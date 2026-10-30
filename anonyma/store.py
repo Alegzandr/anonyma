@@ -1,10 +1,20 @@
-"""Mapping store for the pseudonymization regime.
+"""Mapping stores for the pseudonymization regime (``models.MappingStore``).
 
-Phase 0: in-memory implementation of ``models.MappingStore``. The infrastructure
-workstream adds the encrypted SQLite store (Argon2id + AES-GCM).
+Phase 0: in-memory implementation plus the API of the encrypted SQLite store,
+owned by the infrastructure workstream.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
+
+
+class StoreError(Exception):
+    """``str(exc)`` is a French user-facing message."""
+
+
+class WrongPassphraseError(StoreError):
+    pass
 
 
 class InMemoryMappingStore:
@@ -26,3 +36,28 @@ class InMemoryMappingStore:
 
     def used_substitutes(self) -> set[str]:
         return {sub for _, sub in self._data.values()}
+
+
+class EncryptedMappingStore:
+    """SQLite file; originals encrypted with AES-GCM under an Argon2id-derived key,
+    lookups through keyed hashes. Implements ``models.MappingStore``."""
+
+    @classmethod
+    def open(cls, path: Path, passphrase: str, *, create: bool = True) -> EncryptedMappingStore:
+        """Open (or create) a store. Raises WrongPassphraseError / StoreError."""
+        raise NotImplementedError
+
+    def close(self) -> None:
+        raise NotImplementedError
+
+    def lookup(self, entity_type: str, key: str) -> str | None:
+        raise NotImplementedError
+
+    def save(self, entity_type: str, key: str, original: str, substitute: str) -> None:
+        raise NotImplementedError
+
+    def reverse(self, substitute: str) -> str | None:
+        raise NotImplementedError
+
+    def used_substitutes(self) -> set[str]:
+        raise NotImplementedError

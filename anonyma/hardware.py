@@ -29,3 +29,8 @@ def detect_hardware() -> HardwareInfo:
 
 def recommend_profile(info: HardwareInfo) -> Profile:
     return Profile.LIGHT
+
+
+def recommend_llm(info: HardwareInfo) -> str | None:
+    """Catalogue id of the LLM suited to this machine (FULL profile), or None."""
+    return None
