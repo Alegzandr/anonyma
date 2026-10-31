@@ -783,7 +783,12 @@ class PdfExtractor(Extractor):
                     try:
                         data = annot.get_file()
                         name = str(annot.file_info.get("filename") or "piece_jointe")
-                    except Exception:
+                    except Exception:  # the writer deletes every attachment annotation
+                        document.add_issue(
+                            Severity.WARNING,
+                            "pdf.attachment_unreadable",
+                            "Pièce jointe illisible : elle est omise.",
+                        )
                         continue
                     ctx.budget.consume(len(data), depth=ctx.depth + 1)
                     child = ctx.extract_child(data, name, document)

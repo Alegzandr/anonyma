@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 from pathlib import Path
 
 import py7zr
 
-from anonyma.extractors._archive import (
-    UniqueNames,
-    anonymized_directories,
-    copy_file,
-    neutral_timestamp,
-)
+from anonyma.extractors._archive import UniqueNames, anonymized_directories, neutral_timestamp
 from anonyma.models import Document, Issue, ReplacementPlan, WriteContext, Writer
 from anonyma.registry import register_writer
 
@@ -39,7 +35,7 @@ class SevenZipWriter(Writer):
                     continue
                 # Copy so that the timestamp change never touches a shared file.
                 staged = staging / f"{i}"
-                copy_file(output.path, staged)
+                shutil.copyfile(output.path, staged)
                 neutral_timestamp(staged)
                 archive.write(staged, unique(output.name))
             for directory in anonymized_directories(document, plan):

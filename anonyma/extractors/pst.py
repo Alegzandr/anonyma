@@ -290,6 +290,11 @@ class PstExtractor(Extractor):
         for i in range(_call(folder, "get_number_of_sub_folders") or 0):
             sub = _call(folder, "get_sub_folder", i)
             if sub is None:
+                document.add_issue(
+                    Severity.ERROR,
+                    "pst.item_unreadable",
+                    "Un dossier de la boîte aux lettres est illisible.",
+                )
                 continue
             name = (_text(_call(sub, "get_name")) or f"dossier-{i + 1}").replace("/", "_")
             self._folder(sub, f"{path}{name}/", document, ctx, counter)

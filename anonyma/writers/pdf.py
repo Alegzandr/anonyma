@@ -39,6 +39,7 @@ from typing import Any
 import pymupdf
 from PIL import Image, ImageDraw, ImageFont
 
+from anonyma.extractors._archive import UniqueNames
 from anonyma.extractors._media import BLANKED_CODE, blanked_message
 from anonyma.extractors._pdf import encode_pdf_string, iter_strings, object_sources
 from anonyma.extractors._pdfobjects import (
@@ -691,17 +692,12 @@ class PdfWriter(Writer):
             **document.properties.get("pdf_embedded", {}),
             **document.properties.get("pdf_attachments", {}),
         }
-        used: set[str] = set()
+        unique = UniqueNames()
         for child_id in children:
             output = ctx.child_outputs.get(child_id)
             if output is None or output.path is None:
                 blanked += 1
                 continue
-            name = Path(output.name).name or "piece_jointe"
-            base, i = name, 2
-            while name.casefold() in used:
-                name = f"{Path(base).stem} ({i}){Path(base).suffix}"
-                i += 1
-            used.add(name.casefold())
+            name = unique(Path(output.name).name or "piece_jointe")
             doc.embfile_add(name, output.path.read_bytes(), filename=name, ufilename=name, desc="")
         return blanked

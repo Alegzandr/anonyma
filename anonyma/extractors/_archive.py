@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import os
-import shutil
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 from typing import IO
@@ -142,7 +141,3 @@ def neutral_timestamp(path: Path) -> None:
     """Give a written child a neutral modification time before archiving it."""
     with contextlib.suppress(OSError):
         os.utime(path, (EPOCH_1980_TS, EPOCH_1980_TS))
-
-
-def copy_file(src: Path, dst: Path) -> None:
-    shutil.copyfile(src, dst)
