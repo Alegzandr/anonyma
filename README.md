@@ -161,6 +161,22 @@ Options principales de `run` :
 | `--table FICHIER` | table de correspondance (pseudonymisation) |
 | `--silencieux`, `-q` | sans barre de progression |
 
+**Arborescence produite.** Un dossier donné en entrée garde son nom sous le dossier de
+sortie : `anonyma-cli run C:/export -o C:/sortie` écrit `C:/sortie/export/…` (même
+sous-arborescence) ; un fichier donné seul est écrit directement dans le dossier de sortie
+(`C:/sortie/lettre.docx`). Un fichier en quarantaine suit la même arborescence sous
+`C:/sortie_quarantaine/`. Les noms de fichiers et de dossiers sont eux-mêmes anonymisés
+(`--noms-neutres` : noms neutres) ; le bilan `--json` donne pour chaque fichier son chemin
+absolu (`chemin`) et relatif (`chemin_relatif`, par exemple `export/eml/message.eml`).
+
+**Progression.** Sur un terminal, une barre de progression s'affiche sur la sortie
+d'erreur. Quand la sortie d'erreur est redirigée (fichier, script, agent), elle est
+remplacée par des lignes simples, au plus une toutes les 10 secondes et à chaque
+changement d'étape, même pendant le traitement d'un long fichier : « Analyse : 120/205
+fichiers… (2 min 05 s) », « Écriture et vérification : 205/205 fichiers, terminé (4 min
+10 s) ». Elles ne contiennent que des nombres, jamais un nom de fichier ni une valeur ;
+la sortie standard n'est pas touchée.
+
 `anonyma-cli run --help` liste toutes les options (OCR, codes-barres, texte invisible des
 PDF, identifiants techniques, organisations, noms de fichiers neutres, numérotation des
 balises).
@@ -228,16 +244,16 @@ d'archives, messages d'une boîte, à toute profondeur) et l'ensemble des **él�
 | `fichiers_a_revoir`, `fichiers_en_echec` | fichiers au résultat `a_revoir`, `echec` |
 | `entites_a_revoir` (alias `a_revoir`) | entités incertaines masquées et à revoir, comptées par fichier |
 | `residus_certains`, `residus_possibles` | résidus trouvés à la vérification (`residus` : leur somme) |
-| `echecs` | éléments, à toute profondeur, listés en échec dans le rapport |
+| `echecs` | éléments, à toute profondeur, listés en échec dans le rapport (un fichier en quarantaine n'y figure pas : il est compté dans `quarantaine` et ses résidus dans `residus`) |
 | `occurrences`, `occurrences_par_type` | occurrences masquées, au total et par type (`PERSONNE`, `EMAIL`…) |
 | `dossier_sortie`, `dossier_quarantaine`, `rapport` | chemins absolus (`null` si sans objet) |
 | `dossier_sortie_non_vide`, `sorties_precedentes_supprimees` | le dossier de sortie contenait déjà des fichiers ; fichiers d'exécutions précédentes supprimés par `--remplacer` |
-| `parametres` | `profil`, `mode`, `regime`, `paranoiaque`, `ocr`, `noms_neutres`, `organisations`, `detecteurs_indisponibles` |
-| `documents` | par fichier : `fichier` (nom anonymisé), `chemin` (fichier produit ou `null`), `format`, `format_sortie`, `statut`, `statut_libelle`, `resultat`, `quarantaine`, `occurrences`, `residus` (certains), `residus_possibles`, `a_revoir` (entités incertaines), `elements_omis`, `problemes` (liste de `element`, `code`, `gravite`, `message`) |
+| `parametres` | `profil` (choisi, ou conseillé en `auto`), `profil_effectif` (celui que les modèles et moteurs installés servent réellement : `complet` sans moteur de modèle de langue tourne en `standard`), `detecteurs` (détecteurs effectivement employés), `detecteurs_indisponibles` et `detecteurs_indisponibles_raisons` (détecteur → raison : modèle non installé, moteur absent et comment l'obtenir), `mode`, `regime`, `paranoiaque`, `ocr`, `noms_neutres`, `organisations` |
+| `documents` | par fichier : `fichier` (nom anonymisé), `chemin` (fichier produit ou `null`), `chemin_relatif` (le même, relatif au dossier de sortie ou de quarantaine), `format`, `format_sortie`, `statut`, `statut_libelle`, `resultat`, `quarantaine`, `occurrences`, `residus` (certains), `residus_possibles`, `a_revoir` (entités incertaines), `elements_omis`, `problemes` (liste de `element`, `code`, `gravite`, `message`) |
 
 Le rapport JSON reprend `schema`, `lot`, `regime`, `verdict`, `verdict_libelle`,
 `code_sortie` et les comptages (de `nombre_fichiers` à `occurrences_par_type`, sans les
-alias), avec `debut`, `fin` et le détail : `fichiers` (mêmes champs que `documents`, sans `chemin` ni
+alias), avec `debut`, `fin` et le détail : `fichiers` (mêmes champs que `documents`, sans `chemin`, `chemin_relatif` ni
 `problemes`), `residus` (`fichier`, `emplacement`, `zone`, `type`, `origine` —
 `valeur_origine` ou `detecteur` —, `detecteur`, `certitude` — `certain` ou `possible` —,
 et leurs libellés), `a_revoir` (`fichier`, `type`, `remplacement`), `echecs` (`fichier`
@@ -245,6 +261,11 @@ sous la forme « archive.zip › membre.pdf », `statut`, `statut_libelle`, `pro
 français, `codes`), `verifications_incompletes`, `parametres` (codes) et
 `parametres_libelles` (libellés du rapport lisible). L'ancienne clé `entites_par_type` y
 est conservée : elle contient des occurrences, comme `occurrences_par_type`.
+
+`anonyma-cli modeles liste --json` donne de même le catalogue des modèles : par modèle
+`id`, `type`, `titre`, `installe`, `verifie`, `partiel_octets`, `taille_octets`,
+`licence`, `revision`, `depot`, `chemin` (dossier du modèle installé ou `null`),
+`conseille`, `moteur_disponible` et `moteur_absent` (raison, ou `null`).
 
 Une erreur d'utilisation (code 2) n'écrit rien sur la sortie standard : le message est sur
 la sortie d'erreur. `analyser --json` donne de même `occurrences_par_type` (aussi sous son
@@ -266,7 +287,7 @@ modifiés. `anonyma-cli formats` affiche la liste exacte disponible sur le poste
 | Bureautique | docx, xlsx, pptx (et variantes à macros ou modèles), odt, ods, odp, rtf | Texte (y compris les noms coupés par la mise en forme), tableaux, en-têtes et pieds de page, notes, commentaires (conservés, anonymisés, auteur « Anonyme »), révisions (acceptées), zones de texte, graphiques, noms de feuilles et formules, liens, textes alternatifs, images incorporées (OCR). Métadonnées, historique, miniatures et macros purgés. |
 | Anciens formats | doc, xls, ppt | Convertis par le LibreOffice embarqué, anonymisés, puis réécrits dans leur format d'origine. Sans LibreOffice (version allégée), les xls sont restitués en xlsx (valeurs seules) et les doc/ppt échouent explicitement. |
 | PDF | pdf texte et numérisé | Suppression réelle du texte (redaction, pas un simple cache), OCR des pages numérisées, formulaires, pièces jointes, signets, liens, métadonnées et XMP purgés. |
-| Courriels | eml, msg, mbox, pst | Tous les en-têtes (From, To, Cc, Bcc, Reply-To, Sender, Return-Path, Received, Message-ID, In-Reply-To, References…), noms d'affichage, corps texte et HTML (attributs `href`, `alt`, `title` compris), citations, signatures, images incorporées (OCR), pièces jointes et messages joints, récursivement. Les msg sont réécrits nativement en msg ; un pst est restitué sous forme de **dossier d'eml** reproduisant l'arborescence de la boîte. Signatures DKIM/ARC supprimées (elles deviendraient invalides). Les en-têtes restent lisibles par les messageries dans tous les modes : en mode balises, `From: "[PERSONNE_009]" <EMAIL_001@anonyme.invalid>`, `Message-ID: <ID_MESSAGE_001@anonyme.invalid>` (le même dans tout le lot : les fils de discussion sont conservés) et une date neutre (1er mars 1970, une minute de plus par réponse dans le fil) ; les images intégrées (`cid:`) restent affichées. |
+| Courriels | eml, msg, mbox, pst | Tous les en-têtes (From, To, Cc, Bcc, Reply-To, Sender, Return-Path, Received, Message-ID, In-Reply-To, References…), noms d'affichage, corps texte et HTML (attributs `href`, `alt`, `title` compris), citations, signatures, images incorporées (OCR), pièces jointes et messages joints, récursivement. Les msg sont réécrits nativement en msg ; un pst est restitué sous forme de **dossier d'eml** reproduisant l'arborescence de la boîte. Signatures DKIM/ARC supprimées (elles deviendraient invalides). Les en-têtes restent lisibles par les messageries dans tous les modes : en mode balises, `From: "[PERSONNE_009]" <EMAIL_001@anonyme.invalid>`, `Message-ID: <ID_MESSAGE_001@anonyme.invalid>` (le même dans tout le lot : les fils de discussion sont conservés) et une date neutre (1er mars 1970, une minute de plus par réponse dans le fil) ; en mode réaliste, les dates sont décalées (voir « Comportements à connaître »). Les dates des msg (envoi, réception, création, modification, pièces jointes) suivent la même règle et sont relues à la vérification. Les images intégrées (`cid:`) restent affichées. |
 | Données et texte | txt, log, md, csv, tsv, json, xml, html | Contenu, clés et nombres JSON, attributs et commentaires XML/HTML ; encodage, délimiteurs, indentation et balisage conservés à l'identique hors des valeurs remplacées. |
 | Images | png, jpg, tiff (multipage), bmp, heic, webp | OCR puis masquage opaque des zones, métadonnées EXIF/XMP/IPTC et GPS purgées. Sans moteur OCR, l'image est signalée en échec (son texte ne peut pas être vérifié). |
 | Archives | zip, 7z | Contenu traité récursivement sans limite arbitraire de profondeur, avec protection contre les bombes d'archives (taille, taux de compression, nombre de fichiers). Les entrées chiffrées sont signalées et omises. |
@@ -290,9 +311,12 @@ processeur sinon) et le profil conseillé. Le modèle de langue conseillé est l
 grand du catalogue qui tient dans la mémoire vive (4B, 8B ou 14B). Pour imposer un
 profil : `--profil` ponctuellement, ou `anonyma-cli config definir profile complet`
 (`auto` pour revenir au choix automatique). Un détecteur dont le modèle n'est pas
-installé est ignoré et signalé ; si c'est son moteur qui manque dans cette version
-(modèle de langue sans llama-cpp-python, par exemple), le message le dit, et ni
-`materiel` ni le choix automatique ne conseillent un profil qui ne peut pas tourner.
+installé est ignoré et signalé ; si c'est son moteur qui manque (modèle de langue sans
+llama-cpp-python), le message le dit, et ni `materiel` ni le choix automatique ne
+conseillent un profil qui ne peut pas tourner. **Le dossier portable n'embarque pas
+llama-cpp-python** : le profil `complet` y tourne comme `standard`, même si `modeles
+liste` montre un modèle de langue installé et vérifié (la colonne État le signale).
+Depuis les sources, le moteur s'installe avec `uv sync --extra llm`.
 
 ## Modèles
 
@@ -425,6 +449,28 @@ ré-identifiés.
   révisions suivies sont acceptées (les suppressions disparaissent entièrement).
 - **PST restitué en dossier d'eml** : aucun outil libre ne sait réécrire un PST de façon
   fiable.
+- **Dates en mode réaliste** : toutes les dates du lot sont décalées d'un même nombre de
+  jours entiers (entre 30 et 400, avant ou après), tiré au hasard et secret ; l'heure et
+  le fuseau horaire sont conservés. Un même instant reçoit donc le même substitut dans
+  tous les formats (`2026-09-01T08:14:29Z`, `01/09/2026 10:14`, en-tête
+  `Date: Tue, 01 Sep 2026 08:14:29 +0000`, « 1er septembre 2026 », dates des msg),
+  l'ordre et les intervalles sont préservés (une réponse reste après le message auquel
+  elle répond) ; le jour de la semaine peut changer et est corrigé dans les en-têtes. En
+  pseudonymisation, le décalage est gardé dans la table : il reste le même d'une
+  exécution à l'autre avec la même table, et la ré-identification restitue les dates
+  d'origine. Les **dates de naissance** ont leur propre décalage secret, différent pour
+  chaque date (30 à 365 jours) : une date d'événement connue ne permet pas de les
+  retrouver ; l'âge reste approximativement juste et le NIR suit la date de naissance
+  substituée. Revers assumé du décalage unique : qui connaît la vraie date d'un seul
+  événement du lot peut retrouver toutes les autres (hors dates de naissance). En modes
+  balises et masquage, les dates des en-têtes, des propriétés msg et du `Thread-Index`
+  deviennent la date neutre du 1er mars 1970. La date du séparateur `From ` d'une boîte
+  mbox n'est jamais conservée : elle reprend la date anonymisée du message.
+- **`Thread-Index` régénéré** : l'en-tête Outlook des fils de discussion est reconstruit
+  à partir de la date de début anonymisée et d'un identifiant recalculé ; une réponse
+  prolonge toujours l'index du message auquel elle répond. Un `Thread-Index` invalide, ou
+  dont la date n'a pas été masquée, est supprimé. La propriété binaire équivalente des msg
+  (`PR_CONVERSATION_INDEX`) reste supprimée.
 
 ## Licences
 
