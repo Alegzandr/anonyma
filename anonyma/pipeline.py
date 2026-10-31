@@ -1449,14 +1449,18 @@ class Pipeline:
 
     # -- execution helpers --------------------------------------------------
 
-    def _workers(self, jobs: int) -> int:
+    def _workers(self, jobs: int, stage: str = "analyse") -> int:
+        """Worker processes for ``stage``. FULL analyses in one process (one LLM
+        instance, a memo shared by the whole batch); its writing and verification
+        never run the LLM (``verify = False``) and are sized like STANDARD."""
+        full = self.detection_profile is Profile.FULL
         if self.config.workers:
             wanted = self.config.workers
-        elif self.detection_profile is Profile.FULL:
+        elif full and stage == "analyse":
             wanted = 1  # one LLM instance at a time
         else:
             wanted = max(1, min(os.cpu_count() or 1, 8) - 1)
-            if self.detection_profile is Profile.STANDARD:
+            if full or self.detection_profile is Profile.STANDARD:
                 # Each worker holds its own GLiNER instance (~2 GiB).
                 from anonyma import hardware
 
@@ -1492,7 +1496,7 @@ class Pipeline:
 
         if progress:
             progress(ProgressEvent(stage, 0, total))
-        if self._workers(total) == 1:
+        if self._workers(total, stage) == 1:
             global _item_progress
 
             def item(done_: int, total_: int, step: str) -> None:
@@ -1511,7 +1515,7 @@ class Pipeline:
                     _item_progress = None
             return results
         try:
-            self._pool(fn, jobs, list(range(total)), self._workers(total), cancel, done)
+            self._pool(fn, jobs, list(range(total)), self._workers(total, stage), cancel, done)
         except BrokenProcessPool:
             log.warning("worker pool broken during %s; retrying the remaining items", stage)
             # A worker can also die for reasons outside the item (memory pressure from
