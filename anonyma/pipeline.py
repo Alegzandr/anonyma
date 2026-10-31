@@ -59,10 +59,11 @@ from anonyma.models import (
     VerificationResult,
     WriteContext,
     Writer,
+    apply_replacements,
     new_id,
 )
 from anonyma.policy import apply_policies
-from anonyma.replacer import Replacer, SubstitutionTable, build_plan
+from anonyma.replacer import BLACKOUT_CHAR, Replacer, SubstitutionTable, build_plan
 from anonyma.resolver import (
     DOCUMENT_LOCAL_TYPES,
     PROPAGATION_DETECTOR,
@@ -774,13 +775,87 @@ class _WriteContext(WriteContext):
 def anonymized_name(
     doc: Document, entities: Sequence[Entity], table: SubstitutionTable, extension: str
 ) -> str:
-    """Apply the plan to the FILENAME segment, sanitize, and set the extension."""
+    """Apply the plan to the FILENAME segment, sanitize, and set the extension.
+
+    Each path component is anonymized on its own: a replacement spanning a separator
+    (an entity ``corpus/Exports`` read across two folder names) is cut at the
+    separator and each piece gets the substitute, so the output tree always has the
+    depth of the input tree (never two folders merged into one)."""
     plan = build_plan(doc, [e for e in entities if e.segment_id == FILENAME_SEGMENT_ID], table)
-    raw = plan.apply(doc.segment(FILENAME_SEGMENT_ID)).replace("\\", "/")
-    parts = [safe_filename(p) for p in raw.split("/") if p not in ("", ".", "..")] or ["_"]
+    text = doc.segment(FILENAME_SEGMENT_ID).text
+    replacements = plan.for_segment(FILENAME_SEGMENT_ID)
+    blackout = table.mode is ReplacementMode.BLACKOUT
+    parts: list[str] = []
+    for start, end in _path_components(text):
+        component = text[start:end]
+        if component in ("", ".", ".."):
+            continue
+        pieces = []
+        for rep in replacements:
+            lo, hi = max(rep.start, start), min(rep.end, end)
+            if lo >= hi:
+                continue
+            # Separators a substitute carries at its edges belong to the path.
+            substitute = (
+                BLACKOUT_CHAR * (hi - lo) if blackout else rep.substitute.strip("/\\") or "_"
+            )
+            piece = replace(rep, start=lo - start, end=hi - start, original=text[lo:hi])
+            pieces.append(replace(piece, substitute=substitute))
+        parts.append(safe_filename(apply_replacements(component, pieces)))
+    parts = parts or ["_"]
     stem = PurePosixPath(parts[-1])
     parts[-1] = safe_filename((stem.stem if stem.suffix else stem.name) + extension)
     return "/".join(parts)
+
+
+def top_level_names(
+    documents: Sequence[Document], entities: Sequence[Entity], table: SubstitutionTable
+) -> dict[str, str]:
+    """``document id -> output name`` of the top-level documents, folders named once
+    for the whole batch.
+
+    Each document's name is anonymized on its own (:func:`anonymized_name`), so a
+    folder could come out masked for one file and not for another (an entity read
+    in one name only). An input folder gets a single output name: the masked one
+    when any of its files masked it (recall over precision), else the first."""
+    by_doc: dict[str, list[Entity]] = {}
+    for e in entities:
+        if e.segment_id == FILENAME_SEGMENT_ID:
+            by_doc.setdefault(e.document_id, []).append(e)
+    own: dict[str, tuple[list[str], list[str]]] = {}
+    folders: dict[tuple[str, ...], str] = {}
+    for doc in documents:
+        name = anonymized_name(doc, by_doc.get(doc.id, []), table, _output_shape(doc)[1])
+        original = [doc.name[s:e] for s, e in _path_components(doc.name)]
+        original = [p for p in original if p not in ("", ".", "..")]
+        parts = name.split("/")
+        if len(parts) != len(original):
+            continue
+        own[doc.id] = (original, parts)
+        for depth in range(1, len(parts)):
+            key = tuple(original[:depth])
+            current = folders.get(key)
+            unmasked = safe_filename(original[depth - 1])
+            if current is None or (current == unmasked and parts[depth - 1] != unmasked):
+                folders[key] = parts[depth - 1]
+    return {
+        doc_id: "/".join(
+            [*(folders[tuple(original[:depth])] for depth in range(1, len(parts))), parts[-1]]
+        )
+        for doc_id, (original, parts) in own.items()
+    }
+
+
+def _path_components(name: str) -> list[tuple[int, int]]:
+    """``(start, end)`` of each component of ``name`` (``/`` and ``\\`` separators)."""
+    bounds: list[tuple[int, int]] = []
+    start = 0
+    for index, char in enumerate(name):
+        if char in "/\\":
+            bounds.append((start, index))
+            start = index + 1
+    bounds.append((start, len(name)))
+    return bounds
 
 
 @dataclass(slots=True)
@@ -796,8 +871,10 @@ class _WriteJob:
     work_dir: Path
     #: Original names of the tree (searched in the output by the verifier).
     names: list[str] = field(default_factory=list)
-    #: ``document id -> neutral name`` when ``config.neutral_filenames``.
-    neutral_names: dict[str, str] = field(default_factory=dict)
+    #: ``document id -> output name`` decided batch-wide: neutral names
+    #: (``config.neutral_filenames``), else the top-level names, whose folders are
+    #: named consistently for the whole batch (:func:`top_level_names`).
+    output_names: dict[str, str] = field(default_factory=dict)
 
 
 def _counts(entities: Sequence[Entity]) -> dict[str, int]:
@@ -814,7 +891,7 @@ def _write_tree(
     the written path (None when the document is omitted)."""
     entities = by_doc.get(doc.id, [])
     writer, extension, pack_folder = _output_shape(doc)
-    name = job.neutral_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
+    name = job.output_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
     result = DocumentResult(
         document_id=doc.id,
         output_name=name,
@@ -953,7 +1030,7 @@ def _write_crashed(job: _WriteJob) -> DocumentResult:
     doc = job.document
     _, extension, _ = _output_shape(doc)
     entities = [e for e in job.entities if e.document_id == doc.id]
-    name = job.neutral_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
+    name = job.output_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
     return DocumentResult(
         document_id=doc.id,
         output_name=name,
@@ -1310,11 +1387,12 @@ class Pipeline:
         )
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)
         review = {cid for cid, c in active.items() if c.needs_review}
-        neutral: dict[str, str] = {}
         if self.config.neutral_filenames:
-            neutral = neutral_names(analysis.documents)
+            names = neutral_names(analysis.documents)
             if self.store is not None and self.config.regime is Regime.PSEUDONYMIZATION:
-                store_neutral_names(self.store, analysis.batch_id, analysis.documents, neutral)
+                store_neutral_names(self.store, analysis.batch_id, analysis.documents, names)
+        else:
+            names = top_level_names(analysis.documents, entities, table)
 
         jobs: list[tuple[Any, ...]] = []
         for doc in analysis.documents:
@@ -1338,7 +1416,7 @@ class Pipeline:
                         output_dir=output_dir,
                         work_dir=analysis.work_dir / f"w-{new_id()[:8]}",
                         names=original_names(doc),
-                        neutral_names={d.id: neutral[d.id] for d in doc.walk() if d.id in neutral},
+                        output_names={d.id: names[d.id] for d in doc.walk() if d.id in names},
                     ),
                 )
             )
@@ -1545,6 +1623,7 @@ __all__ = [
     "propagate_names",
     "quarantine_dir",
     "resolve_decisions",
+    "top_level_names",
     "validate_output_dir",
     "walk_inputs",
 ]

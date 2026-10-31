@@ -759,3 +759,41 @@ def test_inline_extraction_sees_the_cancel_token(tmp_path: Path, canary_config: 
     analysis = pipeline.analyze([inputs / "a.zip"], cancel=_CancelInsideItem())
     pipeline.close(analysis)
     assert [d.status for d in analysis.documents] == [DocumentStatus.CANCELLED]
+
+
+class _AcrossFoldersDetector(Detector):
+    """Reads ``Exports/sous`` (two folder names) as one organisation."""
+
+    name = "dossiers"
+
+    def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
+        out = []
+        for s in segments:
+            i = s.text.find("Exports/sous")
+            if i >= 0:
+                end = i + len("Exports/sous")
+                out.append(Entity("ORGANISATION", "", document_id, s.id, i, end, 0.9, self.name))
+        return out
+
+
+def test_entity_across_folders_keeps_the_tree_depth(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry.load_plugins()
+    monkeypatch.setitem(registry._detectors, "dossiers", _AcrossFoldersDetector)
+    folder = tmp_path / "Exports" / "sous"
+    folder.mkdir(parents=True)
+    (folder / "a.txt").write_text("Rien.\n", encoding="utf-8")
+    (tmp_path / "Exports" / "b.txt").write_text("Rien.\n", encoding="utf-8")
+    result = Pipeline(canary_config).run([tmp_path / "Exports"], tmp_path / "out")
+    names = sorted(r.output_name for r in result.results)
+    # One substitute per component: never ``[ORGANISATION_001]/a.txt`` (folders merged),
+    # and the input folder has one output name for the whole batch.
+    assert names == [
+        "[ORGANISATION_001]/[ORGANISATION_001]/a.txt",
+        "[ORGANISATION_001]/b.txt",
+    ]
+    written = sorted(
+        p.relative_to(tmp_path / "out").as_posix() for p in (tmp_path / "out").rglob("*.txt")
+    )
+    assert written == names
