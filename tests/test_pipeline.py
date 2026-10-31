@@ -813,3 +813,40 @@ def test_worker_logs_go_to_the_log_file_not_stderr(
     assert "extraction failed" not in captured.err + captured.out
     log = (portable_home / "data" / "logs" / "anonyma.log").read_text(encoding="utf-8")
     assert "extraction failed" in log
+
+
+def _linger() -> int:
+    """A job that leaves a non-daemon thread behind: its worker can never exit."""
+    import threading
+    import time
+
+    threading.Thread(target=time.sleep, args=(3600,)).start()
+    return 1
+
+
+def test_pool_shutdown_is_bounded() -> None:
+    import time
+    from concurrent.futures import ProcessPoolExecutor
+
+    from anonyma.pipeline import _worker_init, shutdown_pool
+
+    pool = ProcessPoolExecutor(1, initializer=_worker_init)
+    assert pool.submit(_linger).result() == 1
+    processes = list(pool._processes.values())
+    start = time.monotonic()
+    shutdown_pool(pool, timeout=1.0)
+    assert time.monotonic() - start < 20
+    assert not any(p.is_alive() for p in processes)
+
+
+def test_full_profile_without_its_model_is_not_single_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry.load_plugins()
+    llm = registry.detector_classes()["llm"]
+    monkeypatch.setattr(llm, "is_available", classmethod(lambda cls, config: False))
+    monkeypatch.setattr("os.cpu_count", lambda: 4)
+    pipeline = Pipeline(Config(profile=Profile.FULL))
+    assert pipeline.config.profile is Profile.FULL  # still reported as chosen
+    assert pipeline.detection_profile is not Profile.FULL
+    assert pipeline._workers(10) > 1

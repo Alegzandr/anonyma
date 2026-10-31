@@ -17,9 +17,11 @@ from __future__ import annotations
 import os
 import shutil
 import threading
+import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from concurrent.futures import CancelledError, Future, ProcessPoolExecutor, as_completed
+from concurrent.futures import CancelledError, Future, ProcessPoolExecutor, as_completed, wait
 from concurrent.futures.process import BrokenProcessPool
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -253,6 +255,56 @@ def _worker_init() -> None:
     netguard.install()
     # Like the main process: records go to data/logs, never to the user's terminal.
     logs.setup_logging(worker=True)
+
+
+#: Seconds given to idle worker processes to exit once a pool is shut down, before
+#: they are terminated.
+POOL_EXIT_TIMEOUT = 10.0
+
+
+@contextmanager
+def worker_pool(workers: int) -> Iterator[ProcessPoolExecutor]:
+    """A process pool whose shutdown is bounded.
+
+    ``ProcessPoolExecutor.__exit__`` waits without limit for its management thread,
+    which waits for every worker to take its stop signal from the call queue: one
+    worker that never takes it (blocked on the queue's lock, or stuck in native
+    code) hangs the batch after its last result. Here, pending jobs are cancelled,
+    workers get :data:`POOL_EXIT_TIMEOUT` seconds to exit, and the ones left are
+    terminated (every result has been collected by then)."""
+    pool = ProcessPoolExecutor(workers, initializer=_worker_init)
+    try:
+        yield pool
+    finally:
+        shutdown_pool(pool)
+
+
+def shutdown_pool(pool: ProcessPoolExecutor, timeout: float = POOL_EXIT_TIMEOUT) -> None:
+    """Shut ``pool`` down without waiting more than ``timeout`` for its workers."""
+    # Taken before shutdown(), which drops its references.
+    processes = list((getattr(pool, "_processes", None) or {}).values())
+    manager = getattr(pool, "_executor_manager_thread", None)
+    call_queue = getattr(pool, "_call_queue", None)
+    pool.shutdown(wait=False, cancel_futures=True)
+    deadline = time.monotonic() + timeout
+    for process in processes:
+        process.join(max(0.0, deadline - time.monotonic()))
+    stuck = [p for p in processes if p.is_alive()]
+    if stuck:
+        log.warning("%d worker process(es) did not exit; terminating them", len(stuck))
+        # The management thread must not then wait for the queue's feeder thread,
+        # which may be blocked writing to workers that are gone.
+        cancel_join = getattr(call_queue, "cancel_join_thread", None)
+        if callable(cancel_join):
+            cancel_join()
+        for process in stuck:
+            process.terminate()
+        for process in stuck:
+            process.join(POOL_EXIT_TIMEOUT)
+    if isinstance(manager, threading.Thread):
+        manager.join(timeout)
+        if manager.is_alive():
+            log.warning("worker pool management thread still running after shutdown")
 
 
 def detectors_for(config: Config) -> list[Detector]:
@@ -1164,17 +1216,20 @@ class Pipeline:
         self.config = replace(config, profile=profile)
         self.store = store
         registry.load_plugins()
+        #: Profile the installed models actually serve (``complet`` without its
+        #: language model runs as ``standard``): it sizes the worker pool.
+        self.detection_profile = registry.usable_profile(self.config, profile)
 
     # -- execution helpers --------------------------------------------------
 
     def _workers(self, jobs: int) -> int:
         if self.config.workers:
             wanted = self.config.workers
-        elif self.config.profile is Profile.FULL:
+        elif self.detection_profile is Profile.FULL:
             wanted = 1  # one LLM instance at a time
         else:
             wanted = max(1, min(os.cpu_count() or 1, 8) - 1)
-            if self.config.profile is Profile.STANDARD:
+            if self.detection_profile is Profile.STANDARD:
                 # Each worker holds its own GLiNER instance (~2 GiB).
                 from anonyma import hardware
 
@@ -1242,7 +1297,7 @@ class Pipeline:
     ) -> int | None:
         """Run ``jobs[indices]`` one at a time in a fresh single-worker pool; returns
         the index of the item that broke it (None when all ran or cancelled)."""
-        with ProcessPoolExecutor(1, initializer=_worker_init) as pool:
+        with worker_pool(1) as pool:
             for index in indices:
                 if cancel and cancel.cancelled:
                     return None
@@ -1266,7 +1321,7 @@ class Pipeline:
         Raises ``BrokenProcessPool`` after reporting every result completed before
         the break."""
         reported: set[int] = set()
-        with ProcessPoolExecutor(workers, initializer=_worker_init) as pool:
+        with worker_pool(workers) as pool:
             futures: dict[Future[Any], int] = {pool.submit(fn, *jobs[i]): i for i in indices}
             try:
                 for future in as_completed(futures):
@@ -1287,6 +1342,12 @@ class Pipeline:
                     if future.exception() is None:
                         done(index, future.result())
                 raise
+            finally:
+                # Leaving early (interrupted): pending jobs never start, running ones
+                # finish (they may be placing an output), before the pool shuts down.
+                for f in futures:
+                    f.cancel()
+                wait(list(futures))
 
     def _analysis_crashed(
         self, source: Path, name: str, config: Config, work_dir: Path, *rest: Any
@@ -1295,7 +1356,7 @@ class Pipeline:
         worker as well), so that it is reported anonymized."""
         job = (source, name, config, work_dir, SKIP_CRASH)
         try:
-            with ProcessPoolExecutor(1, initializer=_worker_init) as pool:
+            with worker_pool(1) as pool:
                 result: tuple[Document, list[Entity]] = pool.submit(_analyze_one, *job).result()
                 return result
         except BrokenProcessPool:
