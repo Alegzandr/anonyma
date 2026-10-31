@@ -103,10 +103,13 @@ passe en local : aucune donnée ne quitte le poste.
   `data/config.json`, en onglets : Détection, Remplacement, Listes (valeurs à ne jamais
   masquer, valeurs à toujours masquer, listes métier), Organisations, Avancé et Système.
 
-Statuts d'un fichier : **Anonymisé** (vérifié, rien à signaler) ; **À revoir** (vérifié,
-mais des entités incertaines ont été masquées par précaution ou un détecteur statistique
-signale un résidu possible) ; **Résidus** (une valeur d'origine a été retrouvée : fichier
-en quarantaine) ; **Échec** ou **Non pris en charge** (rien n'est produit).
+Statuts d'un fichier : **Anonymisé** (vérifié, rien à signaler ; **Pseudonymisé** en
+pseudonymisation) ; **À revoir** (vérifié, mais des entités incertaines ont été masquées
+par précaution, un détecteur statistique signale un résidu possible, ou un élément
+inclus — pièce jointe, membre d'archive chiffré ou illisible — a dû être omis) ;
+**Résidus** (une valeur d'origine a été retrouvée : fichier en quarantaine) ; **Échec**
+ou **Non pris en charge** (rien n'est produit ; une archive dont aucun élément n'a pu
+être gardé est en échec plutôt que restituée vide).
 
 ## Utilisation en ligne de commande
 
@@ -154,6 +157,7 @@ Options principales de `run` :
 | `--config FICHIER` | autre fichier de configuration JSON |
 | `--rapport FICHIER` | rapport `.json`, `.md` ou `.html` (aucune donnée d'origine) |
 | `--json` | bilan JSON sur la sortie standard (voir ci-dessous) |
+| `--remplacer` | supprime d'abord ce qu'une exécution précédente a écrit dans le dossier de sortie |
 | `--table FICHIER` | table de correspondance (pseudonymisation) |
 | `--silencieux`, `-q` | sans barre de progression |
 
@@ -162,45 +166,91 @@ PDF, identifiants techniques, organisations, noms de fichiers neutres, numérota
 balises).
 
 Le dossier de sortie est contrôlé **avant** l'analyse : un dossier qui chevauche les
-originaux ou un fichier existant arrête la commande aussitôt (code 2). Le résumé commence
+originaux ou un fichier existant arrête la commande aussitôt (code 2). Un dossier de
+sortie **déjà rempli** est signalé sur la sortie d'erreur : rien n'y est écrasé, un
+fichier produit sous un nom déjà pris reçoit un suffixe « (2) ». Avec `--remplacer`,
+Anonyma supprime d'abord les fichiers qu'il a lui-même écrits dans ce dossier et dans sa
+quarantaine lors des exécutions précédentes, s'ils n'ont pas été modifiés depuis (la liste
+est tenue dans `data/sorties/`, jamais dans le dossier de sortie) ; tout autre fichier est
+conservé. Le résumé commence
 par un verdict sur une ligne (« 8 fichiers anonymisés et vérifiés. », ou
 « 6 anonymisés · 1 à revoir · 1 en quarantaine (ne pas diffuser) »), puis le tableau des
 données masquées (type, code, occurrences) et les chemins du dossier de sortie, de la
 quarantaine si elle existe, et du rapport, chacun sur une ligne. Seul un résidu
 **certain** envoie un fichier en quarantaine ; un résidu **possible** (signal statistique,
 souvent une balise mal relue par l'OCR) le laisse « à revoir » et le résumé invite à
-vérifier la zone signalée dans le rapport. Dans ce résumé comme dans
-`analyser` et les rapports, une **entité** est une valeur distincte (une même personne) et
-une **occurrence** chacune de ses mentions.
+vérifier la zone signalée dans le rapport. Les éléments en échec sont nommés par leur
+chemin anonymisé, un élément inclus sous la forme « archive.zip › membre.pdf ». Dans ce
+résumé comme dans `analyser` et les rapports, une **entité** est une valeur distincte (une
+même personne) et une **occurrence** chacune de ses mentions ; un fichier qui n'a rien
+produit (non pris en charge, en échec) ne compte aucune occurrence masquée.
 
-Codes de sortie : **0** tous les fichiers sont anonymisés, **1** au moins un fichier
-présente des résidus, a échoué, n'est pas pris en charge ou le traitement a été
-interrompu, **2** erreur d'utilisation (option invalide, dossier de sortie invalide,
-phrase secrète incorrecte, configuration invalide…). Les fichiers dont la vérification
-échoue sont placés dans `<sortie>_quarantaine/`, **à côté** du dossier de sortie (jamais
-dedans : le dossier de sortie ne contient que des fichiers vérifiés et peut être partagé
-tel quel) ; ils ne doivent pas être diffusés.
+Codes de sortie : **0** tous les fichiers sont anonymisés et vérifiés, éventuellement
+« à revoir » ; **1** au moins un fichier est en quarantaine, en échec ou non pris en
+charge, ou le traitement a été interrompu ; **2** erreur d'utilisation (option invalide,
+dossier de sortie invalide, phrase secrète incorrecte ou impossible à saisir faute de
+console, configuration invalide…). Le code découle du verdict, jamais d'un autre calcul :
+`anonymise`, `a_revoir` et `vide` donnent 0, `quarantaine` et `echec` donnent 1. Les
+fichiers dont la vérification échoue sont placés dans `<sortie>_quarantaine/`, **à côté**
+du dossier de sortie (jamais dedans : le dossier de sortie ne contient que des fichiers
+vérifiés et peut être partagé tel quel) ; ils ne doivent pas être diffusés.
+
+Sans console interactive (script, agent, tâche planifiée), une commande qui a besoin de la
+phrase secrète échoue aussitôt (code 2) si `ANONYMA_PASSPHRASE` n'est pas définie, au lieu
+d'attendre une saisie.
 
 **Automatisation (`--json`).** Le texte du résumé peut évoluer ; pour un script ou un
 agent, `run --json` écrit sur la sortie standard un unique objet JSON et rien d'autre (la
 progression, les avertissements et le résumé lisible passent sur la sortie d'erreur). Il
-ne contient que des codes, des nombres, des chemins et les noms anonymisés des fichiers :
+ne contient que des codes, des nombres, des chemins et les noms anonymisés des fichiers.
+Les valeurs sont des **codes** stables ; les libellés français, quand ils sont utiles,
+sont dans des clés `…_libelle` à part. Le rapport `--rapport x.json` emploie le même
+vocabulaire (mêmes clés de comptage, mêmes codes).
+
+Trois niveaux sont comptés séparément : les **fichiers** (ceux donnés en entrée ou
+trouvés dans les dossiers d'entrée), les **éléments inclus** (pièces jointes, membres
+d'archives, messages d'une boîte, à toute profondeur) et l'ensemble des **éléments**
+(les deux).
 
 | Clé | Contenu |
 |---|---|
-| `verdict` | `anonymise`, `a_revoir`, `quarantaine`, `echec` ou `vide` |
-| `code_sortie` | code de sortie de la commande (0 ou 1) |
-| `fichiers`, `elements` | fichiers en entrée ; éléments traités (pièces jointes et contenus d'archives compris) |
-| `statuts` | nombre de fichiers par statut (`anonymise`, `a_revoir`, `residu`, `echec`, `non_supporte`, `annule`) |
-| `quarantaine`, `a_revoir`, `residus`, `echecs` | nombres correspondants |
-| `occurrences_par_type` | occurrences masquées par type (`PERSONNE`, `EMAIL`…) |
+| `schema` | version du vocabulaire (2) |
+| `verdict`, `verdict_libelle` | `anonymise`, `a_revoir`, `quarantaine`, `echec` ou `vide` ; la phrase du résumé |
+| `code_sortie` | code de sortie, déduit du verdict (0 ou 1) |
+| `lot`, `regime` | identifiant du lot ; `anonymisation` ou `pseudonymisation` |
+| `nombre_fichiers` (alias `fichiers`) | fichiers traités |
+| `nombre_elements` (alias `elements`), `nombre_elements_inclus` | tous les éléments ; éléments inclus seulement |
+| `elements_omis` | éléments inclus retirés de leur conteneur (chiffrés, illisibles, non pris en charge) |
+| `resultats` | fichiers par résultat : `anonymise`, `a_revoir`, `quarantaine`, `echec`, `non_supporte`, `annule` (la somme vaut `nombre_fichiers`) |
+| `statuts` | fichiers par statut : `anonymise`, `a_revoir`, `residu`, `echec`, `non_supporte`, `annule` |
+| `statuts_elements` | tous les éléments par statut |
+| `quarantaine` | fichiers effectivement placés dans le dossier de quarantaine |
+| `fichiers_a_revoir`, `fichiers_en_echec` | fichiers au résultat `a_revoir`, `echec` |
+| `entites_a_revoir` (alias `a_revoir`) | entités incertaines masquées et à revoir, comptées par fichier |
+| `residus_certains`, `residus_possibles` | résidus trouvés à la vérification (`residus` : leur somme) |
+| `echecs` | éléments, à toute profondeur, listés en échec dans le rapport |
+| `occurrences`, `occurrences_par_type` | occurrences masquées, au total et par type (`PERSONNE`, `EMAIL`…) |
 | `dossier_sortie`, `dossier_quarantaine`, `rapport` | chemins absolus (`null` si sans objet) |
-| `parametres` | `profil`, `mode`, `regime` appliqués |
-| `documents` | par fichier : `fichier` (nom anonymisé), `statut`, `quarantaine`, `occurrences`, `residus`, `a_revoir` |
+| `dossier_sortie_non_vide`, `sorties_precedentes_supprimees` | le dossier de sortie contenait déjà des fichiers ; fichiers d'exécutions précédentes supprimés par `--remplacer` |
+| `parametres` | `profil`, `mode`, `regime`, `paranoiaque`, `ocr`, `noms_neutres`, `organisations`, `detecteurs_indisponibles` |
+| `documents` | par fichier : `fichier` (nom anonymisé), `chemin` (fichier produit ou `null`), `format`, `format_sortie`, `statut`, `statut_libelle`, `resultat`, `quarantaine`, `occurrences`, `residus` (certains), `residus_possibles`, `a_revoir` (entités incertaines), `elements_omis`, `problemes` (liste de `element`, `code`, `gravite`, `message`) |
+
+Le rapport JSON reprend `schema`, `lot`, `regime`, `verdict`, `verdict_libelle`,
+`code_sortie` et les comptages (de `nombre_fichiers` à `occurrences_par_type`, sans les
+alias), avec `debut`, `fin` et le détail : `fichiers` (mêmes champs que `documents`, sans `chemin` ni
+`problemes`), `residus` (`fichier`, `emplacement`, `zone`, `type`, `origine` —
+`valeur_origine` ou `detecteur` —, `detecteur`, `certitude` — `certain` ou `possible` —,
+et leurs libellés), `a_revoir` (`fichier`, `type`, `remplacement`), `echecs` (`fichier`
+sous la forme « archive.zip › membre.pdf », `statut`, `statut_libelle`, `problemes` en
+français, `codes`), `verifications_incompletes`, `parametres` (codes) et
+`parametres_libelles` (libellés du rapport lisible). L'ancienne clé `entites_par_type` y
+est conservée : elle contient des occurrences, comme `occurrences_par_type`.
 
 Une erreur d'utilisation (code 2) n'écrit rien sur la sortie standard : le message est sur
 la sortie d'erreur. `analyser --json` donne de même `occurrences_par_type` (aussi sous son
-ancien nom `mentions_par_type`) et `entites_distinctes_par_type`.
+ancien nom `mentions_par_type`), `entites_distinctes_par_type`, et dans `non_analyses` les
+éléments illisibles ou non pris en charge (`fichier` sous son nom anonymisé, `statut`,
+`statut_libelle`, `problemes`, `codes`), que l'affichage texte liste aussi.
 
 ## Formats
 
@@ -239,14 +289,16 @@ processeur sinon) et le profil conseillé. Le modèle de langue conseillé est l
 grand du catalogue qui tient dans la mémoire vive (4B, 8B ou 14B). Pour imposer un
 profil : `--profil` ponctuellement, ou `anonyma-cli config definir profile complet`
 (`auto` pour revenir au choix automatique). Un détecteur dont le modèle n'est pas
-installé est ignoré et signalé.
+installé est ignoré et signalé ; si c'est son moteur qui manque dans cette version
+(modèle de langue sans llama-cpp-python, par exemple), le message le dit, et ni
+`materiel` ni le choix automatique ne conseillent un profil qui ne peut pas tourner.
 
 ## Modèles
 
 Les modèles d'IA ne sont pas livrés dans l'archive :
 
 ```sh
-anonyma-cli modeles liste                    # catalogue et état (installé, vérifié…)
+anonyma-cli modeles liste                    # catalogue, état (installé, vérifié…), licence, révision
 anonyma-cli modeles telecharger <identifiant>
 anonyma-cli modeles supprimer <identifiant>
 ```
@@ -292,6 +344,11 @@ Ré-identification (pseudonymisation uniquement) :
 anonyma-cli reidentifier --balise "[PERSONNE_001]"
 anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt, .md, .csv, .json…)
 ```
+
+Les fichiers retrouvent le texte exact qu'ils contenaient (« DUPONT » reste en
+majuscules) quand la table le connaît, sinon la valeur de référence de l'entité ; les
+fichiers ignorés (formats non textuels…) sont nommés et ne sont pas comptés comme
+ré-identifiés.
 
 ## Sécurité
 
