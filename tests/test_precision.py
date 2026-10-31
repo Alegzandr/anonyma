@@ -332,3 +332,10 @@ def test_function_mailbox_keeps_its_local_part_in_realistic_mode(tmp_path: Path)
     text = next((tmp_path / "out").rglob("a.txt")).read_text(encoding="utf-8")
     assert "offres@" in text and "cartouches.example" not in text
     assert "ysaline" not in text.lower()
+
+
+@pytest.mark.parametrize(
+    "css", ["@page WordSection1 {size:612pt}", "@font-face {font-family:Aptos}"]
+)
+def test_css_at_rules_are_not_handles(css: str) -> None:
+    assert not _values(_detect(Config(), css), "IDENTIFIANT")

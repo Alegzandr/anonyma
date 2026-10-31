@@ -435,8 +435,9 @@ class _Realistic:
                 return False
             if checksums.compact(substitute).casefold() in self.forbidden:
                 return False
-            # Hyphenated parts too: « Renaud-sur-François » must not reuse « Renaud ».
-            parts = [p for t in tokens_of(substitute) for p in (t, *t.split("-"))]
+            # Parts too: « Renaud-sur-François », ``monique.girard@…``, ``@elodie_david``
+            # must not reuse « Renaud », « Girard », « Élodie ».
+            parts = [p for t in tokens_of(substitute) for p in (t, *re.split(r"[-._@]", t))]
             if any(normalize(p.strip(".")) in self.forbidden_tokens for p in parts):
                 return False
         return True

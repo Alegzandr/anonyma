@@ -758,8 +758,11 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "pseudo_arobase",
         EntityType.USERNAME,
-        # Hyphens inside a handle (« @jean-baptiste ») belong to it.
-        r"(?<![\w@./+\-])@\w(?:[\w.\-]{1,28}\w)(?![\w@\-]|\.\w)",
+        # Hyphens inside a handle (« @jean-baptiste ») belong to it. CSS at-rules of
+        # mail bodies (« @page WordSection1 », « @font-face ») are no handles.
+        r"(?<![\w@./+\-])@(?!(?:page|font-face|media|import|charset|keyframes|supports"
+        r"|namespace|list|counter-style|layer|container|property|viewport)(?![\w\-]))"
+        r"\w(?:[\w.\-]{1,28}\w)(?![\w@\-]|\.\w)",
         0.6,
         context=(
             "twitter",
