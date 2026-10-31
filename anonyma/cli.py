@@ -1,8 +1,8 @@
 """Command-line interface (Typer), French only.
 
-Exit codes: 0 everything anonymized, 1 some file has residues / failed / is
-unsupported (or the operation failed), 2 usage error (bad option, wrong
-passphrase, invalid configuration).
+Exit codes: 0 every file anonymized (or to review), 1 some file in quarantine,
+failed or unsupported, or the operation was interrupted or failed, 2 usage error
+(bad option, wrong passphrase, invalid configuration, no console for a prompt).
 """
 
 from __future__ import annotations
@@ -63,6 +63,12 @@ REIDENTIFY_EXTENSIONS = frozenset(
 
 out = Console(highlight=False)
 err = Console(stderr=True, highlight=False)
+
+
+def program_name() -> str:
+    """The command as users type it: ``anonyma-cli`` in the portable build (see
+    ``packaging/``), ``anonyma`` from sources (``uv run anonyma``)."""
+    return "anonyma-cli" if getattr(sys, "frozen", False) else "anonyma"
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +316,7 @@ CONTEXT = {"help_option_names": ["-h", "--help"]}
 SUBCOMMAND = "COMMANDE [ARGUMENTS]..."
 
 app = typer.Typer(
+    name=program_name(),
     help="Anonyma : anonymisation locale et en masse de documents.",
     no_args_is_help=True,
     add_completion=False,
@@ -673,15 +680,50 @@ def progress_display(enabled: bool) -> Iterator[Callable[[ProgressEvent], None] 
 
 
 #: French names of detectors that may be missing (model not installed...).
-_DETECTOR_LABELS = {"gliner": "GLiNER", "llm": "modèle de langage local"}
+_DETECTOR_LABELS = {"gliner": "GLiNER", "llm": "modèle de langue"}
+#: Detectors whose engine (a library) may be left out of a build.
+_ENGINE_MISSING = {
+    "gliner": "moteur GLiNER non disponible dans cette version",
+    "llm": "moteur du modèle de langue non disponible dans cette version",
+}
+#: Detector each profile adds, so that it is worth choosing.
+_PROFILE_DETECTOR = {Profile.STANDARD: "gliner", Profile.FULL: "llm"}
+
+
+def engine_available(detector: str) -> bool:
+    """Whether this build ships the library a model-based detector runs on (a model
+    may be installed while its engine is not: llama-cpp-python left out...)."""
+    import importlib.util
+
+    modules = {"gliner": ("onnxruntime", "tokenizers"), "llm": ("llama_cpp",)}
+    return all(importlib.util.find_spec(m) is not None for m in modules.get(detector, ()))
+
+
+def runnable_profile(profile: Profile) -> Profile:
+    """``profile``, or the most thorough lower one whose engines this build ships."""
+    for candidate in (Profile.FULL, Profile.STANDARD):
+        if candidate.rank <= profile.rank and engine_available(_PROFILE_DETECTOR[candidate]):
+            return candidate
+    return Profile.LIGHT
 
 
 def _missing_detectors(config: Config) -> list[str]:
     """French names of the detectors the profile enables but cannot run."""
+    return [_DETECTOR_LABELS.get(name, name) for name in _missing_detector_names(config)]
+
+
+def _missing_detector_names(config: Config) -> list[str]:
     from anonyma import registry
 
-    names = registry.missing_detectors(config, config.effective_profile())
-    return [_DETECTOR_LABELS.get(name, name) for name in names]
+    return registry.missing_detectors(config, config.effective_profile())
+
+
+def _missing_reason(name: str) -> str:
+    """« GLiNER (modèle non installé) », « modèle de langue (moteur ... version) »."""
+    label = _DETECTOR_LABELS.get(name, name)
+    if not engine_available(name) and name in _ENGINE_MISSING:
+        return f"{label} ({_ENGINE_MISSING[name]})"
+    return f"{label} (modèle non installé)"
 
 
 def _short_label(label: str) -> str:
@@ -702,22 +744,28 @@ def _profile_warning(config: Config) -> str | None:
 
     effective = config.effective_profile()
     if config.profile is None:
-        advised = hardware.recommend_profile(hardware.detect_hardware())
-        if advised is effective:
+        # Never advise a profile whose engine this build lacks.
+        advised = runnable_profile(hardware.recommend_profile(hardware.detect_hardware()))
+        if advised.rank <= effective.rank:
             return None
         return (
             f"Profil appliqué : {_profile_name(effective)}. Le profil "
             f"{_profile_name(advised)} conseillé pour cette machine demande des modèles "
-            "non installés (voir « anonyma modeles liste »)."
+            f"non installés (voir « {program_name()} modeles liste »)."
         )
-    missing = _missing_detectors(config)
-    if not missing:
+    names = _missing_detector_names(config)
+    if not names:
         return None
-    without = "ce détecteur" if len(missing) < 2 else "ces détecteurs"
+    without = "ce détecteur" if len(names) < 2 else "ces détecteurs"
+    hint = (
+        f" (voir « {program_name()} modeles liste »)"
+        if any(engine_available(name) for name in names)
+        else ""
+    )
     return (
         f"Profil {_profile_name(effective)} choisi, mais non disponible : "
-        f"{', '.join(missing)}. La détection se fait sans {without} "
-        "(voir « anonyma modeles liste »)."
+        f"{', '.join(_missing_reason(n) for n in names)}. La détection se fait sans "
+        f"{without}{hint}."
     )
 
 
@@ -1071,9 +1119,9 @@ PlainTableOpt = Annotated[
 
 RUN_HELP = (
     "Anonymiser des fichiers et dossiers vers un dossier de sortie (alias : anonymiser).\n\n"
-    "Codes de sortie : 0 tout est anonymisé et vérifié ; 1 au moins un fichier en "
-    "quarantaine, en échec ou non pris en charge ; 2 erreur d'utilisation. Avec --json, la "
-    "sortie standard ne contient que le bilan JSON."
+    "Codes de sortie : 0 tout est anonymisé et vérifié, ou à revoir ; 1 au moins un "
+    "fichier en quarantaine, en échec ou non pris en charge, ou traitement interrompu ; "
+    "2 erreur d'utilisation. Avec --json, la sortie standard ne contient que le bilan JSON."
 )
 
 
@@ -1713,7 +1761,7 @@ def _spec_or_fail(model_id: str) -> Any:
 
     spec = get_spec(model_id)
     if spec is None:
-        fail(f"Modèle inconnu : {model_id} (voir « anonyma modeles liste »).")
+        fail(f"Modèle inconnu : {model_id} (voir « {program_name()} modeles liste »).")
     return spec
 
 
@@ -1834,7 +1882,18 @@ def hardware_info(config_file: ConfigOpt = None) -> None:
     table.add_column()
     # Same words as the GUI: « conseillé », profile labels of the Settings page.
     rows = {label: value for label, value in hardware.summary(info)}
-    rows["Profil recommandé"] = PROFILE_LABELS[hardware.recommend_profile(info)]
+    recommended = hardware.recommend_profile(info)
+    advised = runnable_profile(recommended)  # never a profile this build cannot run
+    rows["Profil recommandé"] = PROFILE_LABELS[advised]
+    notes = list(info.notes)
+    if not engine_available("llm"):
+        rows["Modèle de langage recommandé"] = f"aucun ({_ENGINE_MISSING['llm']})"
+    if advised is not recommended:
+        detector = _PROFILE_DETECTOR[recommended]
+        notes.append(
+            f"Le profil {PROFILE_LABELS[recommended]} conviendrait à cette machine, mais "
+            f"{_ENGINE_MISSING[detector]}."
+        )
     renamed = {
         "Profil recommandé": "Profil conseillé",
         "Modèle de langage recommandé": "Modèle de langue conseillé",
@@ -1845,8 +1904,8 @@ def hardware_info(config_file: ConfigOpt = None) -> None:
     if config.profile is not None:
         table.add_row("Profil imposé", PROFILE_LABELS[config.profile])
     out.print(table)
-    for note in info.notes:
-        out.print(f"• {note}")
+    for note in notes:
+        out.print(f"• {_markup_escape(note)}")
 
 
 @app.command("formats")
@@ -2017,7 +2076,9 @@ def main() -> None:
     multiprocessing.freeze_support()
     force_utf8()
     try:
-        app()
+        # Usage lines and hints show the documented name, whatever argv[0] is
+        # (« anonyma-cli.exe », a full path, « python -m anonyma »...).
+        app(prog_name=program_name())
     except Exception as exc:
         if isinstance(exc, OSError) and _stdout_closed():
             # ``anonyma ... | head``: the reader left, nothing more to say.

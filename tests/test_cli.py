@@ -522,7 +522,7 @@ def test_reidentifier_neutral_names(tmp_path: Path, corpus: Path, business_list:
 def test_unexpected_error_shows_its_type_only(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def boom() -> None:
+    def boom(**kwargs: Any) -> None:
         raise RuntimeError("Contrat de Quintavalle.pdf")
 
     monkeypatch.setattr(cli, "app", boom)
@@ -568,7 +568,7 @@ def test_run_help_groups_and_lists_choices() -> None:
     assert "─ Divers ─" in output and "─ Options ─" not in output
     for choice in ("leger", "standard", "complet", "balises", "realiste", "masquage"):
         assert choice in output
-    assert "Utilisation : root run [OPTIONS] CHEMINS..." in output  # no « {CHEMINS...} »
+    assert "Utilisation : anonyma run [OPTIONS] CHEMINS..." in output  # no « {CHEMINS...} »
 
 
 def test_commands_help_uses_infinitives() -> None:
@@ -942,3 +942,31 @@ def test_invalid_configuration_is_explained_in_french(tmp_path: Path, corpus: Pa
     assert "ReplacementMode" not in output
     result = invoke("config", "definir", "regime", "bidon", "--config", tmp_path / "n.json")
     assert "Regime" not in result.output and "régime" in result.output
+
+
+def test_missing_language_engine_is_named_precisely(
+    monkeypatch: pytest.MonkeyPatch, corpus: Path, business_list: Path
+) -> None:
+    from anonyma import hardware, registry
+
+    llm = registry.detector_classes()["llm"]
+    monkeypatch.setattr(llm, "is_available", classmethod(lambda cls, config: False))
+    real = cli.engine_available
+    monkeypatch.setattr(cli, "engine_available", lambda name: name != "llm" and real(name))
+    result = invoke("analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-q")
+    output = " ".join(result.output.split())
+    assert "moteur du modèle de langue non disponible dans cette version" in output
+    assert "modèle de langue (modèle non installé)" not in output
+
+    monkeypatch.setattr(hardware, "recommend_profile", lambda info: Profile.FULL)
+    output = " ".join(invoke("materiel").output.split())
+    assert "Profil conseillé Complet" not in output
+    assert "moteur du modèle de langue non disponible dans cette version" in output
+
+
+def test_usage_shows_the_documented_program_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert cli.program_name() == "anonyma"
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    assert cli.program_name() == "anonyma-cli"
+    help_text = " ".join(invoke("run", "--help").output.split())
+    assert "interrompu" in help_text
