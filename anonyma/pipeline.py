@@ -1025,11 +1025,15 @@ def _write_tree(
     destination = job.work_dir / new_id() / PurePosixPath(name).name
     target = destination.with_name(new_id()) if pack_folder else destination
     plan = build_plan(doc, entities, job.table)
+    shown = doc
+    if job.config.neutral_filenames:
+        # Embedded items are flattened under neutral names: the (empty) folders of an
+        # archive go too, their original names would otherwise stay.
+        shown = replace(doc, segments=[s for s in doc.segments if s.locator[:1] != ("dir",)])
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        result.issues.extend(
-            writer.write(doc, plan, target, _WriteContext(job.config, child_outputs, job.work_dir))
-        )
+        context = _WriteContext(job.config, child_outputs, job.work_dir)
+        result.issues.extend(writer.write(shown, plan, target, context))
         if pack_folder:
             _zip_folder(target, destination)
             shutil.rmtree(target, ignore_errors=True)
@@ -1595,6 +1599,43 @@ class Pipeline:
         shutil.rmtree(analysis.work_dir, ignore_errors=True)
 
 
+def display_names(analysis: BatchAnalysis, separator: str = " › ") -> dict[str, str]:
+    """``document id -> anonymized path`` of every item of an analysis, as a run
+    with tags would name it (« [PERSONNE_001]/cv.pdf › piece.txt »): what reports
+    and messages may show before anything is written. Neutral names when the
+    configuration asks for them."""
+    if analysis.config.neutral_filenames:
+        names = neutral_names(analysis.documents)
+    else:
+        config = replace(analysis.config, mode=ReplacementMode.TAG, regime=Regime.ANONYMIZATION)
+        clusters = {
+            cid: c for cid, c in analysis.clusters.items() if c.review is not ReviewStatus.REJECTED
+        }
+        entities = [e for e in analysis.entities if e.cluster_id in clusters]
+        table = Replacer(config).assign(clusters, entities, analysis.documents)
+        names = top_level_names(analysis.documents, entities, table)
+        by_doc: dict[str, list[Entity]] = {}
+        for e in entities:
+            if e.segment_id == FILENAME_SEGMENT_ID:
+                by_doc.setdefault(e.document_id, []).append(e)
+        for doc in analysis.all_documents():
+            if doc.id not in names:
+                extension = _output_shape(doc)[1]
+                names[doc.id] = anonymized_name(doc, by_doc.get(doc.id, []), table, extension)
+    paths: dict[str, str] = {}
+
+    def visit(doc: Document, prefix: str) -> None:
+        name = names.get(doc.id, "_")
+        path = f"{prefix}{separator}{name}" if prefix else name
+        paths[doc.id] = path
+        for child in doc.children:
+            visit(child, path)
+
+    for doc in analysis.documents:
+        visit(doc, "")
+    return paths
+
+
 def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> ResolvedDecisions:
     """Apply review decisions to an analysis without touching it.
 
@@ -1761,6 +1802,7 @@ __all__ = [
     "ResolvedDecisions",
     "collect_inputs",
     "detect_tree",
+    "display_names",
     "drop_inside_whitelist",
     "extract_file",
     "is_quarantined",

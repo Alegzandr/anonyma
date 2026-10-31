@@ -850,3 +850,19 @@ def test_full_profile_without_its_model_is_not_single_process(
     assert pipeline.config.profile is Profile.FULL  # still reported as chosen
     assert pipeline.detection_profile is not Profile.FULL
     assert pipeline._workers(10) > 1
+
+
+def test_neutral_names_drop_empty_archive_folders(tmp_path: Path, canary_config: Config) -> None:
+    import zipfile
+
+    src = tmp_path / "in" / "a.zip"
+    src.parent.mkdir()
+    with zipfile.ZipFile(src, "w") as zf:
+        zf.writestr(f"Dossier {CANARY_PERSON}/", b"")
+        zf.writestr("notes/a.txt", b"Rien.")
+    canary_config.neutral_filenames = True
+    top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.ANONYMIZED
+    assert top.output_path is not None
+    with zipfile.ZipFile(top.output_path) as zf:
+        assert zf.namelist() == ["piece_jointe_0001.txt"]

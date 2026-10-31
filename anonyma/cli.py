@@ -1478,8 +1478,28 @@ def analyse(
     raise typer.Exit(EXIT_PARTIAL if bad & set(summary["statuts"]) else EXIT_OK)
 
 
+#: Statuses of an item the analysis could not read.
+_UNREAD = frozenset({DocumentStatus.FAILED, DocumentStatus.UNSUPPORTED, DocumentStatus.CANCELLED})
+
+
 def analysis_summary(analysis: BatchAnalysis) -> dict[str, Any]:
-    """Counts only (no value, no file name)."""
+    """Counts, and the items that could not be read under their anonymized names
+    (never a value or an original name)."""
+    from anonyma.pipeline import display_names
+    from anonyma.report import status_label
+
+    unread = [d for d in analysis.all_documents() if d.status in _UNREAD]
+    names = display_names(analysis) if unread else {}
+    problems = [
+        {
+            "fichier": names.get(doc.id, "_"),
+            "statut": doc.status.value,
+            "statut_libelle": status_label(doc.status),
+            "problemes": [i.message for i in doc.issues if i.severity is not Severity.INFO],
+            "codes": [i.code for i in doc.issues if i.severity is not Severity.INFO],
+        }
+        for doc in unread
+    ]
     statuses: dict[str, int] = {}
     formats: dict[str, int] = {}
     for doc in analysis.all_documents():
@@ -1503,6 +1523,8 @@ def analysis_summary(analysis: BatchAnalysis) -> dict[str, Any]:
         "occurrences_par_type": dict(occurrences),
         "entites_distinctes_par_type": dict(sorted(distinct.items())),
         "a_revoir": len(analysis.review_clusters()),
+        # Items that could not be read (failed, unsupported, cancelled), any depth.
+        "non_analyses": problems,
     }
 
 
@@ -1539,6 +1561,12 @@ def _print_analysis(summary: dict[str, Any]) -> None:
     ]
     if problems:
         out.print("Éléments non analysés : " + " · ".join(problems), style="yellow")
+        for item in summary["non_analyses"]:
+            reasons = " ; ".join(item["problemes"]) or item["statut_libelle"]
+            out.print(
+                f"[yellow]•[/] {_markup_escape(item['fichier'])} : {_markup_escape(reasons)}",
+                soft_wrap=True,
+            )
     if summary["a_revoir"]:
         n = summary["a_revoir"]
         verb = "serait" if n < 2 else "seraient"

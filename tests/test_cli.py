@@ -1019,3 +1019,24 @@ def test_models_list_never_cuts_identifiers(monkeypatch: pytest.MonkeyPatch, wid
         assert spec.id in output.split(), spec.id
         assert spec.revision in output  # needed for an offline import
     assert "…" not in output
+
+
+def test_analyser_lists_unread_files_under_anonymized_names(
+    corpus: Path, business_list: Path
+) -> None:
+    (corpus / f"{CANARY_PERSON}.xyz").write_bytes(b"\x00\x01")
+    args = ["analyser", corpus, "-p", "leger", "--liste-metier", business_list]
+    result = invoke(*args, "-q")
+    assert result.exit_code == 1
+    assert "entree/[PERSONNE_001].xyz : Format de fichier non reconnu." in result.output
+    assert "uintavalle" not in result.output
+    data = json.loads(invoke(*args, "--json").stdout)
+    assert data["non_analyses"] == [
+        {
+            "fichier": "entree/[PERSONNE_001].xyz",
+            "statut": "non_supporte",
+            "statut_libelle": "Non pris en charge",
+            "problemes": ["Format de fichier non reconnu."],
+            "codes": ["format.unknown"],
+        }
+    ]
