@@ -79,7 +79,7 @@ GENERIC_ORG_WORDS = frozenset(
      "technologies", "technology", "software", "services", "cloud", "ireland", "emea",
      "eu", "the", "&", "et", "and", "de", "la", "le", "les", "des", "du", "by",
      # product names built on a listed name (« Oodrive Sign », oodrive-sign.com)
-     "sign", "esign", "signature", "suite", "pro", "business", "enterprise", "online"}
+     "sign", "esign", "signature", "suite", "pro", "business", "enterprise", "online", "eid"}
 )  # fmt: skip
 #: Second-level public suffixes: the organization label is the one before them.
 TWO_LEVEL_SUFFIXES = frozenset(
