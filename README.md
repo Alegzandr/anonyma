@@ -110,11 +110,17 @@ en quarantaine) ; **Échec** ou **Non pris en charge** (rien n'est produit).
 
 ## Utilisation en ligne de commande
 
-Toutes les commandes acceptent `-h` / `--help`.
+Toutes les commandes acceptent `-h` / `--help` ; l'aide de `run` et d'`analyser` range
+les options par thème (Sortie, Détection, Remplacement, Images et PDF, Organisations,
+Divers). Les sorties sont toujours écrites en UTF-8, y compris redirigées vers un fichier.
 
 ```sh
 # Anonymiser un dossier (sous-dossiers compris) vers un dossier de sortie
 anonyma-cli run "Dossiers clients" --sortie anonymises --rapport rapport.html
+anonyma-cli anonymiser "Dossiers clients" -o anonymises     # même commande (alias)
+
+# Bilan lisible par un script ou un agent : JSON seul sur la sortie standard
+anonyma-cli run "Dossiers clients" -o anonymises --json --silencieux > bilan.json
 
 # Choisir le profil, le mode de remplacement, ajouter des listes
 anonyma-cli run courrier.docx -o sortie --profil standard --mode realiste \
@@ -147,16 +153,54 @@ Options principales de `run` :
 | `--processus N`, `-j N` | nombre de processus (0 = automatique) |
 | `--config FICHIER` | autre fichier de configuration JSON |
 | `--rapport FICHIER` | rapport `.json`, `.md` ou `.html` (aucune donnée d'origine) |
+| `--json` | bilan JSON sur la sortie standard (voir ci-dessous) |
 | `--table FICHIER` | table de correspondance (pseudonymisation) |
 | `--silencieux`, `-q` | sans barre de progression |
 
+`anonyma-cli run --help` liste toutes les options (OCR, codes-barres, texte invisible des
+PDF, identifiants techniques, organisations, noms de fichiers neutres, numérotation des
+balises).
+
+Le dossier de sortie est contrôlé **avant** l'analyse : un dossier qui chevauche les
+originaux ou un fichier existant arrête la commande aussitôt (code 2). Le résumé commence
+par un verdict sur une ligne (« 8 fichiers anonymisés et vérifiés. », ou
+« 6 anonymisés · 1 à revoir · 1 en quarantaine (ne pas diffuser) »), puis le tableau des
+données masquées (type, code, occurrences) et les chemins du dossier de sortie, de la
+quarantaine si elle existe, et du rapport, chacun sur une ligne. Seul un résidu
+**certain** envoie un fichier en quarantaine ; un résidu **possible** (signal statistique,
+souvent une balise mal relue par l'OCR) le laisse « à revoir » et le résumé invite à
+vérifier la zone signalée dans le rapport. Dans ce résumé comme dans
+`analyser` et les rapports, une **entité** est une valeur distincte (une même personne) et
+une **occurrence** chacune de ses mentions.
+
 Codes de sortie : **0** tous les fichiers sont anonymisés, **1** au moins un fichier
 présente des résidus, a échoué, n'est pas pris en charge ou le traitement a été
-interrompu, **2** erreur d'utilisation (option invalide, phrase secrète incorrecte,
-configuration invalide…). Les fichiers dont la vérification échoue sont placés dans
-`<sortie>_quarantaine/`, **à côté** du dossier de sortie (jamais dedans : le dossier de
-sortie ne contient que des fichiers vérifiés et peut être partagé tel quel) ; ils ne doivent
-pas être diffusés.
+interrompu, **2** erreur d'utilisation (option invalide, dossier de sortie invalide,
+phrase secrète incorrecte, configuration invalide…). Les fichiers dont la vérification
+échoue sont placés dans `<sortie>_quarantaine/`, **à côté** du dossier de sortie (jamais
+dedans : le dossier de sortie ne contient que des fichiers vérifiés et peut être partagé
+tel quel) ; ils ne doivent pas être diffusés.
+
+**Automatisation (`--json`).** Le texte du résumé peut évoluer ; pour un script ou un
+agent, `run --json` écrit sur la sortie standard un unique objet JSON et rien d'autre (la
+progression, les avertissements et le résumé lisible passent sur la sortie d'erreur). Il
+ne contient que des codes, des nombres, des chemins et les noms anonymisés des fichiers :
+
+| Clé | Contenu |
+|---|---|
+| `verdict` | `anonymise`, `a_revoir`, `quarantaine`, `echec` ou `vide` |
+| `code_sortie` | code de sortie de la commande (0 ou 1) |
+| `fichiers`, `elements` | fichiers en entrée ; éléments traités (pièces jointes et contenus d'archives compris) |
+| `statuts` | nombre de fichiers par statut (`anonymise`, `a_revoir`, `residu`, `echec`, `non_supporte`, `annule`) |
+| `quarantaine`, `a_revoir`, `residus`, `echecs` | nombres correspondants |
+| `occurrences_par_type` | occurrences masquées par type (`PERSONNE`, `EMAIL`…) |
+| `dossier_sortie`, `dossier_quarantaine`, `rapport` | chemins absolus (`null` si sans objet) |
+| `parametres` | `profil`, `mode`, `regime` appliqués |
+| `documents` | par fichier : `fichier` (nom anonymisé), `statut`, `quarantaine`, `occurrences`, `residus`, `a_revoir` |
+
+Une erreur d'utilisation (code 2) n'écrit rien sur la sortie standard : le message est sur
+la sortie d'erreur. `analyser --json` donne de même `occurrences_par_type` (aussi sous son
+ancien nom `mentions_par_type`) et `entites_distinctes_par_type`.
 
 ## Formats
 
@@ -191,7 +235,7 @@ dans `<sortie>_quarantaine/`, à côté du dossier de sortie.
 
 `anonyma-cli materiel` affiche la mémoire, les processeurs, la carte graphique, les
 accélérations disponibles pour ONNX Runtime (DirectML sous Windows, Core ML sous macOS,
-processeur sinon) et le profil recommandé. Le modèle de langage recommandé est le plus
+processeur sinon) et le profil conseillé. Le modèle de langue conseillé est le plus
 grand du catalogue qui tient dans la mémoire vive (4B, 8B ou 14B). Pour imposer un
 profil : `--profil` ponctuellement, ou `anonyma-cli config definir profile complet`
 (`auto` pour revenir au choix automatique). Un détecteur dont le modèle n'est pas
@@ -236,8 +280,9 @@ son nom ou son empreinte et vérifié avant installation.
 
 La table est protégée par une **phrase secrète**, demandée à l'ouverture (saisie
 masquée, confirmée à la création) ou lue dans la variable d'environnement
-`ANONYMA_PASSPHRASE` pour les traitements automatisés. Elle n'est enregistrée nulle
-part : **une phrase secrète perdue rend la table définitivement illisible.** La clé est
+`ANONYMA_PASSPHRASE` pour les traitements automatisés (la variable est retirée de
+l'environnement dès le démarrage : ni les processus de traitement ni LibreOffice ne la
+reçoivent). Elle n'est enregistrée nulle part : **une phrase secrète perdue rend la table définitivement illisible.** La clé est
 dérivée par Argon2id ; valeurs d'origine et substituts sont chiffrés en AES-256-GCM et
 recherchés par empreintes HMAC : rien n'apparaît en clair dans le fichier.
 
