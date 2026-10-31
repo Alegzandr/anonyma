@@ -109,8 +109,13 @@ class RapidOcrEngine:
     rotated = True
 
     def __init__(self, latin: tuple[Path, Path] | None = None) -> None:
+        import onnxruntime as ort
         from rapidocr_onnxruntime import RapidOCR
 
+        # rapidocr opens its own ONNX Runtime sessions: telemetry (ETW on Windows) off first.
+        disable = getattr(ort, "disable_telemetry_events", None)
+        if disable is not None:
+            disable()
         kwargs: dict[str, Any] = {"text_score": MIN_LINE_SCORE}
         if latin is not None:
             kwargs["rec_model_path"] = str(latin[0])
