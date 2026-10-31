@@ -116,3 +116,21 @@ def test_residue_location_and_label() -> None:
     result = verify(output("Jean Dupont", label="dc:creator"), [("Jean Dupont", "PERSONNE")], set())
     (res,) = result.residues
     assert res.location == "sortie.txt" and res.segment_label == "dc:creator"
+
+
+def test_save_time_of_today_is_not_a_residue() -> None:
+    """LibreOffice dates the legacy files it saves: a "modified" of today in the output
+    is its own stamp, even when the original was saved today as well."""
+    from datetime import date
+
+    def metadata(text: str, label: str) -> Document:
+        doc = output()
+        doc.segments = [Segment("m", text, (0,), SegmentContext(SegmentKind.METADATA, label))]
+        return doc
+
+    today = date.today().isoformat()
+    stamped = metadata(f"{today}T10:15:00Z", "modified")
+    assert verify(stamped, [(today, "DATE")], set(), detectors=[RegexDetector(Config())]).clean
+    assert not verify(metadata(f"{today}T10:15:00Z", "created"), [(today, "DATE")], set()).clean
+    old = metadata("2019-03-04T10:15:00Z", "modified")
+    assert not verify(old, [("2019-03-04", "DATE")], set()).clean

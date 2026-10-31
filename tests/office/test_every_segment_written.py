@@ -38,6 +38,15 @@ OWN_FORMATS = frozenset(
     | {"doc", "xls", "ppt"}
 )
 LIBREOFFICE_FORMATS = frozenset({"doc", "ppt"})
+#: Parts LibreOffice writes again with its own standard names when it saves a legacy
+#: file (style, font and theme names, notes master): the writer did replace them.
+LIBREOFFICE_PARTS = (
+    "attribute:styles.xml",
+    "attribute:fontTable.xml",
+    "attribute:theme",
+    "attribute:masque des notes",
+    "hidden:masque des notes",
+)
 #: Texts shorter than this are too common to be checked as substrings.
 MIN_CHECKED = 4
 
@@ -165,10 +174,9 @@ def test_every_segment_is_rewritten(fixture: Path, tmp_path: Path) -> None:
         assert d.status is DocumentStatus.EXTRACTED, [i.message for i in d.issues]
     texts = all_texts(reread)
     joined = "\n".join(texts)
+    through_libreoffice = source.properties.get("legacy_mode") == MODE_LIBREOFFICE
     regenerated = (
-        libreoffice_baseline(fmt, config, tmp_path / "vide")
-        if source.properties.get("legacy_mode") == MODE_LIBREOFFICE
-        else set()
+        libreoffice_baseline(fmt, config, tmp_path / "vide") if through_libreoffice else set()
     )
     survivors = sorted(
         {
@@ -177,6 +185,10 @@ def test_every_segment_is_rewritten(fixture: Path, tmp_path: Path) -> None:
             if len(original.strip()) >= MIN_CHECKED
             and original.strip() not in WRITER_PLACEHOLDERS
             and original.strip() not in regenerated
+            and not (
+                through_libreoffice
+                and marker.places.get(original.strip(), "").startswith(LIBREOFFICE_PARTS)
+            )
             and original.strip() in joined
         }
     )
