@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -516,3 +517,31 @@ def test_unexpected_error_shows_its_type_only(
     captured = capsys.readouterr()
     assert "RuntimeError" in captured.err
     assert "Quintavalle" not in captured.err + captured.out
+
+
+def _env_spy(seen: list[str | None], method: Any) -> Any:
+    def spy(self: Any, *args: Any, **kwargs: Any) -> Any:
+        # Worker processes and LibreOffice inherit this environment.
+        seen.append(os.environ.get(cli.PASSPHRASE_ENV))
+        return method(self, *args, **kwargs)
+
+    return spy
+
+
+def test_passphrase_never_reaches_child_processes(
+    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma.pipeline import Pipeline
+
+    seen: list[str | None] = []
+    monkeypatch.setattr(Pipeline, "run", _env_spy(seen, Pipeline.run))
+    table = tmp_path / "table.anonyma"
+    args = _run_args(corpus, tmp_path / "sortie", business_list, "-r", "pseudonymisation")
+    result = invoke(*args, "--table", table, env={cli.PASSPHRASE_ENV: SECRET})
+    assert result.exit_code == 0, result.output
+    assert table.is_file()
+    # Analysis only, no table opened: the variable is gone as well.
+    monkeypatch.setattr(Pipeline, "analyze", _env_spy(seen, Pipeline.analyze))
+    result = invoke("analyser", corpus, "-p", "leger", "-q", env={cli.PASSPHRASE_ENV: SECRET})
+    assert result.exit_code == 0, result.output
+    assert seen == [None, None]

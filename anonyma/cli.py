@@ -198,6 +198,18 @@ app.add_typer(config_app, name="config")
 _bootstrapped = False
 
 
+#: ``ANONYMA_PASSPHRASE`` taken out of the environment by :func:`take_env_passphrase`.
+_env_passphrase: str | None = None
+
+
+def take_env_passphrase() -> None:
+    """Move ``ANONYMA_PASSPHRASE`` out of ``os.environ`` before anything else runs, so
+    that worker processes and LibreOffice never inherit it: the mapping table is only
+    opened by this process, the workers never need its key."""
+    global _env_passphrase
+    _env_passphrase = os.environ.pop(PASSPHRASE_ENV, None) or None
+
+
 def bootstrap() -> None:
     """Portable environment, network guard, temp cleanup and logging (idempotent)."""
     global _bootstrapped
@@ -231,6 +243,7 @@ def _root(
         ),
     ] = False,
 ) -> None:
+    take_env_passphrase()
     bootstrap()
 
 
@@ -395,7 +408,9 @@ def store_path(config: Config, table: Path | None) -> Path:
 
 
 def read_passphrase(*, confirm: bool) -> str:
-    env = os.environ.get(PASSPHRASE_ENV)
+    global _env_passphrase
+    env = _env_passphrase or os.environ.pop(PASSPHRASE_ENV, None)
+    _env_passphrase = None
     if env:
         return env
     try:
@@ -403,6 +418,8 @@ def read_passphrase(*, confirm: bool) -> str:
             "Phrase secrète de la table de correspondance",
             hide_input=True,
             confirmation_prompt="Confirmez la phrase secrète" if confirm else False,
+            prompt_suffix=" : ",
+            err=True,
         )
     except typer.Abort:
         fail("Phrase secrète non saisie.")
