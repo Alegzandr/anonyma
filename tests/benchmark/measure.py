@@ -830,6 +830,7 @@ def evaluate_doc(truth: dict[str, Any], out_root: Path) -> dict[str, Any]:
                 "value": entry["value"],
                 "where": entry["where"],
                 "leaked": bool(hits),
+                "precision_only": bool(entry.get("precision_only")),
                 "hits": sorted(set(hits))[:12],
                 "first_name_residue": bool(partial),
             }
@@ -871,11 +872,10 @@ def aggregate(docs: list[dict[str, Any]]) -> dict[str, Any]:
     for doc in docs:
         for e in doc["entries"]:
             ok = 0 if e["leaked"] else 1
-            for bucket in (
-                by_type[e["type"]],
-                by_fmt_type[doc["format"]][e["type"]],
-                direct if e["direct"] else indirect,
-            ):
+            buckets = [by_type[e["type"]], by_fmt_type[doc["format"]][e["type"]]]
+            if not e.get("precision_only"):  # mail dates: precision ground truth only
+                buckets.append(direct if e["direct"] else indirect)
+            for bucket in buckets:
                 bucket[0] += ok
                 bucket[1] += 1
     prec: dict[str, list[int]] = defaultdict(lambda: [0, 0])

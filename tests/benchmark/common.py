@@ -36,6 +36,10 @@ CORPUS = ROOT / "corpus"
 TRUTH = ROOT / "ground_truth"
 RESULTS = ROOT / "results"
 
+#: Sending / transport dates of mails: ground truth for precision only (masked by the
+#: date policy, not a detection target of the recall rates).
+DATE_SENT = "DATE_ENVOI"
+
 DIRECT_TYPES = (
     "PERSONNE",
     "EMAIL",

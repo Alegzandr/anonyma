@@ -212,6 +212,27 @@
    ],
    "partial": [],
    "regions": []
+  },
+  {
+   "id": "07-009",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Thu, 05 Mar 2026 11:00:00 +0100",
+   "where": [
+    "Date"
+   ],
+   "surfaces": [
+    "Thu, 05 Mar 2026 11:00:00 +0100"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Thu, 05 Mar 2026 11:00:00 +0100"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
   }
  ],
  "keep": [

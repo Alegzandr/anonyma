@@ -256,6 +256,27 @@
    ],
    "partial": [],
    "regions": []
+  },
+  {
+   "id": "09-010",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Mon, 9 Mar 2026 10:00:00 +0100",
+   "where": [
+    "Received (en-têtes de transport)"
+   ],
+   "surfaces": [
+    "Mon, 9 Mar 2026 10:00:00 +0100"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Mon, 9 Mar 2026 10:00:00 +0100"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
   }
  ],
  "keep": [

@@ -18,6 +18,13 @@ Depuis, le **correctif global n°1** (incident du PDF signé, voir la section d�
 ajouté un 25e document ; en `leger` : 99,7 % (323/324) de rappel direct, 94,2 % de
 précision, 93,3 % de phrases témoins intactes (`standard` non remesuré, modèles absents).
 
+Les dates d'envoi et de transport des courriels (en-têtes `Date` et `Received`,
+séparateurs mbox, en-tête cité dans un corps) figurent depuis dans la vérité terrain sous
+le type `DATE_ENVOI`, pour la précision seulement (hors taux de rappel) : ce sont des
+métadonnées personnelles que la politique des dates remplace, pas des faux positifs. En
+`leger` : 100,0 % de rappel direct, 65,0 % sur les autres types, précision 97,6 %
+(90,8 % avec l'ancienne vérité terrain), 93,3 % de phrases témoins intactes.
+
 La cible (≥ 99 % de rappel sur les identifiants directs en profil `standard`) est
 atteinte sur ce corpus ; voir les limites plus bas : 322 valeurs ne permettent pas de
 garantir 99 % sur des documents réels.
