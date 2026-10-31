@@ -2,7 +2,7 @@
 
 ## Profil leger
 
-- Durée du lot : 43.5 s pour 25 documents
+- Durée du lot : 28.5 s pour 25 documents
 - Rappel identifiants directs : **100.0 %** (324/324)
 - Rappel autres types : 65.0 % (39/60)
 - Précision (segments remplacés correspondant à une valeur de référence) : 90.8 % (295/325) ; hors dates non liées à une naissance : 91.6 %
@@ -91,7 +91,7 @@
 
 ## Profil standard
 
-- Durée du lot : 142.4 s pour 25 documents
+- Durée du lot : 27.7 s pour 25 documents
 - Rappel identifiants directs : **100.0 %** (324/324)
 - Rappel autres types : 65.0 % (39/60)
 - Précision (segments remplacés correspondant à une valeur de référence) : 90.8 % (295/325) ; hors dates non liées à une naissance : 91.6 %

@@ -702,6 +702,12 @@ class Detector(ABC):
         """False when a dependency or model is missing (detector skipped, reported)."""
         return True
 
+    @classmethod
+    def is_enabled(cls, config: Config) -> bool:
+        """False when the settings switch this detector off (it then finds nothing):
+        it is not listed among the detectors a batch used."""
+        return True
+
     @abstractmethod
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         """Return entities found in ``segments``; offsets relative to each segment."""

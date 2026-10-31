@@ -473,6 +473,90 @@
    ],
    "partial": [],
    "regions": []
+  },
+  {
+   "id": "08-017",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Mon, 09 Mar 2026 08:00:00 +0100",
+   "where": [
+    "Date"
+   ],
+   "surfaces": [
+    "Mon, 09 Mar 2026 08:00:00 +0100"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Mon, 09 Mar 2026 08:00:00 +0100"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
+  },
+  {
+   "id": "08-018",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Mon Mar  9 08:00:00 2026",
+   "where": [
+    "séparateurs mbox"
+   ],
+   "surfaces": [
+    "Mon Mar  9 08:00:00 2026"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Mon Mar  9 08:00:00 2026"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
+  },
+  {
+   "id": "08-019",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Tue, 10 Mar 2026 08:00:00 +0100",
+   "where": [
+    "Date"
+   ],
+   "surfaces": [
+    "Tue, 10 Mar 2026 08:00:00 +0100"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Tue, 10 Mar 2026 08:00:00 +0100"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
+  },
+  {
+   "id": "08-020",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Tue, 10 Mar 2026 09:00:00 +0100",
+   "where": [
+    "Date"
+   ],
+   "surfaces": [
+    "Tue, 10 Mar 2026 09:00:00 +0100"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Tue, 10 Mar 2026 09:00:00 +0100"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
   }
  ],
  "keep": [

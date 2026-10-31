@@ -197,7 +197,7 @@ def test_identifiers_have_valid_checksums_and_shape() -> None:
 
 def test_dates_shifted_consistently() -> None:
     table, kept, _ = assign(
-        [("03/04/1985", "DATE_NAISSANCE"), ("10/04/1985", "DATE"), ("1er mars 2021", "DATE"),
+        [("03/04/1985", "DATE"), ("10/04/1985", "DATE"), ("1er mars 2021", "DATE"),
          ("2021-03-08", "DATE")],
         ReplacementMode.REALISTIC,
     )  # fmt: skip
@@ -216,6 +216,88 @@ def test_dates_shifted_consistently() -> None:
         and date.fromordinal(date(2021, 3, 8).toordinal() + shift).isoformat()
     )
     assert re.fullmatch(r"(1er|\d{1,2}) \w+ \d{4}", textual)
+
+
+def test_one_instant_gets_one_substitute_in_every_format() -> None:
+    """D365 export: the ISO value, its Dataverse label, the mail header and the CSV
+    cell of one e-mail move together; time of day and zone are kept."""
+    from datetime import datetime, timedelta
+    from email.utils import parsedate_to_datetime
+
+    values = [
+        ("2026-09-01T08:14:29Z", "DATE"),
+        ("2026-09-01T08:14:29.123Z", "DATE"),
+        ("2026-09-01T10:14:29+02:00", "DATE"),
+        ("01/09/2026 10:14", "DATE"),
+        ("01 Sep 2026 08:14:29 +0000", "DATE"),
+        ("2026-09-01T08:17:29Z", "DATE"),  # modified 3 minutes later
+        ("2026-08-31T23:59:00Z", "DATE"),  # the day before
+        ("12 mars 2026", "DATE"),
+        ("12/03/2026", "DATE"),
+    ]
+    table, kept, _ = assign(values, ReplacementMode.REALISTIC)
+    out = {v: sub(table, kept, v) for v, _ in values}
+    created = datetime.fromisoformat(out["2026-09-01T08:14:29Z"])
+    shift = created - datetime.fromisoformat("2026-09-01T08:14:29Z")
+    assert shift.seconds == 0 and shift.days != 0  # whole days only
+    assert datetime.fromisoformat(out["2026-09-01T08:14:29.123Z"]) == created + timedelta(
+        microseconds=123000
+    )
+    assert out["2026-09-01T10:14:29+02:00"].endswith("T10:14:29+02:00")
+    assert datetime.fromisoformat(out["2026-09-01T10:14:29+02:00"]) == created
+    assert out["01/09/2026 10:14"] == created.strftime("%d/%m/%Y") + " 10:14"
+    assert parsedate_to_datetime(out["01 Sep 2026 08:14:29 +0000"]) == created
+    assert datetime.fromisoformat(out["2026-09-01T08:17:29Z"]) - created == timedelta(minutes=3)
+    assert datetime.fromisoformat(out["2026-08-31T23:59:00Z"]) < created  # order kept
+    textual = shift_date("12 mars 2026", shift.days)
+    assert out["12 mars 2026"] == textual and out["12/03/2026"] == shift_date(
+        "12/03/2026", shift.days
+    )
+
+
+def test_birth_dates_have_their_own_offset() -> None:
+    """A birth date does not follow the batch offset (one known event date would give
+    it away) but every format of it agrees, and stays near the original."""
+    from anonyma.substitutes import parse_date
+
+    def days(value: str) -> int:
+        moved, original = parse_date(sub(table, kept, value)), parse_date(value)
+        assert moved is not None and original is not None
+        return (moved - original).days
+
+    births = [f"{d:02d}/04/1985" for d in range(1, 29)]
+    values = [("2026-03-12", "DATE"), ("3 avril 1985", "DATE_NAISSANCE")]
+    values += [(b, "DATE_NAISSANCE") for b in births]
+    table, kept, _ = assign(values, ReplacementMode.REALISTIC)
+    shifts = {days(b) for b in births}
+    assert all(30 <= abs(s) <= 365 for s in shifts)
+    assert len(shifts) > 1 and shifts != {days("2026-03-12")}
+    assert days("3 avril 1985") == days("03/04/1985")
+
+
+def test_pseudonymized_dates_are_stable_and_older_substitutes_are_fixed() -> None:
+    from anonyma.replacer import DATE_SHIFT_KEY, PARAMETER_TYPE
+
+    store = InMemoryMappingStore()
+    cfg = Config(mode=ReplacementMode.REALISTIC, regime=Regime.PSEUDONYMIZATION)
+    first = [ent("2026-09-01T08:14:29Z", "DATE")]
+    kept, clusters = resolve(first, cfg)
+    one = Replacer(cfg, store).assign(clusters, kept).substitute_for(kept[0])
+    shift = int(store.lookup(PARAMETER_TYPE, DATE_SHIFT_KEY) or "0")
+    # An older version stored a random time of day: the next run corrects it.
+    stale = [
+        k for k, (_, substitute) in store._data.items() if k[0] == "DATE" and substitute == one
+    ]
+    assert stale
+    for k in stale:
+        store._data[k] = (store._data[k][0], one[:11] + "17:03:59Z")
+    kept, clusters = resolve([ent("2026-09-01T08:14:29Z", "DATE")], cfg)
+    two = Replacer(cfg, store).assign(clusters, kept).substitute_for(kept[0])
+    assert two == one and two.endswith("T08:14:29Z")
+    assert int(store.lookup(PARAMETER_TYPE, DATE_SHIFT_KEY) or "0") == shift
+    from anonyma.store import reidentification_map
+
+    assert reidentification_map(store.items())[one] == "2026-09-01T08:14:29Z"
 
 
 def test_shift_date_formats() -> None:

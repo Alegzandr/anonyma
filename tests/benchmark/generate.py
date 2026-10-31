@@ -32,7 +32,7 @@ from xml.sax.saxutils import escape, quoteattr
 from PIL import Image, ImageDraw
 from PIL.PngImagePlugin import PngInfo
 
-from tests.benchmark.common import CORPUS, DIRECT_TYPES, TRUTH
+from tests.benchmark.common import CORPUS, DATE_SENT, DIRECT_TYPES, TRUTH
 from tests.fixtures.generators.mail_archive_image import _add_props, font, one_off
 from tests.fixtures.generators.office import (
     NS_A,
@@ -774,6 +774,7 @@ class Doc:
     keep: list[str] = field(default_factory=list)
     images: dict[str, dict[str, Any]] = field(default_factory=dict)
     pending: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
+    mail_dates: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def dir(self) -> Path:
@@ -836,6 +837,14 @@ class Doc:
             "TELEPHONE", e164, where, *surfaces, renderings=[{"mode": "compact", "text": national}]
         )
 
+    def mail_date(self, value: str, where: str) -> None:
+        """A sending or transport date of a mail (header, quoted header, mbox
+        separator, msg property): personal metadata the date policy replaces (neutral
+        date, shifted date). Precision only: its replacement is a true positive, but
+        it is left out of the recall rates (``precision_only``). Added last, so that
+        the ids of the other entries do not move."""
+        self.mail_dates.append((value, where))
+
     def dob(self, d: date, where: str, *surfaces: str) -> None:
         self.add("DATE_NAISSANCE", d.isoformat(), where, *surfaces)
 
@@ -847,6 +856,8 @@ class Doc:
         self.pending.append((kind, value, {"image": image, "bbox": [round(v, 4) for v in bbox]}))
 
     def save(self) -> None:
+        for value, where in self.mail_dates:
+            self.add(DATE_SENT, value, where)["precision_only"] = True
         for kind, value, region in self.pending:
             self.entries[(kind, value)]["regions"].append(region)
         data = {
@@ -1534,6 +1545,9 @@ De : {i.full} &lt;{i.email}&gt;<br>Le badge de J.-B. Kowalczyk est pr&ecirc;t. P
     msg["Cc"] = formataddr((f"{k.last.upper()} {k.first}", k.email))
     msg["Subject"] = f"RE: TR: Dossier {k.last} – pièces justificatives"
     msg["Date"] = "Wed, 04 Mar 2026 09:00:00 +0100"
+    doc.mail_date("Wed, 04 Mar 2026 09:00:00 +0100", "Date")
+    doc.mail_date("Wed, 4 Mar 2026 09:00:00 +0100", "Received")
+    doc.mail_date("dim. 1 mars 2026 à 18:40", "en-tête cité dans le corps")
     msg["Message-ID"] = "<fil-0042@exemple.test>"
     msg["In-Reply-To"] = "<fil-0041@exemple.test>"
     msg["Thread-Topic"] = f"Dossier {k.last}"
@@ -1574,6 +1588,7 @@ De : {i.full} &lt;{i.email}&gt;<br>Le badge de J.-B. Kowalczyk est pr&ecirc;t. P
     inner["To"] = formataddr((k.full, k.email))
     inner["Subject"] = "Badge et parking"
     inner["Date"] = "Sun, 01 Mar 2026 18:40:00 +0100"
+    doc.mail_date("Sun, 01 Mar 2026 18:40:00 +0100", "Date du message joint")
     inner.set_content(
         f"Bonjour {k.first},\nVotre badge est prêt.\n{i.full}\n{fmt_phone(i.phone, 'odd')}\n"
     )
@@ -1703,6 +1718,7 @@ def doc_eml_encoded() -> Doc:
         "MIME-Version: 1.0\r\n"
         'Content-Type: multipart/mixed; boundary="==limite-0007=="\r\n\r\n'
     )
+    doc.mail_date("Thu, 05 Mar 2026 11:00:00 +0100", "Date")
     zbuf = io.BytesIO()
     with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as zf:
         zip_entry(
@@ -1762,6 +1778,8 @@ def doc_mbox() -> Doc:
     m1["To"] = formataddr((q.full, q.email))
     m1["Subject"] = "Honoraires"
     m1["Date"] = "Mon, 09 Mar 2026 08:00:00 +0100"
+    doc.mail_date("Mon, 09 Mar 2026 08:00:00 +0100", "Date")
+    doc.mail_date("Mon Mar  9 08:00:00 2026", "séparateurs mbox")
     m1.set_content(
         f"Bonjour Quentin,\n\nMerci de régler la note sur le compte {fmt_iban(a.iban, 'nbsp')}.\n"
         f"From the desk of {a.full}\nMaître {a.last}, {a.job}\n",
@@ -1772,6 +1790,7 @@ def doc_mbox() -> Doc:
     m2["To"] = formataddr((n.full, n.email))
     m2["Subject"] = "Liste des nouveaux arrivants"
     m2["Date"] = "Tue, 10 Mar 2026 08:00:00 +0100"
+    doc.mail_date("Tue, 10 Mar 2026 08:00:00 +0100", "Date")
     m2.set_content(f"Noémie,\nci-joint la liste.\n{NEGATIVES[9]}\nQ. Morel\n", cte="base64")
     lam, mer = P["lambert"], P["mercier"]
     csv_text = (
@@ -1785,6 +1804,7 @@ def doc_mbox() -> Doc:
     m3["To"] = q.email
     m3["Subject"] = f"RE: Liste des nouveaux arrivants — {lam.full}"
     m3["Date"] = "Tue, 10 Mar 2026 09:00:00 +0100"
+    doc.mail_date("Tue, 10 Mar 2026 09:00:00 +0100", "Date")
     m3.set_content(
         f"Bien reçu. {lam.first} {lam.last.upper()} commence lundi ; "
         f"son login sera {lam.username}.\n"
@@ -1864,6 +1884,7 @@ def doc_msg() -> Doc:
         f"From: {b.full} <{b.email}>\r\nTo: {a.full} <{a.email}>\r\n"
         f"Subject: Coordonnées {a.last}\r\nMessage-ID: <msg-0009@exemple.test>\r\n"
     )
+    doc.mail_date("Mon, 9 Mar 2026 10:00:00 +0100", "Received (en-têtes de transport)")
     _add_props(
         writer,
         "",
@@ -2903,6 +2924,7 @@ def doc_zip_nested() -> Doc:
     mail["To"] = formataddr((f.full, f.email))
     mail["Subject"] = f"Pièces du dossier {f.last}"
     mail["Date"] = "Fri, 06 Mar 2026 10:00:00 +0100"
+    doc.mail_date("Fri, 06 Mar 2026 10:00:00 +0100", "Date")
     mail.set_content(
         f"Bonjour {f.first},\nVoici l'archive demandée.\n{i.first} {i.last}\n"
         f"{fmt_phone(i.phone, 'spaces')}\n"

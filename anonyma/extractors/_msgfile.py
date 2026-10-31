@@ -26,7 +26,12 @@ Writer policy (identity-bearing values that cannot be anonymized are removed):
   dropped; file names come from the anonymized child; OLE-object attachments and
   attachments whose child could not be anonymized are removed;
 * the named-property map (``__nameid_version1.0``) is copied as is (property
-  names and GUIDs, no values).
+  names and GUIDs, no values);
+* every date property (``PT_SYSTIME``: sending, delivery, creation, modification,
+  attachment and named-property times) is exposed as text (:func:`time_items`,
+  ``01 Sep 2026 08:14:29 +0000``) and rewritten like the ``Date`` header of an eml:
+  the shifted substitute, or the neutral date of
+  :mod:`anonyma.extractors._mailheaders` for a tag; multi-valued dates are dropped.
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ import re
 import struct
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from email.parser import HeaderParser
 from email.policy import compat32
 
@@ -56,6 +62,8 @@ PT_BINARY = 0x0102
 PT_MV_STRING8 = 0x101E
 PT_MV_UNICODE = 0x101F
 PT_MV_BINARY = 0x1102
+PT_SYSTIME = 0x0040
+PT_MV_SYSTIME = 0x1040
 STRING_TYPES = (PT_UNICODE, PT_STRING8)
 MV_STRING_TYPES = (PT_MV_UNICODE, PT_MV_STRING8)
 
@@ -104,6 +112,15 @@ LABELS = {
     0x1035: "Message-ID",
     0x1042: "In-Reply-To",
     0x1039: "References",
+}
+TIME_LABELS = {
+    0x0039: "date d'envoi",
+    0x0E06: "date de réception",
+    0x3007: "date de création",
+    0x3008: "date de modification",
+    0x0E07: "date de remise",
+    0x0048: "date de début",
+    0x0049: "date de fin",
 }
 HEADER_TAGS = frozenset(
     {0x0037, 0x0E1D, 0x0070, 0x0C1A, 0x0C1F, 0x5D01, 0x0042, 0x0065, 0x5D02, 0x0E04, 0x0E03,
@@ -344,6 +361,69 @@ def text_items(tree: MsgTree) -> Iterator[TextItem]:
                 yield TextItem(
                     obj.path, name, PR_BODY, PT_UNICODE, "rtf", rtf_text, prefix + "corps"
                 )
+
+
+_FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=UTC)
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+#: Outlook writes 4501-01-01 for "no date": not a value.
+_LAST_YEAR = 4500
+
+
+def filetime_moment(value: bytes) -> datetime | None:
+    """The instant of a FILETIME (8 bytes, little endian), None for no date."""
+    ticks = int.from_bytes(value[:8], "little")
+    if ticks <= 0:
+        return None
+    try:
+        moment = _FILETIME_EPOCH + timedelta(microseconds=ticks // 10)
+    except OverflowError:
+        return None
+    return moment if moment.year < _LAST_YEAR else None
+
+
+def moment_filetime(moment: datetime) -> bytes:
+    """FILETIME of ``moment`` (whole seconds), 8 bytes little endian."""
+    when = moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
+    seconds = (when.astimezone(UTC).replace(microsecond=0) - _FILETIME_EPOCH) // timedelta(
+        seconds=1
+    )
+    return (max(seconds, 0) * 10**7).to_bytes(8, "little")
+
+
+def render_time(moment: datetime) -> str:
+    """``01 Sep 2026 08:14:29 +0000``: the text a date property is exposed as."""
+    utc = moment.astimezone(UTC)
+    return f"{utc.day:02d} {_MONTHS[utc.month - 1]} {utc.year} {utc:%H:%M:%S} +0000"
+
+
+@dataclass(frozen=True, slots=True)
+class TimeItem:
+    """A date property (fixed ``PT_SYSTIME`` value) of a property object."""
+
+    owner: Entry
+    pid: int
+    moment: datetime
+    label: str
+
+    @property
+    def segment_id(self) -> str:
+        return time_segment_id(self.owner, self.pid)
+
+
+def time_segment_id(owner: Entry, pid: int) -> str:
+    return "/".join((*owner, PROPS)) + f"|d{pid:04X}"
+
+
+def time_items(tree: MsgTree) -> Iterator[TimeItem]:
+    for obj in tree.objects:
+        for entry in obj.entries:
+            if entry.ptype != PT_SYSTIME:
+                continue
+            moment = filetime_moment(entry.value)
+            if moment is None:
+                continue
+            name = TIME_LABELS.get(entry.pid, f"date (propriété {entry.pid:04X})")
+            yield TimeItem(obj.path, entry.pid, moment, obj.label + name)
 
 
 def rtf_only(obj: PropObject) -> bool:

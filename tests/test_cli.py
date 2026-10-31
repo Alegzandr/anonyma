@@ -390,6 +390,10 @@ def test_models_list_import_remove(tmp_path: Path, fake_model: ModelSpec) -> Non
     result = invoke("modeles", "importer", "modele-test", src)
     assert result.exit_code == 0, result.output
     assert "installé, vérifié" in invoke("modeles", "liste").output
+    [row] = json.loads(invoke("modeles", "liste", "--json").stdout)
+    assert row["id"] == "modele-test" and row["installe"] and row["verifie"]
+    assert row["taille_octets"] == len(PAYLOAD) and row["chemin"]
+    assert {"type", "licence", "revision", "moteur_disponible"} <= set(row)
     assert invoke("modeles", "supprimer", "modele-test", "--oui").exit_code == 0
     assert "non installé" in invoke("modeles", "liste").output
     assert invoke("modeles", "importer", "inconnu", src).exit_code == 2
@@ -713,7 +717,17 @@ def test_run_json_summary(
     assert data["rapport"] == str(report.resolve())
     assert data["parametres"]["profil"] == "leger" and data["parametres"]["mode"] == "balises"
     assert data["parametres"]["regime"] == "anonymisation"
+    # Which detection actually ran (an agent cannot tell otherwise).
+    assert data["parametres"]["profil_effectif"] == "leger"
+    used = data["parametres"]["detecteurs"]
+    assert "regex_fr" in used and "gliner" not in used
+    assert "paranoiaque" not in used  # switched off: it finds nothing, not listed
+    assert data["parametres"]["detecteurs_indisponibles"] == []
+    assert data["parametres"]["detecteurs_indisponibles_raisons"] == {}
     assert {d["statut"] for d in data["documents"]} == {"anonymise"}
+    for document in data["documents"]:  # predictable: the input folder keeps its name
+        assert document["chemin_relatif"] == document["fichier"]
+        assert Path(document["chemin"]) == out.resolve() / document["chemin_relatif"]
     assert "uintavalle" not in result.stdout
     assert "fichiers anonymisés et vérifiés" in result.output  # human summary on stderr
 
@@ -725,6 +739,8 @@ def test_run_json_summary(
     assert data["quarantaine"] == 1
     assert data["dossier_quarantaine"] == str((tmp_path / "s2_quarantaine").resolve())
     assert [d["quarantaine"] for d in data["documents"]] == [False, True]
+    assert data["echecs"] == 0  # a quarantined residue is not a failure
+    assert data["documents"][1]["chemin_relatif"] == data["documents"][1]["fichier"]
 
 
 def test_run_json_usage_error_leaves_stdout_empty(tmp_path: Path) -> None:
@@ -956,13 +972,19 @@ def test_missing_language_engine_is_named_precisely(
     monkeypatch.setattr(cli, "engine_available", lambda name: name != "llm" and real(name))
     result = invoke("analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-q")
     output = " ".join(result.output.split())
-    assert "moteur du modèle de langue non disponible dans cette version" in output
+    assert "moteur du modèle de langue (llama-cpp-python) absent" in output
+    assert "« uv sync --extra llm »" in output  # from sources: how to get it
     assert "modèle de langue (modèle non installé)" not in output
 
     monkeypatch.setattr(hardware, "recommend_profile", lambda info: Profile.FULL)
     output = " ".join(invoke("materiel").output.split())
     assert "Profil conseillé Complet" not in output
-    assert "moteur du modèle de langue non disponible dans cette version" in output
+    assert "moteur du modèle de langue (llama-cpp-python) absent" in output
+
+    monkeypatch.setattr("sys.frozen", True, raising=False)  # portable build: no extra
+    result = invoke("analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-q")
+    output = " ".join(result.output.split())
+    assert "absent de la version portable" in output and "uv sync" not in output
 
 
 def test_usage_shows_the_documented_program_name(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1040,3 +1062,46 @@ def test_analyser_lists_unread_files_under_anonymized_names(
             "codes": ["format.unknown"],
         }
     ]
+
+
+def test_heartbeat_lines_are_plain_and_rate_limited() -> None:
+    """stderr redirected (an agent, a log): plain progress lines, at each stage change,
+    at a stage's end and every interval in between, also while nothing moves."""
+    from anonyma.pipeline import ProgressEvent
+
+    now = [0.0]
+    lines: list[str] = []
+    beat = cli.Heartbeat(lines.append, interval=10.0, clock=lambda: now[0])
+    beat.update(ProgressEvent("analyse", 0, 205))
+    for done in range(1, 120):
+        now[0] = done * 0.1
+        beat.update(ProgressEvent("analyse", done, 205))
+    assert lines == ["Analyse : 0/205 fichiers… (0 s)", "Analyse : 100/205 fichiers… (10 s)"]
+    now[0] = 25.0
+    beat.tick()  # one long file: the state is repeated
+    now[0] = 26.0
+    beat.tick()  # not before the interval
+    assert lines[-1] == "Analyse : 119/205 fichiers… (25 s)" and len(lines) == 3
+    now[0] = 200.0
+    beat.update(ProgressEvent("analyse", 205, 205))
+    now[0] = 215.0
+    beat.tick()  # between two stages (resolution): still alive
+    beat.update(ProgressEvent("ecriture", 0, 205))
+    assert lines[-3:] == [
+        "Analyse : 205/205 fichiers, terminé (3 min 20 s)",
+        "Analyse terminée, étape suivante en préparation… (3 min 35 s)",
+        "Écriture et vérification : 0/205 fichiers… (3 min 35 s)",
+    ]
+
+
+def test_redirected_run_prints_heartbeat_not_a_bar(
+    tmp_path: Path, corpus: Path, business_list: Path
+) -> None:
+    args = [a for a in _run_args(corpus, tmp_path / "sortie", business_list, "--json")]
+    args.remove("-q")
+    result = invoke(*args)
+    assert result.exit_code == 0, result.output
+    json.loads(result.stdout)  # stdout: the JSON object only
+    assert "Analyse : 0/2 fichiers…" in result.stderr
+    assert "Écriture et vérification : 2/2 fichiers, terminé" in result.stderr
+    assert "━" not in result.stderr and "uintavalle" not in result.stderr

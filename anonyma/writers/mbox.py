@@ -1,12 +1,13 @@
 """mbox writer: anonymized messages reassembled with anonymized ``From `` lines
-(valid sender address, neutral date: see :func:`_mailheaders.safe_from_line`)."""
+(valid sender address, the anonymized date of the message: see
+:func:`_mailheaders.safe_from_line`)."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-from anonyma.extractors._mailheaders import safe_from_line
+from anonyma.extractors._mailheaders import message_moment, safe_from_line
 from anonyma.models import Document, Issue, ReplacementPlan, WriteContext, Writer
 from anonyma.registry import register_writer
 
@@ -31,14 +32,10 @@ class MboxWriter(Writer):
             output = ctx.child_outputs.get(child_id)
             if output is None or output.path is None:
                 continue  # omitted: reported by the pipeline
-            separator = safe_from_line("")
-            if segment_id is not None:
-                segment = document.segment(segment_id)
-                separator = segment.text
-                if plan.for_segment(segment_id):
-                    separator = safe_from_line(plan.apply(segment))
-            separator = separator.replace("\r", " ").replace("\n", " ")
             message = output.path.read_bytes()
+            line = plan.apply(document.segment(segment_id)) if segment_id is not None else ""
+            separator = safe_from_line(line, message_moment(message))
+            separator = separator.replace("\r", " ").replace("\n", " ")
             # mboxo quoting: no body line may look like a separator.
             message = _FROM_LINE.sub(b">From ", message)
             if not message.endswith(b"\n"):

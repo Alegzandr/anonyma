@@ -6,6 +6,7 @@ import dataclasses
 import email
 import io
 import re
+from datetime import UTC, datetime
 from email.message import EmailMessage, Message
 from email.policy import SMTP, compat32
 from email.utils import getaddresses, parsedate_to_datetime
@@ -130,8 +131,13 @@ def test_from_line_and_cid_urls() -> None:
     assert safe_from_line("[EMAIL_001] [DATE_003]") == (
         "EMAIL_001@anonyme.invalid Sun Mar  1 00:00:00 1970"
     )
+    # The date of a From line is never kept: no detector reads an asctime date.
     assert safe_from_line("a@b.test Mon Jan  5 10:00:00 2026") == (
-        "a@b.test Mon Jan  5 10:00:00 2026"
+        "a@b.test Sun Mar  1 00:00:00 1970"
+    )
+    moment = parsedate_to_datetime("Tue, 08 Feb 2028 10:12:00 +0100")
+    assert safe_from_line("a@b.test Mon Jan  5 10:00:00 2026", moment) == (
+        "a@b.test Tue Feb  8 10:12:00 2028"
     )
     assert safe_from_line("") == "MAILER-DAEMON Sun Mar  1 00:00:00 1970"
     ids = {"logo@exemple.test": "CONTENU_001@anonyme.invalid"}
@@ -259,6 +265,30 @@ def test_mbox_from_lines_stay_valid(tmp_path: Path, canary_config: Config) -> No
     assert lines == [b"From EMAIL_001@anonyme.invalid Sun Mar  1 00:00:00 1970"] * 2
 
 
+def test_mbox_from_line_date_follows_the_shifted_date(
+    tmp_path: Path, canary_config: Config
+) -> None:
+    separator = b"From " + CANARY_EMAIL.encode() + b" Tue Jan 14 10:12:00 2025\n"
+    mbox = b"".join(
+        separator + _mail(i) + b"\n" for i in ("<a1.zq@exemple.test>", "<b2.zq@exemple.test>")
+    )
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "boite.mbox").write_bytes(mbox)
+    config = dataclasses.replace(canary_config, mode=ReplacementMode.REALISTIC)
+    top = Pipeline(config).run([src / "boite.mbox"], tmp_path / "out").results[0]
+    assert top.output_path is not None
+    data = top.output_path.read_bytes()
+    assert b"Jan 14 10:12:00 2025" not in data
+    found = re.finditer(rb"\nDate: ([^\r\n]+)", data)
+    dates = [parsedate_to_datetime(m.group(1).decode()) for m in found]
+    lines = [ln.rstrip(b"\r") for ln in data.split(b"\n") if ln.startswith(b"From ")]
+    assert len(dates) == 2 and len(lines) == 2
+    for line, moment in zip(lines, dates, strict=True):
+        assert line.endswith(moment.strftime(" %H:%M:%S %Y").encode())
+        assert moment.year != 2025 or moment.month != 1 or moment.day != 14
+
+
 def _msg_with_inline_image() -> bytes:
     import struct
 
@@ -339,3 +369,118 @@ def test_neutral_dates_are_not_exposed_again() -> None:
     assert with_hidden_tail(received, "from a by b", "from [URL_001] by b") == (
         f"from [URL_001] by b; {neutral_date()}"
     )
+
+
+# -- msg date properties -------------------------------------------------------
+
+#: 2026-09-01 08:14:29 UTC and 3 minutes later, as FILETIMEs.
+SUBMIT = 134327240690000000
+DELIVERY = SUBMIT + 3 * 60 * 10**7
+
+
+def _msg_with_dates() -> bytes:
+    import struct
+
+    from extract_msg.ole_writer import OleWriter
+
+    from tests.fixtures.generators.mail_archive_image import PT_LONG, PT_SYSTIME, _add_props
+
+    headers = (
+        "Microsoft Mail Internet Headers Version 2.0\r\n"
+        f"From: {CANARY_PERSON} <{CANARY_EMAIL}>\r\n"
+        "Date: Tue, 01 Sep 2026 08:14:29 +0000\r\n"
+        "Thread-Index: AQHdOenojzqcIdTmS3+aHC49T1prfA==\r\n"
+    )
+    writer = OleWriter()
+    _add_props(
+        writer,
+        "",
+        b"\0" * 8 + struct.pack("<IIII", 1, 1, 0, 0) + b"\0" * 8,
+        {
+            0x0039: (PT_SYSTIME, SUBMIT),
+            0x0E06: (PT_SYSTIME, DELIVERY),
+            0x3007: (PT_SYSTIME, SUBMIT),
+            0x1016: (PT_LONG, 1),
+        },
+        {
+            0x001A: "IPM.Note",
+            0x0037: "Dossier",
+            0x0C1A: CANARY_PERSON,
+            0x5D01: CANARY_EMAIL,
+            0x007D: headers,
+            0x1000: f"Bonjour {CANARY_PERSON}\r\n",
+        },
+        {},
+    )
+    _add_props(
+        writer,
+        "__recip_version1.0_#00000000/",
+        b"\0" * 8,
+        {0x0C15: (PT_LONG, 1), 0x3000: (PT_LONG, 0)},
+        {0x3001: CANARY_PERSON, 0x39FE: CANARY_EMAIL},
+        {},
+    )
+    for name in ("00020102", "00030102", "00040102"):
+        writer.addEntry(f"__nameid_version1.0/__substg1.0_{name}", b"")
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+def _msg_times(path: Path) -> dict[int, int]:
+    from anonyma.extractors._cfb import read_cfb
+    from anonyma.extractors._msgfile import PT_SYSTIME, MsgTree
+
+    _, entries = read_cfb(path)
+    tree = MsgTree(entries)
+    assert tree.root is not None
+    return {
+        e.pid: int.from_bytes(e.value, "little") for e in tree.root.entries if e.ptype == PT_SYSTIME
+    }
+
+
+def test_msg_dates_are_exposed(tmp_path: Path, canary_config: Config) -> None:
+    from anonyma.pipeline import extract_file
+
+    source = tmp_path / "m.msg"
+    source.write_bytes(_msg_with_dates())
+    doc = extract_file(source, "m.msg", canary_config, tmp_path / "w")
+    texts = {s.context.label: s.text for s in doc.segments if s.locator[:1] == ("time",)}
+    assert texts["date d'envoi"] == "01 Sep 2026 08:14:29 +0000"
+    assert texts["date de réception"] == "01 Sep 2026 08:17:29 +0000"
+
+
+@pytest.mark.parametrize("mode", [ReplacementMode.REALISTIC, ReplacementMode.TAG])
+def test_msg_dates_follow_the_date_policy(
+    tmp_path: Path, canary_config: Config, mode: ReplacementMode
+) -> None:
+    from anonyma.extractors._mailheaders import thread_index_time
+
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "m.msg").write_bytes(_msg_with_dates())
+    config = dataclasses.replace(canary_config, mode=mode)
+    top = Pipeline(config).run([src / "m.msg"], tmp_path / "out").results[0]
+    assert top.status in (DocumentStatus.ANONYMIZED, DocumentStatus.NEEDS_REVIEW), [
+        i.message for i in top.issues
+    ]
+    assert top.output_path is not None
+    times = _msg_times(top.output_path)
+    assert times[0x0039] != SUBMIT and times[0x0E06] != DELIVERY
+    msg = extract_msg.openMsg(str(top.output_path), strict=False)
+    try:
+        header_index = str(msg.header["Thread-Index"] or "")
+        header_date = parsedate_to_datetime(str(msg.header["Date"]))
+    finally:
+        msg.close()
+    if mode is ReplacementMode.REALISTIC:
+        shift = times[0x0039] - SUBMIT
+        assert shift % (86400 * 10**7) == 0  # whole days
+        assert times[0x0E06] - times[0x0039] == DELIVERY - SUBMIT  # interval kept
+        assert times[0x3007] == times[0x0039]
+        assert header_date.timestamp() == (times[0x0039] / 10**7) - 11644473600
+        assert thread_index_time(header_index) != ""
+    else:
+        neutral = datetime(1970, 3, 1, tzinfo=UTC) - datetime(1601, 1, 1, tzinfo=UTC)
+        assert set(times.values()) == {int(neutral.total_seconds()) * 10**7}
+        assert header_date.year == 1970 and thread_index_time(header_index) == ""

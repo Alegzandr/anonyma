@@ -277,6 +277,19 @@ def test_message_id_by_label_and_body(detector: RegexDetector) -> None:
     assert found(detector, f"voir {mid}", "ID_MESSAGE") == [mid]
 
 
+def test_angle_address_is_not_a_message_id(detector: RegexDetector) -> None:
+    """A digit in the domain once made ``<address>`` a message id in the From header:
+    the eml then got another substitute than the JSON and CSV of the same e-mail."""
+    text = "Jessica Morin <jessica.morin@leads-b2b.exemple.test>"
+    for kind, label in ((SegmentKind.HEADER, "From"), (SegmentKind.BODY, "")):
+        assert found(detector, text, "ID_MESSAGE", kind=kind, label=label) == []
+        assert found(detector, text, "EMAIL", kind=kind, label=label) == [
+            "jessica.morin@leads-b2b.exemple.test"
+        ]
+    numbered = "<jean.dupont75@exemple2.test>"
+    assert found(detector, numbered, "ID_MESSAGE", kind=SegmentKind.HEADER, label="To") == []
+
+
 # -- dates -----------------------------------------------------------------------------
 
 

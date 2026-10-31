@@ -66,6 +66,8 @@ _DISPLAY_NAME = regex.compile(
     r"(?:\"(?P<quoted>[^\"<>]+)\"|(?P<name>[^<>,;\"]*?))[ \t]*<[ \t]*[^<>@\s]+@[^<>\s]+[ \t]*>"
 )
 _ANGLE = regex.compile(r"<[^<>\s]+>")
+#: A whole e-mail address (same shape as the ``email`` rule).
+_EMAIL_ONLY = regex.compile(r"[\w.%+\-']{1,64}@(?:[\w\-]+\.)+[A-Za-z]{2,24}")
 #: Score of values typed by their column / key (:mod:`anonyma.fieldhints`).
 HINT_SCORE = 0.75
 #: Field hints (:mod:`anonyma.fieldhints`) whose values are entities as a whole.
@@ -162,6 +164,16 @@ def _row_label_hint(segment: Segment, row_labels: dict[tuple[str, int, int], str
 
 def _label_has(label: str, parts: Sequence[str]) -> bool:
     return any(p in label for p in parts)
+
+
+def _address_like(inner: str, label: str) -> bool:
+    """``<inner>`` reads as an e-mail address rather than a message id: an address
+    header (``From``, ``To``...), or a local part without digits (message ids carry
+    counters, hashes or time stamps there)."""
+    if not _EMAIL_ONLY.fullmatch(inner):
+        return False
+    local = inner.rsplit("@", 1)[0]
+    return _field_name(label) in ADDRESS_LIST_LABELS or not any(c.isdigit() for c in local)
 
 
 def _field_name(label: str) -> str:
@@ -353,6 +365,11 @@ class RegexDetector(Detector):
         if context:
             score = max(score, rule.context_score if rule.context_score is not None else 0.95)
         elif rule.needs_context:
+            return None
+        elif rule.name == "id_message_corps" and _address_like(text[start + 1 : end - 1], label):
+            # ``Jessica Morin <jessica.morin@leads-b2b.example>`` outside any message-id
+            # context is an address: the ``email`` rule masks it, with the substitute
+            # the same address gets everywhere else in the batch.
             return None
         if rule.name == "identifiant_chemin_windows" and " " in text[start:end].strip():
             # A profile folder with spaces is the display name of its owner.

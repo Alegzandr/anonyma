@@ -634,6 +634,90 @@
    ],
    "partial": [],
    "regions": []
+  },
+  {
+   "id": "06-025",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Wed, 04 Mar 2026 09:00:00 +0100",
+   "where": [
+    "Date"
+   ],
+   "surfaces": [
+    "Wed, 04 Mar 2026 09:00:00 +0100"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Wed, 04 Mar 2026 09:00:00 +0100"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
+  },
+  {
+   "id": "06-026",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Wed, 4 Mar 2026 09:00:00 +0100",
+   "where": [
+    "Received"
+   ],
+   "surfaces": [
+    "Wed, 4 Mar 2026 09:00:00 +0100"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Wed, 4 Mar 2026 09:00:00 +0100"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
+  },
+  {
+   "id": "06-027",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "dim. 1 mars 2026 à 18:40",
+   "where": [
+    "en-tête cité dans le corps"
+   ],
+   "surfaces": [
+    "dim. 1 mars 2026 à 18:40"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "dim. 1 mars 2026 à 18:40"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
+  },
+  {
+   "id": "06-028",
+   "type": "DATE_ENVOI",
+   "direct": false,
+   "value": "Sun, 01 Mar 2026 18:40:00 +0100",
+   "where": [
+    "Date du message joint"
+   ],
+   "surfaces": [
+    "Sun, 01 Mar 2026 18:40:00 +0100"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Sun, 01 Mar 2026 18:40:00 +0100"
+    }
+   ],
+   "partial": [],
+   "regions": [],
+   "precision_only": true
   }
  ],
  "keep": [

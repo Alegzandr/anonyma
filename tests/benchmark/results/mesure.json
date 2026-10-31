@@ -2,7 +2,7 @@
  "name": "mesure",
  "profiles": {
   "leger": {
-   "seconds": 43.45628099999158,
+   "seconds": 28.450239900004817,
    "statuses": {
     "01_txt_lettre": [
      "anonymise"
@@ -6344,7 +6344,7 @@
    }
   },
   "standard": {
-   "seconds": 142.4420975999965,
+   "seconds": 27.66815850000421,
    "statuses": {
     "01_txt_lettre": [
      "anonymise"

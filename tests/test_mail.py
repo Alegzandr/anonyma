@@ -258,7 +258,9 @@ def test_unix_from_line_is_anonymized(tmp_path: Path, canary_config: Config) -> 
         f"From {CANARY_EMAIL} Mon Jan  5 10:00:00 2026\r\nFrom: x@exemple.test\r\n\r\ncorps\r\n"
     ).encode()
     output, _ = _run(tmp_path, "u.eml", raw, canary_config)
-    assert re.match(rb"From \[EMAIL_\d{3}\] Mon Jan  5 10:00:00 2026\r\n", output.read_bytes())
+    # A valid address, and the date of the line is never kept (no Date header: neutral).
+    line = rb"From EMAIL_\d{3}@anonyme\.invalid Sun Mar  1 00:00:00 1970\r\n"
+    assert re.match(line, output.read_bytes())
 
 
 def test_nested_mail_in_zip_in_mail(tmp_path: Path, canary_config: Config) -> None:
@@ -469,6 +471,7 @@ def test_mbox_round_trip(tmp_path: Path, canary_config: Config) -> None:
     ).encode()
     output, _ = _run(tmp_path, "boite.mbox", data, canary_config)
     out = output.read_bytes()
-    assert len(re.findall(rb"From EMAIL_\d{3}@anonyme\.invalid Mon Jan  5 1", out)) == 2
+    neutral = rb"From EMAIL_\d{3}@anonyme\.invalid Sun Mar  1 00:00:00 1970"
+    assert len(re.findall(neutral, out)) == 2  # no Date header: neutral separator date
     assert b"uintavalle" not in out.lower()
     assert len(split_mbox(out)) == 2
