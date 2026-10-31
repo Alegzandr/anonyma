@@ -141,6 +141,83 @@ def _bic(value: str) -> bool:
     return value[4:6] in BIC_COUNTRIES
 
 
+#: Top-level domains that real addresses use (generic, sponsored and the most common
+#: new gTLDs): needed beyond :data:`MAX_FREE_TLD` letters.
+LONG_TLDS = frozenset(
+    {
+        "aero", "agency", "app", "archi", "art", "asia", "associates", "attorney", "auction",
+        "audio", "auto", "band", "bank", "bar", "beer", "best", "bike", "bio", "biz", "blog",
+        "boutique", "build", "business", "cab", "cafe", "camp", "care", "careers", "cash", "center",
+        "chat", "cheap", "church", "city", "claims", "cleaning", "click", "clinic", "clothing",
+        "cloud", "club", "coach", "codes", "coffee", "college", "community", "company", "computer",
+        "construction", "consulting", "contact", "contractors", "cooking", "coop", "corsica",
+        "country", "coupons", "credit", "creditcard", "cruises", "dance", "dating", "deals",
+        "degree", "delivery", "dental", "design", "dev", "diamonds", "digital", "direct",
+        "directory", "discount", "domains", "education", "email", "energy", "engineering",
+        "enterprises", "equipment", "estate", "events", "exchange", "expert", "exposed", "express",
+        "fail", "family", "farm", "fashion", "finance", "financial", "fish", "fitness", "flights",
+        "florist", "football", "foundation", "fund", "furniture", "futbol", "gallery", "games",
+        "garden", "gift", "gifts", "gives", "glass", "global", "gmbh", "gold", "golf", "gouv",
+        "graphics", "gratis", "green", "gripe", "group", "guide", "guru", "health", "healthcare",
+        "help", "hockey", "holdings", "holiday", "homes", "hospital", "host", "house", "immo",
+        "immobilien", "industries", "info", "institute", "insure", "international", "investments",
+        "jobs", "kitchen", "land", "lawyer", "lease", "legal", "life", "lighting", "limited",
+        "limo", "link", "live", "loans", "ltd", "luxury", "management", "market", "marketing",
+        "mba", "media", "memorial", "menu", "mobi", "moda", "money", "mortgage", "museum", "name",
+        "network", "news", "ninja", "online", "paris", "partners", "parts", "photo", "photography",
+        "photos", "pics", "pictures", "pizza", "place", "plumbing", "plus", "press", "pro",
+        "productions", "properties", "property", "pub", "recipes", "red", "rehab", "reise",
+        "reisen", "rentals", "repair", "report", "rest", "restaurant", "review", "reviews", "rocks",
+        "run", "sale", "salon", "sarl", "school", "schule", "science", "services", "shoes", "shop",
+        "shopping", "show", "singles", "site", "soccer", "social", "software", "solar", "solutions",
+        "space", "store", "studio", "style", "supplies", "supply", "support", "surgery", "systems",
+        "tattoo", "tax", "taxi", "team", "tech", "technology", "tennis", "test", "theater",
+        "tienda", "tips", "tires", "today", "tools", "tours", "town", "toys", "trade", "trading",
+        "training", "travel", "tube", "university", "vacations", "ventures", "vet", "viajes",
+        "video", "villas", "vin", "vision", "voyage", "wang", "watch", "website", "wedding", "wiki",
+        "win", "wine", "work", "works", "world", "wtf", "xyz", "yoga", "zone", "alsace", "bzh"
+    }
+)  # fmt: skip
+#: An unknown top-level domain is accepted up to this length (``.test``, ``.local``).
+MAX_FREE_TLD = 6
+#: File extensions that end ``name@2x.png``-like tokens, never an address.
+_FILE_TLDS = frozenset(
+    {
+        "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico", "tif", "tiff", "css", "js", "mjs",
+        "json", "xml", "htm", "html", "php", "asp", "aspx", "jsp", "pdf", "doc", "docx", "xls",
+        "xlsx", "ppt", "pptx", "odt", "ods", "txt", "csv", "log", "tmp", "bak", "dll", "exe", "msg",
+        "eml"
+    }
+)  # fmt: skip
+_HOST_LABEL = regex.compile(r"^[^\W_](?:[\w\-]{0,61}[^\W_])?$")
+
+
+def _camel_case(word: str) -> bool:
+    """``FormattedValue``, ``nextLink``, ``OData``: a capital after a lower-case
+    letter, or a capitals run followed by lower case."""
+    letters = "".join(c for c in word if c.isalpha())
+    return not (letters.islower() or letters.isupper() or letters[1:].islower())
+
+
+def plausible_email(value: str) -> bool:
+    """A host name after the ``@``: labels shaped like host names, ending with a
+    plausible top-level domain (a country code, a short one, a known longer one; one
+    case, never CamelCase). Dotted identifiers such as the OData annotations
+    ``statuscode@OData.Community.Display.V1.FormattedValue`` or
+    ``_ownerid_value@Microsoft.Dynamics.CRM.lookuplogicalname`` are not addresses."""
+    domain = value.rsplit("@", 1)[-1]
+    labels = domain.split(".")
+    if len(labels) < 2 or not all(_HOST_LABEL.match(label) for label in labels):
+        return False
+    tld = labels[-1]
+    key = tld.casefold()
+    if key.startswith("xn--"):
+        return True  # internationalized top-level domain (punycode)
+    if key in _FILE_TLDS or _camel_case(tld):
+        return False
+    return len(key) <= MAX_FREE_TLD or key in LONG_TLDS
+
+
 BIC_COUNTRIES = frozenset(checksums.IBAN_LENGTHS) | frozenset(
     [
         "US",
@@ -217,8 +294,11 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "email",
         EntityType.EMAIL,
-        r"(?<![\w.%+\-'])[\w.%+\-']{1,64}@(?:[\w\-]+\.)+[A-Za-z]{2,24}(?![\w\-])",
+        r"(?<![\w.%+\-'])[\w.%+\-']{1,64}@(?:[\w\-]+\.)+(?:\p{L}{2,24}|xn--[A-Za-z0-9\-]{2,59})"
+        # Never a prefix of a longer dotted name (``x@a.CRM.lookuplogicalname``).
+        r"(?![\w\-]|\.[\w\-])",
         1.0,
+        validator=plausible_email,
     ),
     Rule(
         "email_obfusque",
@@ -853,4 +933,4 @@ LABEL_TYPES: tuple[tuple[str, str], ...] = (
     ("birth", EntityType.DATE_OF_BIRTH),
 )
 
-__all__ = ["DATE_RULES", "DOB_CONTEXT", "LABEL_TYPES", "RULES", "Rule"]
+__all__ = ["DATE_RULES", "DOB_CONTEXT", "LABEL_TYPES", "RULES", "Rule", "plausible_email"]

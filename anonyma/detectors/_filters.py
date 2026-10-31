@@ -17,6 +17,7 @@ import re
 from functools import lru_cache
 
 from anonyma.data import first_name, is_common_word, lexicon
+from anonyma.detectors._rules import plausible_email
 from anonyma.models import EntityType, Segment, SegmentKind
 from anonyma.names import civility_of
 from anonyma.textutils import normalize
@@ -392,8 +393,11 @@ def plausible(
             ipaddress.ip_address(stripped.split("/")[0].split("%")[0])
         except ValueError:
             return False
-    if entity_type == EntityType.EMAIL and "@" not in stripped:
-        return False
+    if entity_type == EntityType.EMAIL:
+        if "@" not in stripped:
+            return False
+        if "." in stripped.rsplit("@", 1)[1] and not plausible_email(stripped):
+            return False  # a dotted identifier (``code@OData.Community.Display.V1.Value``)
     if entity_type == EntityType.LICENSE_PLATE and not _PLATE.match(stripped.upper()):
         return False
     minimum = NUMERIC_MIN_DIGITS.get(entity_type)
