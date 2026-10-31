@@ -181,6 +181,19 @@ la sortie standard n'est pas touchée.
 PDF, identifiants techniques, organisations, noms de fichiers neutres, numérotation des
 balises).
 
+Avec `--conserver-identifiants`, les identifiants techniques (empreintes, UUID, jetons)
+**et les références métier** restent lisibles : numéros de facture, de commande, de
+devis, de ticket, de dossier, d'affaire, de sinistre ou de contrat introduits par leur
+mot-clé et écrits comme une référence (lettres puis chiffres, par exemple
+`FAC-2026-166002`, `CAS-11478-QRV7QP`, `CTR-4297539`). Restent toujours masqués les
+numéros qui désignent une personne : numéro client, d'adhérent, de patient, matricule,
+police d'assurance, pièce d'identité (passeport, CNI, permis, titre de séjour), ainsi
+que l'IBAN, le NIR, la carte bancaire, le téléphone, l'adresse électronique et la plaque
+d'immatriculation. `--identifiant-autorise` (répétable) liste des identifiants à ne
+jamais masquer, même sans `--conserver-identifiants` : une valeur exacte, ou une
+expression régulière préfixée par `re:` ; une expression ancrée (`re:^CAS-`, `re:-FR$`)
+est cherchée dans la valeur, une autre doit la couvrir entièrement (`re:FAC-\d{4}-\d{6}`).
+
 Le dossier de sortie est contrôlé **avant** l'analyse : un dossier qui chevauche les
 originaux ou un fichier existant arrête la commande aussitôt (code 2). Un dossier de
 sortie **déjà rempli** est signalé sur la sortie d'erreur : rien n'y est écrasé, un

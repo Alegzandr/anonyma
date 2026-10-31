@@ -35,11 +35,12 @@ from anonyma.detectors._rules import (
     RULES,
     Rule,
 )
+from anonyma.detectors.opaque import IdWhitelist
 from anonyma.fieldhints import field_hint, hint_of
 from anonyma.logs import get_logger
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
-from anonyma.registry import register_detector
 from anonyma.names import is_functional_name
+from anonyma.registry import register_detector
 from anonyma.textutils import normalize
 
 log = get_logger("detectors.regex")
@@ -70,6 +71,35 @@ _DISPLAY_NAME = regex.compile(
 _ANGLE = regex.compile(r"<[^<>\s]+>")
 #: A whole e-mail address (same shape as the ``email`` rule).
 _EMAIL_ONLY = regex.compile(r"[\w.%+\-']{1,64}@(?:[\w\-]+\.)+[A-Za-z]{2,24}")
+#: Keywords before a reference that names a business document or case, not a person:
+#: kept with ``--conserver-identifiants`` (``Config.mask_opaque_ids`` off) when the
+#: value is reference-shaped. Customer, member, patient, employee, insurance policy
+#: and identity document numbers stay masked: they designate someone.
+BUSINESS_REFERENCE_KEYWORDS = frozenset(
+    {"facture", "commande", "devis", "ticket", "dossier", "affaire", "reference", "ref",
+     "contrat", "sinistre", "rg"}
+)  # fmt: skip
+_REFERENCE_KEYWORD = regex.compile(
+    r"(?<![a-z0-9])(?P<kw>dossier|affaire|reference|ref|rg|ticket|contrat|police|sinistre"
+    r"|client|adherent|matricule|passeport|passport|cni|carte d'identite|permis"
+    r"|titre de sejour|facture|commande|devis|patient|ipp|nda)"
+    r"(?:[ \t]+(?:de|du|n[°o]|numero|:|#)\.?)*[ \t]*(?:n[°ºo]\.?|numero|:|#)?[ \t]*$"
+)
+#: Letters first, then groups of letters and digits (``FAC-2026-166002``,
+#: ``CAS-11478-QRV7QP``, ``CTR-4297539``), in capitals.
+_REFERENCE_SHAPE = regex.compile(r"^[A-Z]{1,6}(?:[\-/_.]?[A-Z0-9]+)+$")
+
+
+def business_reference(text: str, start: int, end: int) -> bool:
+    """``text[start:end]`` is an invoice, order, quote, ticket, case or contract
+    reference introduced by its keyword (« facture FAC-2026-166002 »)."""
+    value = text[start:end]
+    if not _REFERENCE_SHAPE.match(value) or sum(c.isdigit() for c in value) < 4:
+        return False
+    m = _REFERENCE_KEYWORD.search(normalize(text[max(0, start - 40) : start]))
+    return m is not None and m.group("kw") in BUSINESS_REFERENCE_KEYWORDS
+
+
 #: Score of values typed by their column / key (:mod:`anonyma.fieldhints`).
 HINT_SCORE = 0.75
 #: Field hints (:mod:`anonyma.fieldhints`) whose values are entities as a whole.
@@ -243,6 +273,9 @@ class RegexDetector(Detector):
         ]
         self.dob_context = _context_regex(DOB_CONTEXT)
         self.detect_dates = config.detect_dates
+        #: ``--conserver-identifiants``: business references stay readable.
+        self.keep_references = not config.mask_opaque_ids
+        self.id_whitelist = IdWhitelist(config.opaque_id_whitelist or [])
 
     # -- per segment ---------------------------------------------------------
 
@@ -280,19 +313,22 @@ class RegexDetector(Detector):
                 item = self._post(compiled, text, label, start, end)
                 if item is not None:
                     raw.append(item)
-        views: list[tuple[str, list[int] | None]] = [(text, None)]
+        # Another reading of OCR text (glued words split), with the source offsets of
+        # each character.
+        views: list[tuple[str, list[int] | None, list[int] | None]] = [(text, None, None)]
         if segment.context.kind is SegmentKind.OCR:
             ocr_view = unglued(text)
             if ocr_view is not None:
-                views.append(ocr_view)
-        for view, index in views:
+                view, index = ocr_view
+                views.append((view, index, [i + 1 for i in index]))
+        for view, starts, ends in views:
             for recognizer in self.custom:
                 for result in recognizer.analyze(view, recognizer.supported_entities):
                     meta = result.recognition_metadata or {}
                     attrs = dict(meta.get("attributes") or {})
                     start, end = result.start, result.end
-                    if index is not None:
-                        start, end = index[start], index[end - 1] + 1
+                    if starts is not None and ends is not None:
+                        start, end = starts[start], ends[end - 1]
                     raw.append((result.entity_type, start, end, result.score, attrs))
         raw.extend(self._labels(segment, label, row_hint))
         value = text.strip()
@@ -373,6 +409,11 @@ class RegexDetector(Detector):
             # context is an address: the ``email`` rule masks it, with the substitute
             # the same address gets everywhere else in the batch.
             return None
+        if rule.name == "numero_dossier_contexte" and (
+            self.id_whitelist.allows(text[start:end])
+            or (self.keep_references and business_reference(text, start, end))
+        ):
+            return None
         if rule.name == "identifiant_chemin_windows" and " " in text[start:end].strip():
             # A profile folder with spaces is the display name of its owner.
             return EntityType.PERSON, start, end, score, {"rule": rule.name}
@@ -428,6 +469,8 @@ class RegexDetector(Detector):
                 continue
             if normalize(stripped) in TECHNICAL:
                 continue
+            if entity_type == EntityType.PERSON and is_functional_name(stripped):
+                continue  # « Projets IRVE », « Hexagone Facturation 4.2 »
             s = start + part.find(stripped)
             out.append((entity_type, s, s + len(stripped), score, {"rule": "label"}))
         return out
@@ -450,6 +493,8 @@ class RegexDetector(Detector):
             stripped = name.strip(" \t\"'")
             covered.append((m.start(), m.end()))
             if stripped and any(c.isalpha() for c in stripped) and "@" not in stripped:
+                if is_functional_name(stripped, m.group("local")):
+                    continue  # « Service Client <service-client@…> »: a mailbox, no one
                 s = m.start(group) + name.find(stripped)
                 out.append((EntityType.PERSON, s, s + len(stripped), 0.9, {"rule": "label"}))
         for item in self._whole_value(text, EntityType.PERSON):
@@ -469,14 +514,19 @@ class RegexDetector(Detector):
         """Dates of birth, ordinary dates (``detect_dates``) and timestamps.
 
         A date or a time next to a signature cue (« Signé le », « horodatage »,
-            if entity_type == EntityType.PERSON and is_functional_name(stripped):
-                continue  # « Projets IRVE », « Hexagone Facturation 4.2 »
         « signed by »...) or to a person name identifies a signing event: it is
         masked even when ``detect_dates`` is off. A time alone is only kept then.
         """
         out: list[tuple[str, int, int, float, dict[str, str]]] = []
         dob_label = "naissance" in label or "birth" in label
-        persons = [(s, e) for t, s, e, _, _ in raw if t == EntityType.PERSON]
+        # A name inside an address (« boulevard Louise Mahe ») is a street, not a
+        # person whose presence would make a time a timestamp.
+        addresses = [(s, e) for t, s, e, _, _ in raw if t == EntityType.ADDRESS]
+        persons = [
+            (s, e)
+            for t, s, e, _, _ in raw
+            if t == EntityType.PERSON and not any(a <= s and e <= b for a, b in addresses)
+        ]
         for item in raw:
             entity_type, start, end, _score, attrs = item
             if entity_type != EntityType.DATE:
@@ -493,8 +543,6 @@ class RegexDetector(Detector):
                 continue
             if signature or _signature_context(text, start, end, previous, persons):
                 out.append((entity_type, start, end, max(_score, 0.8), attrs))
-                if is_functional_name(stripped, m.group("local")):
-                    continue  # « Service Client <service-client@…> »: a mailbox, no one
             elif self.detect_dates and not time_only:
                 out.append(item)
         return out

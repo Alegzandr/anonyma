@@ -1,4 +1,4 @@
-"""Opaque technical identifiers (``Config.mask_opaque_ids``, every profile).
+r"""Opaque technical identifiers (``Config.mask_opaque_ids``, every profile).
 
 High-entropy tokens identify a document, a transaction or a person as surely as a
 name: e-signature envelope ids, case references hashed into 40 hex characters,
@@ -16,7 +16,11 @@ session tokens in URLs, certificate fingerprints. Masked as ``IDENTIFIANT_TECHNI
 Ordinary words, numbers (prices, dates, phone numbers), IBANs and plates written as
 usual, CSS colours, versions (``2.3.1``), product names (``iPhone15``, ``x64``) and
 paths made of words are left alone. ``Config.opaque_id_whitelist`` lists values never
-masked (exact, case-insensitive) or regular expressions prefixed ``re:`` (full match).
+masked (exact, case-insensitive) or regular expressions prefixed ``re:``: a pattern
+with an explicit anchor (``re:^CAS-``, ``re:-FR$``) is searched, any other one must
+match the whole value (``re:FACT-\d{6}``). The list applies to every technical or
+reference identifier (:class:`IdWhitelist`, also used by the regex detector and the
+resolver).
 """
 
 from __future__ import annotations
@@ -146,26 +150,37 @@ def looks_opaque(token: str) -> bool:
     return switches >= max(4, len(plain) // 5) and _entropy(plain) >= 3.0
 
 
-class _Whitelist:
+class IdWhitelist:
+    """``Config.opaque_id_whitelist``: exact values (case-insensitive) and ``re:``
+    patterns (searched when anchored with ``^`` or ``$``, full match otherwise)."""
+
     def __init__(self, entries: Sequence[str]) -> None:
         self.exact: set[str] = set()
-        self.patterns: list[regex.Pattern[str]] = []
+        self.patterns: list[tuple[regex.Pattern[str], bool]] = []
         for i, raw in enumerate(entries):
             entry = raw.strip()
             if not entry:
                 continue
             if entry.startswith("re:"):
+                source = entry[3:]
+                anchored = source.startswith("^") or source.endswith("$")
                 try:
-                    self.patterns.append(regex.compile(entry[3:]))
+                    self.patterns.append((regex.compile(source), anchored))
                 except regex.error:
                     log.warning("invalid opaque id whitelist pattern #%d ignored", i)
             else:
                 self.exact.add(entry.casefold())
 
     def allows(self, value: str) -> bool:
+        value = value.strip()
         if value.casefold() in self.exact:
             return True
-        return any(p.fullmatch(value) for p in self.patterns)
+        return any(
+            (p.search(value) if anchored else p.fullmatch(value)) for p, anchored in self.patterns
+        )
+
+    def __bool__(self) -> bool:
+        return bool(self.exact or self.patterns)
 
 
 @register_detector
@@ -180,7 +195,7 @@ class OpaqueIdDetector(Detector):
     def __init__(self, config: Config) -> None:
         super().__init__(config)
         self.active = config.mask_opaque_ids
-        self.whitelist = _Whitelist(config.opaque_id_whitelist or [])
+        self.whitelist = IdWhitelist(config.opaque_id_whitelist or [])
 
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         if not self.active:
@@ -265,4 +280,4 @@ def _software_build(text: str, start: int) -> bool:
     return bool(_BUILD_PREFIX.search(text[max(0, start - 10) : start]))
 
 
-__all__ = ["DETECTOR_NAME", "OpaqueIdDetector", "looks_opaque", "opaque_spans"]
+__all__ = ["DETECTOR_NAME", "IdWhitelist", "OpaqueIdDetector", "looks_opaque", "opaque_spans"]

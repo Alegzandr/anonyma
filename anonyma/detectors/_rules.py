@@ -794,6 +794,12 @@ RULES: tuple[Rule, ...] = (
         + r"?(?:de"
         + SP
         + r")?(?:dossier|client|contrat|police|adh[ée]rent))(?![\w])"
+        # « mon numéro client est le HX-C-941260 »
+        + r"(?:"
+        + SP
+        + r"+(?:est|[ée]tait)(?:"
+        + SP
+        + r"+(?:le|la))?)?"
         + SP
         + r"{0,3}(?:n[°ºo]\.?"
         + SP
