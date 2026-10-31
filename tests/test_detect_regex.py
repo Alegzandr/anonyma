@@ -537,3 +537,10 @@ def test_header_row_cells_are_not_values(detector: RegexDetector) -> None:
 
     header = [cell("A1", "nom"), cell("B1", "prenom"), cell("C1", "note"), cell("D1", "cp")]
     assert not detector.detect(header, "d")
+
+
+def test_label_after_other_header_cells_types_nothing(detector: RegexDetector) -> None:
+    def cell(ref: str, text: str) -> Segment:
+        return Segment(ref, text, (), SegmentContext(SegmentKind.CELL, ref))
+
+    assert not detector.detect([cell("A1", "date"), cell("B1", "auteur"), cell("C1", "note")], "d")

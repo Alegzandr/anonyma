@@ -136,23 +136,26 @@ def _column_number(letters: str) -> int:
 
 
 def _row_label_hint(segment: Segment, row_labels: dict[tuple[str, int, int], str]) -> str | None:
-    """Hint given by the cell just left of ``segment`` when it holds a field name
-    (vertical layout « Nom | Jean Dupont »), and record ``segment`` if it is one.
+    """Hint given by the cell just left of ``segment`` when it holds a field name and
+    starts its row (vertical layout « Nom | Jean Dupont »); records ``segment`` if it
+    is one (``row_labels`` also keeps, at column 0, the first column of each row).
 
-    A row holding several field names is a header row (« nom | prénom | cp »): its
-    cells are labels, not values."""
+    A label after other cells, or a row holding several field names, is a header
+    row (« date | auteur | note », « nom | prénom | cp »): its cells are labels."""
     if segment.context.kind is not SegmentKind.CELL:
         return None
     m = _CELL_REF.match(segment.context.label)
     if m is None:
         return None
     sheet, row, col = m.group("sheet") or "", int(m.group("row")), _column_number(m.group("col"))
+    first = int(row_labels.setdefault((sheet, row, 0), str(col)))
     own = field_hint(segment.text)
     if own is not None:
         row_labels[(sheet, row, col)] = own
         return None
     hint = row_labels.get((sheet, row, col - 1))
-    if hint is None or sum(1 for k in row_labels if k[:2] == (sheet, row)) > 1:
+    labels = sum(1 for k in row_labels if k[:2] == (sheet, row) and k[2] > 0)
+    if hint is None or col - 1 != first or labels > 1:
         return None
     return hint
 
