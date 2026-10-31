@@ -304,6 +304,7 @@ def resolve(
     whitelist = config.whitelist_keys()
     whitelist |= {checksums.compact(w).casefold() for w in config.whitelist if w.strip()}
 
+    entities = _unwrap_persons(entities, clusters)
     by_span: dict[tuple[str, str, int, int, bool], Entity] = {}
     span_detectors: dict[tuple[str, str, int, int, bool], set[str]] = {}
     for entity in entities:
@@ -424,6 +425,91 @@ def _field_pairs(entities: Sequence[Entity]) -> dict[int, str]:
             if person is not None and person.is_full:
                 out[id(surname)] = out[id(given)] = combined
     return out
+
+
+#: Words around a person that do not make an organization of it (subject prefixes).
+_MAIL_PREFIXES = frozenset({"re", "tr", "fw", "fwd", "rep", "ref", "objet"})
+#: Words that do make one (« Cabinet Lefèvre », « Lefèvre SARL »).
+_ORG_DESIGNATORS = frozenset(
+    {
+        "cabinet", "societe", "groupe", "association", "entreprise", "etablissements", "ets",
+        "laboratoire", "laboratoires", "clinique", "banque", "agence", "fondation",
+        "mutuelle", "compagnie", "cie", "etude", "office", "syndicat", "federation",
+        "holding", "sarl", "sas", "sasu", "sa", "eurl", "sci", "scp", "selarl", "snc",
+        "gie", "freres", "fils", "associes", "partners", "avocats", "notaires",
+    }
+)  # fmt: skip
+_WORD_RUN = re.compile(r"[^\W\d_]+(?:['’\-][^\W\d_]+)*|\d+")
+
+
+def _unwrap_persons(
+    entities: Sequence[Entity], clusters: Mapping[str, EntityCluster]
+) -> list[Entity]:
+    """An organization or place that is only a known person name plus ordinary words
+    (« Dossier Lefèvre », « Re dossier Lefèvre ») names the person: it becomes a
+    person mention on the name, the ordinary words stay visible."""
+    forms: set[str] = set()
+    for value in [
+        *(e.value for e in entities if e.entity_type == EntityType.PERSON),
+        *(v for c in clusters.values() if c.entity_type == EntityType.PERSON for v in c.variants),
+    ]:
+        person = parse_person(value)
+        if person is None:
+            continue
+        core = " ".join((*person.given, *person.surname))
+        forms.update(f for f in (normalize(core), normalize(" ".join(person.surname))) if f)
+    if not forms:
+        return list(entities)
+    out: list[Entity] = []
+    for e in entities:
+        span = None
+        if (
+            e.entity_type in (EntityType.ORGANIZATION, EntityType.LOCATION)
+            and e.review is not ReviewStatus.MANUAL
+        ):
+            span = _person_inside(e.value, forms)
+        if span is None:
+            out.append(e)
+            continue
+        start, end = span
+        out.append(
+            Entity(
+                entity_type=EntityType.PERSON,
+                value=e.value[start:end],
+                document_id=e.document_id,
+                segment_id=e.segment_id,
+                start=e.start + start,
+                end=e.start + end,
+                score=e.score,
+                detector=e.detector,
+            )
+        )
+    return out
+
+
+def _person_inside(value: str, forms: set[str]) -> tuple[int, int] | None:
+    """Offsets of a known person name in ``value`` when every other word is ordinary."""
+    words = list(_WORD_RUN.finditer(value))
+    for i in range(len(words)):
+        for j in range(len(words), i, -1):
+            if (i, j) == (0, len(words)):
+                continue  # the whole value: nothing around the name
+            name = normalize(value[words[i].start() : words[j - 1].end()])
+            if name not in forms:
+                continue
+            rest = [w.group() for k, w in enumerate(words) if not i <= k < j]
+            if rest and all(_ordinary(w, first=k == 0) for k, w in enumerate(rest)):
+                return words[i].start(), words[j - 1].end()
+    return None
+
+
+def _ordinary(word: str, *, first: bool) -> bool:
+    key = normalize(word)
+    if key in _ORG_DESIGNATORS:
+        return False
+    if key in _MAIL_PREFIXES:
+        return True
+    return is_common_word(word) and (word.islower() or first)
 
 
 def _name_part(value: str) -> bool:
