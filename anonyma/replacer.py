@@ -483,9 +483,12 @@ class _Realistic:
         if original not in self.domains:
             for _ in range(MAX_ATTEMPTS):
                 candidate = fk.fake_domain(rng)
+                # Never a name of the batch as domain word (``…@antoine.example``).
+                word = normalize(candidate.split(".", 1)[0])
                 if (
                     candidate not in self.domains.values()
                     and normalize(candidate) not in self.forbidden
+                    and word not in self.forbidden_tokens
                 ):
                     break
             self.domains[original] = candidate
