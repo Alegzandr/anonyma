@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 import threading
@@ -229,3 +230,43 @@ def test_sqlite_failures_are_store_errors(tmp_path: Path) -> None:
             store.lookup("PERSONNE", "x")
         with pytest.raises(StoreError, match="Écriture impossible"):
             store.save("PERSONNE", "x", "X", "[PERSONNE_001]")
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("memory_cost", b"1099511627776"),  # 1 PiB
+        ("iterations", b"1000000"),
+        ("lanes", b"100000"),
+        ("lanes", b"0"),
+        ("memory_cost", b"4"),
+        ("salt", b"x"),
+    ],
+)
+def test_absurd_kdf_parameters_are_refused_before_deriving(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, value: bytes
+) -> None:
+    from anonyma import store as store_module
+
+    path = tmp_path / "t.db"
+    _open(path).close()
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE meta SET value = ? WHERE name = ?", (value, name))
+
+    def never(*args: object) -> object:
+        raise AssertionError("key derived from untrusted parameters")
+
+    monkeypatch.setattr(store_module, "_derive", never)
+    with pytest.raises(StoreError, match="endommagée"):
+        _open(path)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions")
+def test_store_file_is_owner_only(tmp_path: Path) -> None:
+    path = tmp_path / "t.db"
+    old = os.umask(0o022)
+    try:
+        _open(path).close()
+    finally:
+        os.umask(old)
+    assert path.stat().st_mode & 0o777 == 0o600
