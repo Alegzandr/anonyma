@@ -17,6 +17,7 @@ import regex
 
 from anonyma.config import Config
 from anonyma.data import first_name, lexicon
+from anonyma.detectors._custom import STOP_WORDS
 from anonyma.detectors._filters import ml_text, skip_segment
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment
 from anonyma.registry import register_detector
@@ -119,10 +120,13 @@ class ParanoidDetector(Detector):
             return True
         if _sentence_start(text, start):
             return False
-        # A capitalized common word mid-sentence is explained by the lexicon, unless it
-        # is also a frequent given name (Claire, Pierre, Rose...).
-        record = first_name(word)
-        return record is not None and record.count >= 500
+        # French capitalizes no common noun mid-sentence: a capitalized common word
+        # there names something (« le projet Albatros », « les Tissages du Nord »),
+        # except the words always written so (« Madame », « Bonjour ») and words in
+        # capitals, which are emphasis (« URGENT »).
+        if key in STOP_WORDS:
+            return False
+        return not (word.isupper() and first_name(word) is None)
 
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         if not self.active:
