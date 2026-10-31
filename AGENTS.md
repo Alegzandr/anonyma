@@ -105,4 +105,5 @@ before you consider a change done. On Windows, keep pytest's base temp short
 - `from __future__ import annotations` at the top of modules.
 - Commit subjects as `Area: what changed` (e.g. `PDF: object strings always rewritten`),
   with a short body explaining why.
-- Don't commit scratch files (probe PDFs, screenshots) or `data/` / `models/`.
+- Don't commit scratch files (probe PDFs, screenshots other than the README's in
+  `docs/screenshots/`) or `data/` / `models/`.
