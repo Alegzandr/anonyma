@@ -21,6 +21,12 @@ Two independent checks on every segment of the re-extracted output tree:
    nothing was hidden in them). Their distinctive words (not common words, not in
    the output names) are possible residues.
 
+5. **Raw bytes** (:meth:`Verifier.verify_raw`, :mod:`anonyma.rawscan`): the written
+   file itself, decoded every way that matters (encodings, character references,
+   MIME transfer encodings, archive members, compound-file and PDF streams), is
+   searched for the identifying values of the batch: a backstop for anything an
+   extractor would not expose (detector ``octets_bruts``, certain).
+
 Every value and detector hit kept by the organization policy (``policy.keeps``:
 whitelisted publishers, domains, public URLs) is ignored.
 
@@ -59,6 +65,7 @@ from anonyma.models import (
 )
 from anonyma.names import PARTICLES, civility_of, needs_capital
 from anonyma.policy import keeps
+from anonyma.rawscan import RawScanner, raw_residues
 from anonyma.replacer import BLACKOUT_CHAR
 from anonyma.resolver import NAME_TYPES, cluster_forms
 from anonyma.textsearch import MultiMatcher, leftmost_longest
@@ -274,6 +281,24 @@ class Verifier:
                     )
         return result
 
+    def verify_raw(
+        self,
+        output: Document,
+        sensitive: Sequence[tuple[str, str]],
+        substitutes: set[str],
+        allowed: Sequence[str] = (),
+    ) -> list[Residue]:
+        """Original values found in the raw bytes of a re-extracted output tree (the
+        written file and the items extracted from it, still on disk). Same arguments
+        as :meth:`verify`."""
+        allowed_keys = {normalize(a) for a in allowed} | self.config.whitelist_keys()
+        kept = (*allowed, *self.config.whitelist)
+        scanner = _cached(
+            ("raw", tuple(sensitive), frozenset(substitutes), frozenset(kept)),
+            lambda: RawScanner(sensitive, substitutes, allowed_keys, kept, self.config),
+        )
+        return raw_residues(scanner.scan(output))
+
     @staticmethod
     def _values(
         sensitive: Sequence[tuple[str, str]], allowed_keys: set[str]
@@ -331,7 +356,7 @@ _TAG_LIKE = re.compile(
     r"[\[(<{]?\b[A-Z][A-Z_]{1,40}_(?:[0-9OoIl]{3,}|(?=[A-Za-z0-9]{0,4}[0-9])[A-Za-z0-9]{4,5})\b"
     r"[\])>}]?"
 )
-_CACHE_SIZE = 4
+_CACHE_SIZE = 8
 
 
 def _cached[T](key: object, build: Callable[[], T]) -> T:

@@ -954,13 +954,16 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
     try:
         output_doc = extract_file(path, name, job.config, verify_dir)
         verifier = Verifier(job.config, detectors_for(job.config))
-        return verifier.verify(
-            output_doc,
-            job.sensitive,
-            job.table.all_substitutes(),
-            job.allowed,
-            names=job.names,
+        substitutes = job.table.all_substitutes()
+        result = verifier.verify(
+            output_doc, job.sensitive, substitutes, job.allowed, names=job.names
         )
+        if result.clean:
+            # Backstop: what no extractor exposed is still in the bytes.
+            result.residues.extend(
+                verifier.verify_raw(output_doc, job.sensitive, substitutes, job.allowed)
+            )
+        return result
     except Exception as exc:
         log.warning("verification failed for %s: %s", job.document.id, type(exc).__name__)
         return VerificationResult(
