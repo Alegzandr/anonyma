@@ -183,6 +183,14 @@ def test_opaque_detector_rules_and_whitelist() -> None:
         assert found(OpaqueIdDetector(Config()), f"ref={HEX_REF}", EntityType.OPAQUE_ID, kind=kind)
 
 
+def test_office_suite_build_ids_are_not_opaque() -> None:
+    # LibreOffice stamps its build id on every file it saves (legacy doc/xls/ppt
+    # outputs): masking it at input made every converted output a residue.
+    generator = f"LibreOffice/24.2.7.2$Windows_X86_64 LibreOffice_project/{HEX_REF}"
+    assert found(OpaqueIdDetector(Config()), generator, EntityType.OPAQUE_ID) == []
+    assert found(OpaqueIdDetector(Config()), f"project/{HEX_REF}", EntityType.OPAQUE_ID)
+
+
 # -- barcodes -------------------------------------------------------------------------------
 
 

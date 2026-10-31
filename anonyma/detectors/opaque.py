@@ -237,7 +237,17 @@ class OpaqueIdDetector(Detector):
         for m in _TOKEN.finditer(text):
             if free(m.start(), m.end()) and looks_opaque(m.group()):
                 spans.append((m.start(), m.end(), "jeton"))
-        return spans
+        return [s for s in spans if not _software_build(text, s[0])]
+
+
+#: Build ids of office suites in generator strings (``LibreOffice/24.2.7.2$Windows_X86_64
+#: LibreOffice_project/<40 hex>``): they identify the software, not the document, and
+#: LibreOffice stamps them again on every file it saves (legacy doc/xls/ppt outputs).
+_BUILD_PREFIX = regex.compile(r"_project/$")
+
+
+def _software_build(text: str, start: int) -> bool:
+    return bool(_BUILD_PREFIX.search(text[max(0, start - 10) : start]))
 
 
 __all__ = ["DETECTOR_NAME", "OpaqueIdDetector", "looks_opaque"]
