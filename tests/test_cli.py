@@ -909,3 +909,36 @@ def test_rerun_into_a_used_folder_warns_and_replace_removes_only_our_files(
         [*first, Path("notes-perso.txt")]
     )
     assert (out / "notes-perso.txt").read_text(encoding="utf-8") == "à garder"
+
+
+def test_messages_hold_no_internal_code_or_english(tmp_path: Path, business_list: Path) -> None:
+    folder = tmp_path / "e"
+    folder.mkdir()
+    (folder / "vide.docx").write_bytes(b"")
+    (folder / "abime.docx").write_bytes(b"PK\x03\x04 pas un document")
+    (folder / "inconnu.xyz").write_bytes(b"\x00\x01")
+    report = tmp_path / "r.json"
+    result = invoke(*_run_args(folder, tmp_path / "s", business_list, "--rapport", report))
+    text = result.output + report.read_text(encoding="utf-8").split('"echecs"')[1]
+    assert "vide.docx : Échec de la lecture du fichier : fichier vide." in result.output
+    assert "fichier endommagé ou tronqué" in result.output
+    for internal in ("BadZipFile", "format.unknown", "extract.error :", "Error"):
+        assert internal not in result.output, internal
+    assert "format.unknown :" not in text
+
+
+def test_invalid_configuration_is_explained_in_french(tmp_path: Path, corpus: Path) -> None:
+    config_file = tmp_path / "c.json"
+    config_file.write_text('{"min_score": "0,5"}', encoding="utf-8")
+    result = invoke("analyser", corpus, "--config", config_file)
+    assert result.exit_code == 2
+    assert "la valeur de « min_score » doit être un nombre" in " ".join(result.output.split())
+    assert "not supported" not in result.output
+    config_file.write_text('{"mode": "bidon"}', encoding="utf-8")
+    result = invoke("analyser", corpus, "--config", config_file)
+    assert result.exit_code == 2
+    output = " ".join(result.output.split())
+    assert "mode de remplacement (balises, realiste, masquage)" in output
+    assert "ReplacementMode" not in output
+    result = invoke("config", "definir", "regime", "bidon", "--config", tmp_path / "n.json")
+    assert "Regime" not in result.output and "régime" in result.output

@@ -79,6 +79,25 @@ def _extra_arguments(match: re.Match[str]) -> str:
     return f"{noun} : {extra}"
 
 
+#: Enumerations of the configuration: French name of the setting.
+_ENUM_SETTINGS = {
+    "ReplacementMode": ("mode de remplacement", ReplacementMode),
+    "Regime": ("régime", Regime),
+    "Profile": ("profil", Profile),
+}
+
+
+def _invalid_choice(match: re.Match[str]) -> str:
+    """« 'bidon' is not a valid ReplacementMode » in French, with the valid values."""
+    value, name = match.group(1), match.group(2)
+    known = _ENUM_SETTINGS.get(name)
+    if known is None:
+        return f"{value} n'est pas une valeur valide."
+    setting, enum_type = known
+    choices = ", ".join(str(member.value) for member in enum_type)
+    return f"{value} n'est pas une valeur valide pour le {setting} ({choices})."
+
+
 _Replacement = str | Callable[[re.Match[str]], str]
 
 #: Typer (which vendors Click with hard-coded English strings) usage errors,
@@ -103,7 +122,8 @@ _ERROR_TRANSLATIONS: tuple[tuple[re.Pattern[str], _Replacement], ...] = tuple(
         (r"(\S+) is not a valid float( range)?\.", r"\1 n'est pas un nombre."),
         (r"(\S+) is not a valid boolean\.[^\n]*", r"\1 n'est pas une valeur oui/non."),
         (r"(\S+) is not in the range (.+)\.", r"\1 n'est pas dans l'intervalle \2."),
-        (r"(\S+) is not a valid ([A-Za-z ]+)\.?$", r"\1 n'est pas une valeur valide (\2)."),
+        (r"(\S+) is not a valid ([A-Za-z]+)\.?$", _invalid_choice),
+        (r"(\S+) is not a valid ([A-Za-z ]+)\.?$", r"\1 n'est pas une valeur valide."),
         (r"Expecting .* line (\d+) column \d+ \(char \d+\)", r"JSON mal formé (ligne \1)"),
         (r"Did you mean (.+)\?", r"Vouliez-vous dire \1 ?"),
         # Paths are not echoed: they may carry a sensitive file name.
@@ -423,8 +443,65 @@ def load_config(config_file: Path | None) -> Config:
         fail(f"Fichier de configuration introuvable : {config_file}")
     try:
         return Config.load(config_file)
-    except (ValueError, TypeError, OSError) as exc:
+    except TypeError:
+        # A Python message (« '<=' not supported between... ») tells users nothing.
+        fail(f"Configuration invalide : {_type_problem(config_file)}")
+    except UnicodeDecodeError:
+        fail("Configuration invalide : enregistrez le fichier en UTF-8.")
+    except (ValueError, OSError) as exc:
         fail(f"Configuration invalide : {translate_error(str(exc))}")
+
+
+#: French name of the JSON type of a setting.
+_JSON_KINDS = ((bool, "oui/non (true ou false)"), ((int, float), "un nombre"), (str, "un texte"))
+
+
+def _type_problem(config_file: Path | None) -> str:
+    """Which setting of a configuration file has a value of the wrong type."""
+    from anonyma import paths
+    from anonyma.config import Config
+
+    generic = "une valeur n'a pas le type attendu (nombre, texte, oui/non ou liste)."
+    try:
+        raw = json.loads((config_file or paths.config_path()).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return generic
+    defaults = Config().to_dict()
+    if not isinstance(raw, dict):
+        return "le fichier doit contenir un objet JSON."
+    for scope, values, expected in (
+        ("", raw, defaults),
+        ("limits.", raw.get("limits") or {}, defaults["limits"]),
+    ):
+        if not isinstance(values, dict):
+            return f"« {scope.rstrip('.') or 'limits'} » doit être un objet JSON."
+        for key, value in values.items():
+            default = expected.get(key)
+            if key not in expected or default is None or value is None:
+                continue
+            kind = _expected_kind(default)
+            if kind and not _same_kind(value, default):
+                return f"la valeur de « {scope}{key} » doit être {kind}."
+    return generic
+
+
+def _expected_kind(default: Any) -> str:
+    if isinstance(default, list):
+        return "une liste"
+    if isinstance(default, dict):
+        return "un objet JSON"
+    for types, kind in _JSON_KINDS:
+        if isinstance(default, types):
+            return kind
+    return ""
+
+
+def _same_kind(value: Any, default: Any) -> bool:
+    if isinstance(default, bool) or isinstance(value, bool):
+        return isinstance(value, bool) and isinstance(default, bool)
+    if isinstance(default, (int, float)):
+        return isinstance(value, (int, float))
+    return isinstance(value, type(default))
 
 
 def _read_whitelist(path: Path, what: str = "Liste blanche") -> list[str]:

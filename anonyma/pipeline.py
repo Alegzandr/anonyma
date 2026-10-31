@@ -30,6 +30,7 @@ from typing import Any
 from anonyma import outputs as output_record
 from anonyma import paths, registry
 from anonyma.config import Config
+from anonyma.errors import failure_reason
 from anonyma.frenchtext import plural
 from anonyma.logs import get_logger
 from anonyma.models import (
@@ -544,7 +545,7 @@ def _extract_into(
         doc.add_issue(
             Severity.ERROR,
             "extract.error",
-            f"Échec de la lecture du fichier ({type(exc).__name__}).",
+            f"Échec de la lecture du fichier : {failure_reason(exc, doc.source)}.",
         )
         return
     doc.status = DocumentStatus.FAILED if doc.has_errors else DocumentStatus.EXTRACTED
@@ -582,7 +583,8 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
                 doc.add_issue(
                     Severity.ERROR,
                     "detect.error",
-                    f"Le détecteur « {detector.name} » a échoué : détection incomplète.",
+                    f"Le détecteur « {_detector_label(detector.name)} » a échoué : détection "
+                    "incomplète.",
                 )
                 break
             for e in found:
@@ -595,6 +597,12 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
                 e.document_id = doc.id
                 entities.append(e)
     return entities
+
+
+def _detector_label(name: str) -> str:
+    from anonyma.gui.labels import detector_label
+
+    return detector_label(name)
 
 
 #: Why an input is not read (``_analyze_one(..., skipped=...)``).
@@ -1015,7 +1023,7 @@ def _write_tree(
             Issue(
                 Severity.ERROR,
                 "write.error",
-                f"Échec de l'écriture du fichier anonymisé ({type(exc).__name__}).",
+                f"Échec de l'écriture du fichier produit : {failure_reason(exc)}.",
             )
         )
         return result, None
@@ -1090,7 +1098,7 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
             Issue(
                 Severity.ERROR,
                 "verify.error",
-                f"La vérification a échoué ({type(exc).__name__}).",
+                f"La vérification a échoué : {failure_reason(exc)}.",
             )
         )
         return result
@@ -1241,7 +1249,7 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
                 Issue(
                     Severity.ERROR,
                     "verify.error",
-                    f"La vérification a échoué ({type(exc).__name__}).",
+                    f"La vérification a échoué : {failure_reason(exc)}.",
                 )
             ],
         )
