@@ -44,7 +44,7 @@ def register_extractor[E: type[Extractor]](cls: E) -> E:
     for ext, fmt in cls.extensions.items():
         _extensions[ext.lower()] = fmt
         _extractors[fmt] = cls
-    if cls.sniff is not Extractor.sniff:
+    if cls.sniff.__func__ is not Extractor.sniff.__func__:  # type: ignore[attr-defined]
         _sniffers.append(cls)
     return cls
 

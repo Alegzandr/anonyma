@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE dossier [<!ENTITY org "Exemple">]>
+<!-- Export réalisé par Zéphyrin Quintavalle -->
+<dossier auteur="Zéphyrin Quintavalle" xmlns:x="urn:exemple:test">
+  <titulaire>Zéphyrin Quintavalle</titulaire>
+  <contact courriel="zephyrin.quintavalle@exemple.test">Écrire à zephyrin.quintavalle@exemple.test</contact>
+  <note><![CDATA[Vu avec <b>Zéphyrin Quintavalle</b> & co]]></note>
+  <?traitement responsable="Zéphyrin Quintavalle"?>
+  <x:organisation>&org;</x:organisation>
+  <mixte>Texte <i>libre</i> Zéphyrin Quintavalle</mixte>
+</dossier>

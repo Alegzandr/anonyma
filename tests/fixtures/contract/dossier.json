@@ -1,0 +1,16 @@
+{
+  "dossier": {
+    "titulaire": "Zéphyrin Quintavalle",
+    "contact": {
+      "courriel": "zephyrin.quintavalle@exemple.test",
+      "telephone": 612345678
+    },
+    "Zéphyrin Quintavalle": "clé nominative",
+    "historique": [
+      "Cr\u00e9\u00e9 par Z\u00e9phyrin Quintavalle",
+      null,
+      true,
+      3.5
+    ]
+  }
+}

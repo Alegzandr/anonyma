@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from anonyma import registry
+from anonyma import libreoffice, registry
 from anonyma.config import Config
 from anonyma.models import DocumentStatus, Extractor, Writer
 from anonyma.pipeline import Pipeline, extract_file
@@ -26,6 +26,10 @@ from tests.canary import CANARY_EMAIL, CANARY_PERSON
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contract"
 fixture_files = sorted(p for p in FIXTURES.iterdir() if p.is_file() and p.name != "README.md")
+
+#: Formats that can only be read/written through LibreOffice.
+LIBREOFFICE_ONLY = frozenset({"doc", "ppt"})
+LIBREOFFICE_MISSING = libreoffice.find_soffice(Config()) is None
 
 
 def test_registry_is_consistent() -> None:
@@ -42,11 +46,15 @@ def test_registry_is_consistent() -> None:
 def test_every_format_has_a_fixture() -> None:
     covered = {registry.detect_format(p) for p in fixture_files}
     missing = set(registry.supported_formats()) - covered
+    if LIBREOFFICE_MISSING:
+        missing -= LIBREOFFICE_ONLY
     assert not missing, f"formats without contract fixture: {sorted(missing)}"
 
 
 @pytest.mark.parametrize("fixture", fixture_files, ids=lambda p: p.name)
 def test_fixture_roundtrip(fixture: Path, tmp_path: Path, canary_config: Config) -> None:
+    if LIBREOFFICE_MISSING and registry.detect_format(fixture) in LIBREOFFICE_ONLY:
+        pytest.skip("LibreOffice non installé : format testable uniquement avec LibreOffice")
     if registry.detect_format(fixture) is None and registry.unavailable:
         pytest.skip(f"format plugin unavailable here: {sorted(registry.unavailable.values())}")
     source_dir = tmp_path / "in"

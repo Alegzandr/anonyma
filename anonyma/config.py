@@ -77,6 +77,8 @@ class Config:
     limits: ArchiveLimits = field(default_factory=ArchiveLimits)
     #: Free-form GUI preferences (theme, window geometry...).
     ui: dict[str, Any] = field(default_factory=dict)
+    #: Seconds allowed for one LibreOffice conversion (legacy doc/xls/ppt).
+    libreoffice_timeout: float = 180.0
 
     # -- derived helpers ---------------------------------------------------
 
