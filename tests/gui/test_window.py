@@ -166,3 +166,13 @@ def test_unexpected_exception_dialog_hides_values(
     assert shown and "RuntimeError" in shown[0]
     assert "Quintavalle" not in shown[0]
     assert "Quintavalle" not in caplog.text
+
+
+def test_qt_texts_in_french(qapp: Any) -> None:
+    from PySide6.QtCore import QCoreApplication, QLocale
+
+    from anonyma.app import install_french
+
+    assert install_french(qapp)
+    assert QLocale().language() is QLocale.Language.French
+    assert QCoreApplication.translate("QPlatformTheme", "Cancel") == "Annuler"

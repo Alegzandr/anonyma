@@ -31,6 +31,31 @@ def _configure_qt() -> None:
             pass
 
 
+def install_french(app: object) -> bool:
+    """French for Qt's own texts (standard buttons, context menus, file system model)
+    and French number formatting in every widget. True when the translation loaded."""
+    from pathlib import Path
+
+    import PySide6
+    from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
+    from PySide6.QtWidgets import QApplication
+
+    QLocale.setDefault(QLocale(QLocale.Language.French, QLocale.Country.France))
+    if not isinstance(app, QApplication):
+        return False
+    translator = QTranslator(app)
+    folders = (
+        QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath),
+        # Frozen build: shipped next to the PySide6 package (see packaging/anonyma.spec).
+        str(Path(PySide6.__file__).resolve().parent / "translations"),
+    )
+    for folder in folders:
+        if folder and translator.load("qtbase_fr", folder):
+            app.installTranslator(translator)
+            return True
+    return False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     multiprocessing.freeze_support()
     from anonyma import logs, netguard, paths
@@ -51,6 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     app.setApplicationName("Anonyma")
     app.setApplicationDisplayName("Anonyma")
     app.setWindowIcon(icons.app_icon())
+    install_french(app)
     errors.install()
 
     context = AppContext()
