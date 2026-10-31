@@ -791,100 +791,114 @@ class Pipeline:
     def resolve_decisions(
         self, analysis: BatchAnalysis, decisions: ReviewDecisions
     ) -> ResolvedDecisions:
-        """Apply review decisions to an analysis without touching it.
-
-        Pure (no store, no I/O): the GUI uses it for previews, ``apply`` for output.
-        """
-        clusters = {
-            cid: replace(c, variants=set(c.variants), detectors=set(c.detectors))
-            for cid, c in analysis.clusters.items()
-        }
-        for cid, new_type in decisions.retyped_clusters.items():
-            if cid in clusters:
-                clusters[cid].entity_type = new_type
-        for cid in decisions.confirmed_clusters:
-            if cid in clusters:
-                clusters[cid].review = ReviewStatus.CONFIRMED
-        rejected = set(decisions.rejected_clusters)
-        for cid in rejected:
-            if cid in clusters:
-                clusters[cid].review = ReviewStatus.REJECTED
-
-        entities = [
-            replace(e, entity_type=clusters[e.cluster_id].entity_type)
-            if e.cluster_id in clusters
-            else replace(e)
-            for e in analysis.entities
-            if e.cluster_id not in rejected
-        ]
-        if decisions.manual:
-            manual = self.manual_entities(analysis, decisions)
-            entities, clusters = resolve([*entities, *manual], self.config, clusters)
-            extra = propagate(analysis.documents, clusters, entities, self.config)
-            entities, clusters = resolve([*entities, *extra], self.config, clusters)
-        for cid in decisions.confirmed_clusters:
-            if cid in clusters:
-                clusters[cid].needs_review = False
-
-        active = {cid: c for cid, c in clusters.items() if cid not in rejected}
-        # Filter single-mention rejections last so propagation cannot bring them back.
-        dropped = [e for e in entities if e.key in decisions.rejected_mentions]
-        entities = [
-            e
-            for e in entities
-            if e.cluster_id in active and e.key not in decisions.rejected_mentions
-        ]
-        used = {e.cluster_id for e in entities}
-        active = {cid: c for cid, c in active.items() if cid in used}
-        kept_values = {normalize(e.value) for e in entities}
-        allowed = {v for cid in rejected if cid in clusters for v in clusters[cid].variants}
-        # A rejected mention stays visible; it is only allowed by the verifier when the
-        # same value is not masked elsewhere (otherwise it is a genuine residue).
-        allowed |= {e.value for e in dropped if normalize(e.value) not in kept_values}
-        return ResolvedDecisions(entities, active, sorted(allowed))
+        return resolve_decisions(analysis, decisions)
 
     def manual_entities(self, analysis: BatchAnalysis, decisions: ReviewDecisions) -> list[Entity]:
-        """Every occurrence in the batch of the user-added values."""
-        found: list[Entity] = []
-        for manual in decisions.manual:
-            for doc in analysis.all_documents():
-                if doc.status is not DocumentStatus.EXTRACTED:
-                    continue
-                for seg in doc.segments:
-                    for start, end in find_all(seg.text, manual.value):
-                        found.append(
-                            Entity(
-                                entity_type=manual.entity_type,
-                                value=seg.text[start:end],
-                                document_id=doc.id,
-                                segment_id=seg.id,
-                                start=start,
-                                end=end,
-                                score=1.0,
-                                detector=MANUAL_DETECTOR,
-                                review=ReviewStatus.MANUAL,
-                            )
-                        )
-        return found
+        return manual_entities(analysis, decisions)
 
     @staticmethod
     def check_output_dir(analysis: BatchAnalysis, output_dir: Path) -> None:
-        """Refuse an output folder that contains, or lies inside, the inputs.
+        validate_output_dir([*analysis.inputs, *(d.source for d in analysis.documents)], output_dir)
 
-        Raises ``ValueError`` with a French message."""
-        output_dir = Path(output_dir).resolve()
-        roots = [*analysis.inputs, *(d.source.resolve() for d in analysis.documents)]
-        for root in roots:
-            folder = root if root.is_dir() else root.parent
-            inside_input = root.is_dir() and (output_dir == folder or folder in output_dir.parents)
-            contains_input = output_dir == root or output_dir in root.parents
-            if inside_input or contains_input:
-                raise ValueError(
-                    "Le dossier de sortie doit être distinct des fichiers et dossiers d'origine."
-                )
+
+def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> ResolvedDecisions:
+    """Apply review decisions to an analysis without touching it.
+
+    Pure (no store, no I/O): the GUI uses it for previews, ``apply`` for output.
+    """
+    config = analysis.config
+    clusters = {
+        cid: replace(c, variants=set(c.variants), detectors=set(c.detectors))
+        for cid, c in analysis.clusters.items()
+    }
+    for cid, new_type in decisions.retyped_clusters.items():
+        if cid in clusters:
+            clusters[cid].entity_type = new_type
+    for cid in decisions.confirmed_clusters:
+        if cid in clusters:
+            clusters[cid].review = ReviewStatus.CONFIRMED
+    rejected = set(decisions.rejected_clusters)
+    for cid in rejected:
+        if cid in clusters:
+            clusters[cid].review = ReviewStatus.REJECTED
+
+    entities = [
+        replace(e, entity_type=clusters[e.cluster_id].entity_type)
+        if e.cluster_id in clusters
+        else replace(e)
+        for e in analysis.entities
+        if e.cluster_id not in rejected
+    ]
+    if decisions.manual:
+        manual = manual_entities(analysis, decisions)
+        entities, clusters = resolve([*entities, *manual], config, clusters)
+        extra = propagate(analysis.documents, clusters, entities, config)
+        entities, clusters = resolve([*entities, *extra], config, clusters)
+    for cid in decisions.confirmed_clusters:
+        if cid in clusters:
+            clusters[cid].needs_review = False
+
+    active = {cid: c for cid, c in clusters.items() if cid not in rejected}
+    # Filter single-mention rejections last so propagation cannot bring them back.
+    dropped = [e for e in entities if e.key in decisions.rejected_mentions]
+    entities = [
+        e for e in entities if e.cluster_id in active and e.key not in decisions.rejected_mentions
+    ]
+    used = {e.cluster_id for e in entities}
+    active = {cid: c for cid, c in active.items() if cid in used}
+    kept_values = {normalize(e.value) for e in entities}
+    allowed = {v for cid in rejected if cid in clusters for v in clusters[cid].variants}
+    # A rejected mention stays visible; it is only allowed by the verifier when the
+    # same value is not masked elsewhere (otherwise it is a genuine residue).
+    allowed |= {e.value for e in dropped if normalize(e.value) not in kept_values}
+    return ResolvedDecisions(entities, active, sorted(allowed))
+
+
+def manual_entities(analysis: BatchAnalysis, decisions: ReviewDecisions) -> list[Entity]:
+    """Every occurrence in the batch of the user-added values."""
+    found: list[Entity] = []
+    for manual in decisions.manual:
+        for doc in analysis.all_documents():
+            if doc.status is not DocumentStatus.EXTRACTED:
+                continue
+            for seg in doc.segments:
+                for start, end in find_all(seg.text, manual.value):
+                    found.append(
+                        Entity(
+                            entity_type=manual.entity_type,
+                            value=seg.text[start:end],
+                            document_id=doc.id,
+                            segment_id=seg.id,
+                            start=start,
+                            end=end,
+                            score=1.0,
+                            detector=MANUAL_DETECTOR,
+                            review=ReviewStatus.MANUAL,
+                        )
+                    )
+    return found
+
+
+OUTPUT_CONFLICT_MESSAGE = (
+    "Le dossier de sortie doit être distinct des fichiers et dossiers d'origine."
+)
+
+
+def validate_output_dir(inputs: Sequence[Path], output_dir: Path) -> None:
+    """Refuse an output folder that is, contains, or lies inside one of the inputs.
+
+    Raises ``ValueError`` with a French message (usable before any analysis)."""
+    output_dir = Path(output_dir).resolve()
+    for raw in inputs:
+        root = Path(raw).resolve()
+        inside_input = root.is_dir() and (output_dir == root or root in output_dir.parents)
+        contains_input = output_dir == root or output_dir in root.parents
+        if inside_input or contains_input:
+            raise ValueError(OUTPUT_CONFLICT_MESSAGE)
 
 
 __all__ = [
+    "OUTPUT_CONFLICT_MESSAGE",
     "QUARANTINE_DIR",
     "BatchAnalysis",
     "BatchResult",
@@ -896,4 +910,7 @@ __all__ = [
     "collect_inputs",
     "detect_tree",
     "extract_file",
+    "manual_entities",
+    "resolve_decisions",
+    "validate_output_dir",
 ]
