@@ -61,3 +61,10 @@ def test_paranoid_pipeline_with_whitelist(tmp_path: Path) -> None:
     assert top.output_path is not None
     text = top.output_path.read_text(encoding="utf-8")
     assert "Kervella" not in text and "Plougastel Industries" in text
+
+
+def test_capitalized_common_words_mid_sentence_are_names() -> None:
+    hits = flagged("Réunion du projet Albatros avec les Tissages du Nord, URGENT, Madame.")
+    assert ("NOM_PROPRE", "Albatros") in hits
+    assert any(v.startswith("Tissages") for _, v in hits), hits
+    assert all(v not in ("URGENT", "Madame", "Réunion") for _, v in hits)

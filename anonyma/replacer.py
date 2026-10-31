@@ -25,9 +25,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 import random
+import re
 import secrets
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from anonyma import checksums
 from anonyma import substitutes as fk
@@ -89,7 +91,7 @@ class SubstitutionTable:
         substitute = variant if variant is not None else self.by_cluster[entity.cluster_id]
         if self.mode is ReplacementMode.REALISTIC:
             # Case variants share one normalized key: adapt to this mention.
-            substitute = fk.match_case(entity.value, substitute)
+            substitute = _case_of(entity.entity_type, entity.value, substitute)
         return substitute
 
     def all_substitutes(self) -> set[str]:
@@ -162,9 +164,69 @@ class Replacer:
     def store_key(cluster: EntityCluster) -> str:
         return identity_key(cluster.entity_type, cluster.canonical)
 
+    def stored(self, cluster: EntityCluster) -> str | None:
+        """Substitute the mapping store holds for ``cluster`` in the current mode.
+
+        A table may have been filled in another mode: a tag is never a realistic
+        value (nor the other way round), and a stored code must still be a complete,
+        valid substitute of the same length, or it would be completed with original
+        characters. Such values are ignored and a new substitute is made."""
+        if self.store is None:
+            return None
+        key = self.store_key(cluster)
+        for lookup in (_mode_key(self.config.mode, key), key):
+            known = self.store.lookup(cluster.entity_type, lookup)
+            if known is not None and _fits(self.config.mode, cluster, known):
+                return known
+        return None
+
+    def remember(self, cluster: EntityCluster, substitute: str) -> None:
+        """Save the substitute of ``cluster`` for the current mode."""
+        if self.store is not None:
+            key = _mode_key(self.config.mode, self.store_key(cluster))
+            self.store.save(cluster.entity_type, key, cluster.canonical, substitute)
+
     def rng(self, *parts: str) -> random.Random:
         digest = hmac.new(self._salt, "\x00".join(parts).encode("utf-8"), hashlib.sha256)
         return random.Random(int.from_bytes(digest.digest()[:8], "big"))
+
+
+#: A tag as written by :class:`TagAllocator` (sequential or random id).
+STORED_TAG = re.compile(r"\[[A-Z][A-Z_]*_[A-Z0-9]{3,8}\]")
+
+
+def _mode_key(mode: ReplacementMode, key: str) -> str:
+    """Store key of a value in ``mode``: each mode keeps its own substitute (older
+    tables hold the first one ever assigned under the plain key, still read)."""
+    return f"{mode.value}\0{key}"
+
+
+#: Codes whose stored realistic substitute must still pass their check digits.
+_CHECKED: dict[str, Callable[[str], bool]] = {
+    EntityType.IBAN: checksums.iban_valid,
+    EntityType.CREDIT_CARD: checksums.luhn_valid,
+    EntityType.SIREN: checksums.siren_valid,
+    EntityType.SIRET: checksums.siret_valid,
+}
+
+
+def _fits(mode: ReplacementMode, cluster: EntityCluster, known: str) -> bool:
+    """``known`` (from the store) is a usable substitute of ``cluster`` in ``mode``."""
+    is_tag = bool(STORED_TAG.fullmatch(known.strip()))
+    if mode is ReplacementMode.TAG:
+        return is_tag
+    if mode is not ReplacementMode.REALISTIC or is_tag or "[" in known:
+        return False
+    entity_type = cluster.entity_type
+    if entity_type in RESHAPED_TYPES:
+        compact, original = checksums.compact(known), checksums.compact(cluster.canonical)
+        if len(compact) != len(original) or compact.casefold() == original.casefold():
+            return False
+        check = _CHECKED.get(entity_type)
+        if entity_type == EntityType.NIR and len(compact) == 15:
+            check = checksums.nir_valid
+        return check is None or check(compact)
+    return True
 
 
 def appearance_order(
@@ -214,14 +276,18 @@ class TagAllocator:
 
     def tag_for(self, cluster: EntityCluster) -> str:
         key = Replacer.store_key(cluster)
-        if self.store and (known := self.store.lookup(cluster.entity_type, key)):
-            self.used.add(known)
-            return known
+        if self.store is not None:
+            for lookup in (_mode_key(ReplacementMode.TAG, key), key):
+                known = self.store.lookup(cluster.entity_type, lookup)
+                if known is not None and STORED_TAG.fullmatch(known.strip()):
+                    self.used.add(known)
+                    return known
         entity_type = cluster.entity_type
         tag = self._random(entity_type) if self.random else self._next(entity_type)
         self.used.add(tag)
         if self.store:
-            self.store.save(entity_type, key, cluster.canonical, tag)
+            lookup = _mode_key(ReplacementMode.TAG, key)
+            self.store.save(entity_type, lookup, cluster.canonical, tag)
         return tag
 
     def _next(self, entity_type: str) -> str:
@@ -298,8 +364,7 @@ class _Realistic:
             self._assign(cluster)
 
     def _assign(self, cluster: EntityCluster) -> None:
-        key = Replacer.store_key(cluster)
-        known = self.store.lookup(cluster.entity_type, key) if self.store else None
+        known = self.r.stored(cluster)
         generator = GENERATORS.get(cluster.entity_type)
         if generator is None:
             self._tag(cluster)
@@ -339,8 +404,8 @@ class _Realistic:
         for vkey, (_, substitute) in chosen.items():
             if substitute != base:
                 self.table.by_variant[(cluster.id, vkey)] = substitute
-        if self.store and known is None:
-            self.store.save(cluster.entity_type, key, cluster.canonical, base)
+        if known is None:
+            self.r.remember(cluster, base)
 
     def _tag(self, cluster: EntityCluster) -> None:
         tag = self.tags.tag_for(cluster)
@@ -384,6 +449,23 @@ class _Realistic:
             self.domains[original] = candidate
         return self.domains[original]
 
+    def nir_birth(self, nir: str) -> tuple[int, int] | None:
+        """(year, month) of the substitute birth date of the person a NIR belongs
+        to: a date of birth of the batch in the NIR's year and month, shifted like
+        every date. None when no such date is known."""
+        compact = checksums.compact(nir)
+        if len(compact) < 5 or not compact[1:5].isdigit():
+            return None
+        year, month = int(compact[1:3]), int(compact[3:5])
+        for cluster in self.clusters.values():
+            if cluster.entity_type != EntityType.DATE_OF_BIRTH:
+                continue
+            born = fk.parse_date(cluster.canonical)
+            if born is not None and born.year % 100 == year and born.month == month:
+                shifted = born + timedelta(days=self.shift)
+                return shifted.year, shifted.month
+        return None
+
     def siren(self, original: str, rng: random.Random) -> str:
         if original not in self.sirens:
             self.sirens[original] = fk.fake_siren(rng)
@@ -398,8 +480,18 @@ class _Realistic:
 Generator = Callable[[_Realistic, EntityCluster, random.Random, str | None], dict[str, str] | None]
 
 
+def _case_of(entity_type: str, original: str, substitute: str) -> str:
+    """Case of ``original`` on ``substitute``: word by word for a name (« Claire
+    FONTAINE » -> « Paul MARTIN »), as a whole otherwise: the words of a fake
+    address do not line up with the original ones (« rue des Lilas » must not give
+    « rue emmanuelle Colas »)."""
+    if entity_type == EntityType.PERSON:
+        return fk.match_case(original, substitute)
+    return fk.mirror_case(original, substitute)
+
+
 def _same_for_all(cluster: EntityCluster, base: str) -> dict[str, str]:
-    out = {v: fk.match_case(v, base) for v in cluster.variants}
+    out = {v: _case_of(cluster.entity_type, v, base) for v in cluster.variants}
     out[""] = base
     return out
 
@@ -579,6 +671,21 @@ def _ip(
     return _same_for_all(cluster, known)
 
 
+#: Codes whose substitute is written into the shape of each variant.
+RESHAPED_TYPES = frozenset(
+    {
+        EntityType.IBAN,
+        EntityType.BIC,
+        EntityType.CREDIT_CARD,
+        EntityType.NIR,
+        EntityType.SIREN,
+        EntityType.SIRET,
+        EntityType.VAT_NUMBER,
+        EntityType.LICENSE_PLATE,
+        EntityType.POSTAL_CODE,
+    }
+)
+
 GENERATORS: dict[str, Generator] = {
     EntityType.PERSON: _person,
     EntityType.EMAIL: _email,
@@ -586,7 +693,7 @@ GENERATORS: dict[str, Generator] = {
     EntityType.IBAN: _reshaped(lambda st, v, rng: fk.fake_iban(v, rng)),
     EntityType.BIC: _reshaped(lambda st, v, rng: fk.fake_bic(v, rng)),
     EntityType.CREDIT_CARD: _reshaped(lambda st, v, rng: fk.fake_luhn(v, rng)),
-    EntityType.NIR: _reshaped(lambda st, v, rng: fk.fake_nir(v, rng)),
+    EntityType.NIR: _reshaped(lambda st, v, rng: fk.fake_nir(v, rng, birth=st.nir_birth(v))),
     EntityType.SIREN: _reshaped(_siren),
     EntityType.SIRET: _reshaped(_siret),
     EntityType.VAT_NUMBER: _reshaped(_vat),

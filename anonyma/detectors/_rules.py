@@ -57,6 +57,9 @@ class Rule:
     after: int = 16
     #: Strip trailing punctuation from the match (URLs).
     trim_trailing: bool = False
+    #: Pattern (same flags) found in every text the rule can match: a cheap necessary
+    #: condition checked first, so that slow keyword-led rules skip most segments.
+    prefilter: str = ""
 
 
 # -- validators -----------------------------------------------------------------
@@ -239,6 +242,7 @@ RULES: tuple[Rule, ...] = (
         + r"?)+[A-Za-z]{2,24}(?![\w])",
         0.75,
         flags=regex.MULTILINE | regex.IGNORECASE,
+        prefilter=r"[(\[{]at[)\]}]|" + SP + r"(?:at|arobase)" + SP,
     ),
     # Phone numbers.
     Rule(
@@ -642,20 +646,26 @@ RULES: tuple[Rule, ...] = (
         + r"{0,3})[^\s,;\"'<>()\[\]]{2,64}",
         0.85,
         flags=regex.MULTILINE | regex.IGNORECASE,
+        # The last word of every keyword above, then the separator.
+        prefilter=r"(?:login|identifiant|utilisateur|user|name|pseudo|pseudonyme|compte|account"
+        r"|id|client|handle|skype|teams|slack|github|gitlab|discord|telegram)" + SP + r"{0,3}[:=]",
     ),
     Rule(
         "identifiant_chemin_windows",
         EntityType.USERNAME,
         r"(?<=(?:[A-Za-z]:)?\\\\?(?:Users|Utilisateurs|Documents and Settings|home)\\\\?)"
-        r"[^\\/\s:*?\"<>|]{2,64}",
+        # A profile folder may hold spaces (« C:\Users\Jean Dupont\ »).
+        r"(?:[^\\/:*?\"<>|\r\n\t]{2,64}(?=\\)|[^\\/\s:*?\"<>|]{2,64})",
         0.9,
         flags=regex.MULTILINE | regex.IGNORECASE,
+        prefilter=r"users|utilisateurs|documents and settings|home",
     ),
     Rule(
         "identifiant_chemin_unix",
         EntityType.USERNAME,
         r"(?<=/(?:home|Users|users|utilisateurs)/)[^/\s:*?\"<>|]{2,64}",
         0.9,
+        prefilter=r"/(?:home|Users|users|utilisateurs)/",
     ),
     Rule(
         "identifiant_domaine",
@@ -666,7 +676,8 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "pseudo_arobase",
         EntityType.USERNAME,
-        r"(?<![\w@./+\-])@[A-Za-z0-9_](?:[A-Za-z0-9_.]{1,28}[A-Za-z0-9_])(?![\w@]|\.\w)",
+        # Hyphens inside a handle (« @jean-baptiste ») belong to it.
+        r"(?<![\w@./+\-])@\w(?:[\w.\-]{1,28}\w)(?![\w@\-]|\.\w)",
         0.6,
         context=(
             "twitter",
@@ -716,6 +727,9 @@ RULES: tuple[Rule, ...] = (
         0.7,
         validator=_has_digit,
         flags=regex.MULTILINE | regex.IGNORECASE,
+        prefilter=r"dossier|affaire|r[ée]f|rg|ticket|contrat|police|sinistre|client|adh[ée]rent"
+        r"|matricule|passeport|passport|cni|carte d'identit|permis|titre de|facture|commande"
+        r"|devis|patient|ipp|nda",
     ),
 )
 
@@ -826,6 +840,7 @@ DATE_RULES: tuple[Rule, ...] = (
         + TIME_AFTER_DATE,
         0.6,
         flags=regex.MULTILINE | regex.IGNORECASE,
+        prefilter=r"(?<![\w])(?:" + MONTHS_EN + r")",
     ),
 )
 

@@ -472,3 +472,75 @@ def test_column_and_key_hints(detector: RegexDetector) -> None:
     assert not found(detector, "Synthèse", "PERSONNE", label="nom de feuille")
     # Below the verifier's certainty: a misleading header sends to review, not quarantine.
     assert all(e.score < 0.8 for e in detect(detector, "LEBRUN", **cell))  # type: ignore[arg-type]
+
+
+def test_person_span_stops_at_form_labels(detector: RegexDetector) -> None:
+    """« NOM : X   Prénom : Y »: the label is never swallowed, each value is found and
+    tagged with the name part its label gives (the resolver pairs them)."""
+    hits = [
+        e
+        for e in detect(detector, "NOM : TOURNESOL   Prénom : Ysaline")
+        if e.entity_type == "PERSONNE"
+    ]
+    assert sorted(e.value for e in hits) == ["TOURNESOL", "Ysaline"]
+    parts = {e.value: e.attributes.get("field") for e in hits}
+    assert parts == {"TOURNESOL": "nom", "Ysaline": "prenom"}
+    values = found(detector, "Nom de famille : Quintavalle  Né le 03/04/1985", "PERSONNE")
+    assert values == ["Quintavalle"]
+
+
+def test_person_span_stops_at_sentence_end_and_next_civility(detector: RegexDetector) -> None:
+    text = "Entretien avec M. Braquemart. Mme Vasseur-Delmas absente. Vu M. Durand Mme Petit."
+    values = found(detector, text, "PERSONNE")
+    assert "Braquemart" in values and "Vasseur-Delmas" in values
+    assert not any("." in v or "Mme" in v for v in values), values
+    # An initial keeps its period and stays in the name.
+    assert "J. Dupont" in found(detector, "Signé par J. Dupont.", "PERSONNE")
+
+
+def test_hyphenated_handle_is_one_identifier(detector: RegexDetector) -> None:
+    assert found(detector, "suivez @jean-baptiste sur le réseau", "IDENTIFIANT") == [
+        "@jean-baptiste"
+    ]
+
+
+def test_windows_profile_folder_with_spaces(detector: RegexDetector) -> None:
+    path = r"C:\Users\Zéphyrin Quintavalle\Documents\cv.txt"
+    assert found(detector, path, "PERSONNE") == ["Zéphyrin Quintavalle"]
+
+
+def test_value_next_to_a_field_name_cell(detector: RegexDetector) -> None:
+    """Vertical layout « Nom | Zéphyrin Quintavalle »: the label cell types its neighbour."""
+
+    def cell(ref: str, text: str) -> Segment:
+        return Segment(ref, text, (), SegmentContext(SegmentKind.CELL, f"feuille 1!{ref}"))
+
+    segments = [
+        cell("A1", "Nom"),
+        cell("B1", "Zéphyrin Quintavalle"),
+        cell("A2", "Service"),
+        cell("B2", "Comptabilité générale"),
+        cell("C1", "Zéphyrin Quintavalle"),  # not next to the label
+    ]
+    persons = [
+        (e.segment_id, e.value)
+        for e in detector.detect(segments, "d")
+        if e.entity_type == "PERSONNE"
+    ]
+    assert ("B1", "Zéphyrin Quintavalle") in persons
+    assert all(seg != "B2" for seg, _ in persons)
+
+
+def test_header_row_cells_are_not_values(detector: RegexDetector) -> None:
+    def cell(ref: str, text: str) -> Segment:
+        return Segment(ref, text, (), SegmentContext(SegmentKind.CELL, ref))
+
+    header = [cell("A1", "nom"), cell("B1", "prenom"), cell("C1", "note"), cell("D1", "cp")]
+    assert not detector.detect(header, "d")
+
+
+def test_label_after_other_header_cells_types_nothing(detector: RegexDetector) -> None:
+    def cell(ref: str, text: str) -> Segment:
+        return Segment(ref, text, (), SegmentContext(SegmentKind.CELL, ref))
+
+    assert not detector.detect([cell("A1", "date"), cell("B1", "auteur"), cell("C1", "note")], "d")

@@ -1,6 +1,6 @@
-"""French regex detector (profile LIGHT) built on Presidio recognizers.
+"""French regex detector (profile LIGHT).
 
-Every rule of :mod:`anonyma.detectors._rules` is a Presidio ``PatternRecognizer``;
+Every rule of :mod:`anonyma.detectors._rules` is one compiled regular expression;
 persons, addresses, organisations and places use the custom recognizers of
 :mod:`anonyma.detectors._custom`. No NLP engine (and no spaCy model) is involved:
 recognizers are called directly, and context handling is done here, accent- and
@@ -16,7 +16,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import regex
-from presidio_analyzer import Pattern, PatternRecognizer
 
 from anonyma import checksums
 from anonyma.config import Config
@@ -36,7 +35,7 @@ from anonyma.detectors._rules import (
     RULES,
     Rule,
 )
-from anonyma.fieldhints import hint_of
+from anonyma.fieldhints import field_hint, hint_of
 from anonyma.logs import get_logger
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
 from anonyma.registry import register_detector
@@ -91,30 +90,74 @@ def _context_regex(words: Sequence[str]) -> regex.Pattern[str] | None:
     return regex.compile(rf"(?<![a-z0-9])(?:{body})(?![a-z0-9])")
 
 
-class _RuleRecognizer(PatternRecognizer):
-    """Presidio recognizer for one :class:`Rule`; validation is done by the detector."""
-
-    def __init__(self, rule: Rule) -> None:
-        super().__init__(
-            supported_entity=rule.entity_type,
-            name=rule.name,
-            supported_language="fr",
-            patterns=[Pattern(rule.name, rule.pattern, rule.score)],
-            global_regex_flags=rule.flags,
-        )
-        self.rule = rule
-
-    def validate_result(self, pattern_text: str) -> bool | None:
-        return None
+#: Longest time a rule may spend on one segment (catastrophic backtracking guard).
+RULE_TIMEOUT = 60
 
 
 class _Compiled:
-    __slots__ = ("context", "recognizer", "rule")
+    __slots__ = ("context", "context_words", "pattern", "prefilter", "rule")
 
     def __init__(self, rule: Rule) -> None:
         self.rule = rule
-        self.recognizer = _RuleRecognizer(rule)
+        self.pattern = regex.compile(rule.pattern, rule.flags)
+        self.prefilter = regex.compile(rule.prefilter, rule.flags) if rule.prefilter else None
         self.context = _context_regex(rule.context)
+        #: Context words without word boundaries: a rule that needs context is only
+        #: run on a segment holding one of them somewhere (necessary condition).
+        self.context_words = (
+            regex.compile("|".join(regex.escape(normalize(w).rstrip("*")) for w in rule.context))
+            if rule.needs_context and rule.context
+            else None
+        )
+
+    def spans(self, text: str) -> list[tuple[int, int]]:
+        if self.prefilter is not None and not self.prefilter.search(text):
+            return []
+        try:
+            return [
+                m.span()
+                for m in self.pattern.finditer(text, timeout=RULE_TIMEOUT)
+                if m.end() > m.start()
+            ]
+        except TimeoutError:
+            log.warning("rule %s timed out on a segment, skipped", self.rule.name)
+            return []
+
+
+#: A1-style reference at the start of a cell label (``feuille 2!B7``, ``C3``).
+_CELL_REF = regex.compile(r"^(?P<sheet>.*?!)?(?P<col>[A-Z]{1,3})(?P<row>\d+)(?![\w!])")
+
+
+def _column_number(letters: str) -> int:
+    n = 0
+    for c in letters:
+        n = n * 26 + ord(c) - 64
+    return n
+
+
+def _row_label_hint(segment: Segment, row_labels: dict[tuple[str, int, int], str]) -> str | None:
+    """Hint given by the cell just left of ``segment`` when it holds a field name and
+    starts its row (vertical layout « Nom | Jean Dupont »); records ``segment`` if it
+    is one (``row_labels`` also keeps, at column 0, the first column of each row).
+
+    A label after other cells, or a row holding several field names, is a header
+    row (« date | auteur | note », « nom | prénom | cp »): its cells are labels."""
+    if segment.context.kind is not SegmentKind.CELL:
+        return None
+    m = _CELL_REF.match(segment.context.label)
+    if m is None:
+        return None
+    sheet, row, col = m.group("sheet") or "", int(m.group("row")), _column_number(m.group("col"))
+    first = int(row_labels.setdefault((sheet, row, 0), str(col)))
+    own = field_hint(segment.text)
+    if own is not None:
+        row_labels[(sheet, row, col)] = own
+        return None
+    hint = row_labels.get((sheet, row, col - 1))
+    labels = sum(1 for k in row_labels if k[:2] == (sheet, row) and k[2] > 0)
+    if hint is None or col - 1 != first or labels > 1:
+        return None
+    return hint
 
 
 def _label_has(label: str, parts: Sequence[str]) -> bool:
@@ -192,24 +235,35 @@ class RegexDetector(Detector):
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         found: list[Entity] = []
         previous = ""
+        #: Field-name cells (« Nom » in A1): (sheet, row, column) -> hint.
+        row_labels: dict[tuple[str, int, int], str] = {}
         for segment in segments:
             if not segment.text.strip() or skip_segment(segment):
                 continue
-            found.extend(self._segment(segment, document_id, previous))
+            row_hint = _row_label_hint(segment, row_labels)
+            found.extend(self._segment(segment, document_id, previous, row_hint))
             # OCR lines and PDF blocks: a cue often sits on the line before the date.
             previous = segment.text[-SIGNATURE_WINDOW:]
         return found
 
-    def _segment(self, segment: Segment, document_id: str, previous: str = "") -> list[Entity]:
+    def _segment(
+        self, segment: Segment, document_id: str, previous: str = "", row_hint: str | None = None
+    ) -> list[Entity]:
         text = segment.text
         label = normalize(segment.context.label)
         raw: list[tuple[str, int, int, float, dict[str, str]]] = []
+        flat: str | None = None
         for compiled in self.compiled:
             rule = compiled.rule
             if segment.context.kind in rule.skip_kinds:
                 continue
-            for result in compiled.recognizer.analyze(text, [rule.entity_type]):
-                item = self._post(compiled, text, label, result.start, result.end)
+            words = compiled.context_words
+            if words is not None and not (compiled.context and compiled.context.search(label)):
+                flat = normalize(text) if flat is None else flat
+                if not words.search(flat):
+                    continue  # no context word anywhere: every match would be dropped
+            for start, end in compiled.spans(text):
+                item = self._post(compiled, text, label, start, end)
                 if item is not None:
                     raw.append(item)
         views: list[tuple[str, list[int] | None]] = [(text, None)]
@@ -226,7 +280,7 @@ class RegexDetector(Detector):
                     if index is not None:
                         start, end = index[start], index[end - 1] + 1
                     raw.append((result.entity_type, start, end, result.score, attrs))
-        raw.extend(self._labels(segment, label))
+        raw.extend(self._labels(segment, label, row_hint))
         value = text.strip()
         if len(value) == 9 and value.isdigit() and value[0] in "67":
             # A whole cell/value 6xxxxxxxx: a mobile number stored as a number.
@@ -300,10 +354,13 @@ class RegexDetector(Detector):
             score = max(score, rule.context_score if rule.context_score is not None else 0.95)
         elif rule.needs_context:
             return None
+        if rule.name == "identifiant_chemin_windows" and " " in text[start:end].strip():
+            # A profile folder with spaces is the display name of its owner.
+            return EntityType.PERSON, start, end, score, {"rule": rule.name}
         return rule.entity_type, start, end, score, {"rule": rule.name}
 
     def _labels(
-        self, segment: Segment, label: str
+        self, segment: Segment, label: str, row_hint: str | None = None
     ) -> list[tuple[str, int, int, float, dict[str, str]]]:
         """Entities implied by the segment label (mail headers, metadata fields)."""
         out: list[tuple[str, int, int, float, dict[str, str]]] = []
@@ -317,7 +374,7 @@ class RegexDetector(Detector):
                     s = len(text) - len(text.lstrip())
                     spans = [(s, len(text.rstrip()))]
                 out += [(entity_type, s, e, 0.95, {"rule": "label"}) for s, e in spans]
-        hint = hint_of(label)
+        hint = hint_of(label) or row_hint
         if hint in HINT_TYPES:
             entity_type = HINT_TYPES[hint]
             # Below the verifier's certainty level: a header can mislead, a residue

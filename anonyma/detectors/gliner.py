@@ -117,7 +117,7 @@ class GlinerDetector(Detector):
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         from anonyma.gliner_onnx import GlinerOnnx
 
-        todo = [s for s in segments if any(c.isalpha() for c in s.text) and not skip_segment(s)]
+        todo = [s for s in segments if has_words(s.text) and not skip_segment(s)]
         if not todo:
             return []
         model = self._model()
@@ -174,6 +174,17 @@ class GlinerDetector(Detector):
 
 #: A job title identifies someone only next to them: same paragraph, this close.
 JOB_TITLE_WINDOW = 150
+#: An alphanumeric run (letters, digits).
+_ALNUM_RUN = re.compile(r"[^\W_]+")
+
+
+def has_words(text: str) -> bool:
+    """Text worth a model pass: a run of at least two letters and no digit. GUIDs,
+    hexadecimal ids, ISO dates and timestamps and numbers (JSON exports hold
+    thousands of them) have none; the regex rules handle them."""
+    return any(len(run) >= 2 and run.isalpha() for run in _ALNUM_RUN.findall(text))
+
+
 _PARAGRAPH_BREAK = re.compile(r"\n[ \t ]*\n")
 
 

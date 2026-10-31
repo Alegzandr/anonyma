@@ -301,6 +301,27 @@ def keeps(entity_type: str, value: str, config: Config) -> bool:
     if policy == POLICY_ALL or not value.strip():
         return False
     white, black = _lists(config)
+    global _keep_lists
+    if _keep_lists is None or _keep_lists[0] is not white or _keep_lists[1] is not black:
+        _keep_lists = (white, black)
+        _keep_cache.clear()
+    key = (entity_type, value, policy)
+    known = _keep_cache.get(key)
+    if known is None:
+        if len(_keep_cache) >= _KEEP_CACHE_SIZE:
+            _keep_cache.clear()
+        known = _keep_cache[key] = _keeps(entity_type, value, white, black, policy)
+    return known
+
+
+#: Decisions of :func:`keeps` for the current lists: a batch asks again and again
+#: about the same values (a date or a login on every line of a log).
+_KEEP_CACHE_SIZE = 65536
+_keep_cache: dict[tuple[str, str, str], bool] = {}
+_keep_lists: tuple[OrgList, OrgList] | None = None
+
+
+def _keeps(entity_type: str, value: str, white: OrgList, black: OrgList, policy: str) -> bool:
     if entity_type == EntityType.ORGANIZATION:
         return _name_kept(value, white, black, policy)
     if entity_type == EntityType.URL:

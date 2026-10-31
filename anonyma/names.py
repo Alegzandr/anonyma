@@ -125,7 +125,7 @@ def parse_person(value: str) -> PersonName | None:
         split = _UNDERSCORE_TOKEN.findall(value)
         words = [w for w in split if any(c.isalpha() for c in w)]
         upper = [_is_upper_word(w) for w in words]
-        if (any(upper) and not all(upper)) or any(_given_like(w) for w in words):
+        if (any(upper) and not all(upper)) or any(given_like(w) for w in words):
             tokens = split
     civility: list[str] = []
     gender: str | None = None
@@ -160,17 +160,17 @@ def parse_person(value: str) -> PersonName | None:
             else:
                 given, surname = words[:first_upper], words[first_upper:]
         else:
-            first_is_name = _given_like(words[0])
-            last_is_name = _given_like(words[-1])
+            first_is_name = given_like(words[0])
+            last_is_name = given_like(words[-1])
             if not first_is_name and last_is_name and not is_initial(words[0]):
                 surname_first = True
                 k = len(words) - 1
-                while k > 1 and _given_like(words[k - 1]):
+                while k > 1 and given_like(words[k - 1]):
                     k -= 1
                 surname, given = words[:k], words[k:]
             else:
                 k = 1
-                while k < len(words) - 1 and (_given_like(words[k]) or is_initial(words[k])):
+                while k < len(words) - 1 and (given_like(words[k]) or is_initial(words[k])):
                     if normalize(words[k]) in PARTICLES:
                         break
                     k += 1
@@ -183,7 +183,8 @@ def parse_person(value: str) -> PersonName | None:
     return PersonName(" ".join(civility), tuple(given), tuple(surname), surname_first, gender)
 
 
-def _given_like(token: str) -> bool:
+def given_like(token: str) -> bool:
+    """An initial or a given name of the lexicon (any case, compounds included)."""
     if is_initial(token):
         return True
     record = first_name(token)
@@ -249,11 +250,33 @@ def _login_forms(person: PersonName) -> dict[str, str]:
         form = template(*parts)
         if len(form) >= 5 and form not in forms.values():
             forms[name] = form
+    # Hyphens kept (``jean-baptiste.kerguelen``, ``berenice.lagarde-moreau``): the
+    # template names carry an ``h`` (``gh.s``, ``g.sh``); without it they are the
+    # plain templates.
+    given, initials, surname = parts
     hyphen_given = "-".join(_ascii(g) for g in person.given_key.split("-") if g)
+    hyphen_surname = "-".join(
+        w for w in (_ascii(p) for p in re.split(r"[-\s]+", person.surname_key)) if w
+    )
     if "-" in hyphen_given:
-        forms.setdefault("gh.s", f"{hyphen_given}.{parts[2]}")
-        forms.setdefault("gh-s", f"{hyphen_given}-{parts[2]}")
+        forms.setdefault("gh.s", f"{hyphen_given}.{surname}")
+        forms.setdefault("gh-s", f"{hyphen_given}-{surname}")
+    if "-" in hyphen_surname:
+        forms.setdefault("g.sh", f"{given}.{hyphen_surname}")
+        forms.setdefault("g_sh", f"{given}_{hyphen_surname}")
+        forms.setdefault("i.sh", f"{initials}.{hyphen_surname}")
+        forms.setdefault("ish", f"{initials}{hyphen_surname}")
+        forms.setdefault("sh.g", f"{hyphen_surname}.{given}")
+        if "-" in hyphen_given:
+            forms.setdefault("gh.sh", f"{hyphen_given}.{hyphen_surname}")
     return forms
+
+
+def login_of(template: str, person: PersonName) -> str | None:
+    """Form of ``person`` for a template of :func:`login_forms`; a hyphen template
+    (``g.sh``) falls back to the plain one when ``person`` has no hyphen."""
+    forms = login_forms(person)
+    return forms.get(template) or forms.get(template.replace("h", ""))
 
 
 def match_login_template(local: str, person: PersonName) -> str | None:
@@ -323,10 +346,12 @@ __all__ = [
     "PARTICLES",
     "PersonName",
     "civility_of",
+    "given_like",
     "initials_forms",
     "initials_of",
     "is_initial",
     "login_forms",
+    "login_of",
     "login_parts",
     "match_login_template",
     "needs_capital",

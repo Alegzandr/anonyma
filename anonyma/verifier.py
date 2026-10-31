@@ -19,7 +19,8 @@ Two independent checks on every segment of the re-extracted output tree:
    path component and its stem) must not survive anywhere in the output (detector
    ``nom_origine``, certain), unless they are still part of the output names (then
    nothing was hidden in them). Their distinctive words (not common words, not in
-   the output names) are possible residues.
+   the output names) are residues too: certain when capitalized like a proper name
+   (« Quintavalle »), possible otherwise.
 
 5. **Raw bytes** (:meth:`Verifier.verify_raw`, :mod:`anonyma.rawscan`): the written
    file itself, decoded every way that matters (encodings, character references,
@@ -181,7 +182,12 @@ class Verifier:
         # masked surname): text inside them is not a residue.
         kept = frozenset([*allowed, *self.config.whitelist])
         kept_matcher = _cached(("kept", kept), lambda: _substitutes(set(kept)))
-        name_table = _name_table(names, [d.name for d in output.walk()], allowed_keys)
+        name_table = _name_table(
+            names,
+            [d.name for d in output.walk()],
+            allowed_keys,
+            certain_words=not self.config.neutral_filenames,
+        )
         kinds: list[SegmentKind] = []  # of each residue, for neutral labels
 
         for doc in output.walk():
@@ -486,13 +492,20 @@ def _distinctive_word(word: str) -> bool:
 
 
 def _name_table(
-    names: Iterable[str], output_names: Sequence[str], allowed_keys: set[str]
+    names: Iterable[str],
+    output_names: Sequence[str],
+    allowed_keys: set[str],
+    *,
+    certain_words: bool = True,
 ) -> MultiMatcher[bool]:
     """Original names to search in an output (payload: certain residue).
 
     Each path component and its stem (certain) when distinctive and absent from the
-    output names; their distinctive words absent from the output names (possible).
-    Everything is compared with separators as spaces.
+    output names; their distinctive words absent from the output names, i.e. masked
+    in them: certain when they read as proper names, possible otherwise. With neutral
+    output names (``certain_words`` False) every word is absent from them, masked or
+    not: words are only possible residues. Everything is compared with separators as
+    spaces.
     """
     table: MultiMatcher[bool] = MultiMatcher()
     in_output = normalize(spaced_name(" / ".join(output_names)))
@@ -510,8 +523,19 @@ def _name_table(
             for word in words:
                 key = normalize(word)
                 if key not in output_words and key not in allowed_keys:
-                    table.add(word, False)
+                    table.add(word, certain_words and _name_like_word(word))
     return table
+
+
+def _name_like_word(word: str) -> bool:
+    """A distinctive word of an original name that reads as a proper name
+    (« Quintavalle » of « CV Zéphyrin Quintavalle.txt »): found verbatim in the
+    output, it is a certain residue. Lower-case words and short acronyms
+    (« rgpd », « ACME ») stay possible residues."""
+    letters = [c for c in word if c.isalpha()]
+    if len(letters) < MIN_NAME_WORD or not word[:1].isupper():
+        return False
+    return not (word.isupper() and len(letters) <= 4)
 
 
 def _neutral_outside(

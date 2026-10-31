@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -150,3 +151,97 @@ def test_standard_profile_pipeline(installed: Config, tmp_path: Path) -> None:
     assert top.output_path is not None
     text = top.output_path.read_text(encoding="utf-8")
     assert "Kervella" not in text and "Morvan" not in text
+
+
+class _FakeEncoding:
+    def __init__(self, ids: list[int], word_ids: list[int | None]) -> None:
+        self.ids, self.word_ids = ids, word_ids
+
+
+class _FakeTokenizer:
+    """One token per word: ``1000 + first letter`` for capitalized words, else 500."""
+
+    def encode(
+        self, words: list[str], *, is_pretokenized: bool, add_special_tokens: bool
+    ) -> _FakeEncoding:
+        ids = [1000 + ord(w[0]) if w[:1].isupper() else 500 for w in words]
+        word_ids: list[int | None] = list(range(len(words)))
+        if add_special_tokens:
+            return _FakeEncoding([1, *ids, 2], [None, *word_ids, None])
+        return _FakeEncoding(ids, word_ids)
+
+    def token_to_id(self, token: str) -> int:
+        return 3
+
+
+class _FakeSession:
+    """Scores a span by its first and last words only (capitalized: a name), so that
+    a span across two packed texts (« Alice . Bob ») would score too."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def run(self, names: list[str], feeds: dict[str, Any]) -> list[Any]:
+        import numpy as np
+
+        self.calls += 1
+        ids, mask, spans = feeds["input_ids"], feeds["words_mask"], feeds["span_idx"]
+        out = np.full((ids.shape[0], spans.shape[1], 1), -10.0, dtype=np.float32)
+        for k in range(ids.shape[0]):
+            words = {int(mask[k, j]) - 1: int(ids[k, j]) for j in range(ids.shape[1]) if mask[k, j]}
+            for n, (a, b) in enumerate(spans[k]):
+                if feeds["span_mask"][k, n] and words[int(a)] > 1000 and words[int(b)] > 1000:
+                    out[k, n, 0] = 5.0 + (int(b) - int(a))
+        return [out]
+
+
+def _fake_model() -> tuple[GlinerOnnx, _FakeSession]:
+    import threading
+
+    model = GlinerOnnx.__new__(GlinerOnnx)
+    model.max_width, model.max_words, model.max_tokens = 3, 384, 512
+    model.ent_token, model.sep_token = "<<ENT>>", "<<SEP>>"
+    model.batch_size, model.window_overlap, model.pad_id = 8, 48, 0
+    model.tokenizer = _FakeTokenizer()  # type: ignore[assignment]
+    model._suffix = [2]
+    session = _FakeSession()
+    model.session = session  # type: ignore[assignment]
+    model.input_names = {"input_ids", "attention_mask", "words_mask", "span_idx", "span_mask"}
+    model._lock = threading.Lock()
+    model._prompt_cache = {}
+    return model, session
+
+
+def test_packed_short_texts_predict_like_one_by_one() -> None:
+    texts = ["Alice", "Bob", "rien ici", "Jean Dupont est là", "", "Alice Bob Carole", "x"] * 30
+    model, session = _fake_model()
+    packed = model.predict(texts, ["personne"], flat=False)
+    alone = [model.predict([t], ["personne"], flat=False)[0] for t in texts]
+    assert packed == alone
+    # No span joins two texts (« Alice . Bob » would score in this fake model).
+    assert all(s.end <= len(t) for t, spans in zip(texts, packed, strict=True) for s in spans)
+    # Thousands of tiny segments: a handful of model calls, not one window each.
+    model, session = _fake_model()
+    model.predict(["@odata.context", "Zéphyrin"] * 2000, ["personne"])
+    assert session.calls <= 10
+
+
+def test_segments_without_words_skip_the_model() -> None:
+    from anonyma.detectors.gliner import has_words
+
+    for text in ("3f2504e0-4f89-11d3-9a0c-0305e82c3301", "2026-01-14T10:12:00Z", "12 345,6", "a1"):
+        assert not has_words(text), text
+    assert has_words("@odata.context") and has_words("Jean")
+
+
+def test_short_windows_overlap_by_half_at_most() -> None:
+    """A long label prompt leaves a small budget: windows must still advance by half
+    their length, not one word at a time (quadratic number of windows)."""
+    model = GlinerOnnx.__new__(GlinerOnnx)
+    model.max_words, model.window_overlap = 384, 48
+    windows = model._windows(0, [[1]] * 2000, budget=20)
+    assert len(windows) <= 2 * 2000 // 20 + 1
+    covered = set()
+    for w in windows:
+        covered |= set(range(w.first_word, w.first_word + w.word_count))
+    assert covered == set(range(2000))

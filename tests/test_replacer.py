@@ -265,3 +265,97 @@ def test_plan_merges_overlaps_with_longest_head() -> None:
     plan = build_plan(doc, kept, table)
     out = plan.apply(doc.segments[0])
     assert "Dupont" not in out and "Martin" not in out and out.startswith("Voir [PERSONNE_")
+
+
+def _iban_fr() -> str:
+    bank, branch, account = "30001", "00794", "00012345678"
+    bban = bank + branch + account + checksums.rib_key(bank, branch, account)
+    iban = "FR" + checksums.iban_check_digits("FR", bban) + bban
+    return " ".join(iban[i : i + 4] for i in range(0, len(iban), 4))
+
+
+@pytest.mark.parametrize(
+    ("first", "then"),
+    [
+        (ReplacementMode.TAG, ReplacementMode.REALISTIC),
+        (ReplacementMode.REALISTIC, ReplacementMode.TAG),
+    ],
+)
+def test_pseudonymization_table_reused_in_another_mode(
+    first: ReplacementMode, then: ReplacementMode
+) -> None:
+    """A table filled in one mode never leaks a tag (or the original) into the other."""
+    store = InMemoryMappingStore()
+    nir_body = "2850478006084"
+    nir = f"{nir_body} {checksums.nir_key(nir_body)}"
+    values = [("Camille Durand", "PERSONNE"), (_iban_fr(), "IBAN"), (nir, "NIR")]
+    tables = []
+    for mode in (first, then, first):
+        cfg = Config(mode=mode, regime=Regime.PSEUDONYMIZATION)
+        entities = [ent(v, t, f"s{i}") for i, (v, t) in enumerate(values)]
+        kept, clusters = resolve(entities, cfg)
+        table = Replacer(cfg, store).assign(clusters, kept)
+        tables.append((mode, {e.value: table.substitute_for(e) for e in kept}))
+    for mode, subs in tables:
+        for original, substitute in subs.items():
+            tag = bool(re.fullmatch(r"\[[A-Z_]+_[A-Z0-9]+\]", substitute))
+            assert tag is (mode is ReplacementMode.TAG), (mode, substitute)
+            if mode is ReplacementMode.REALISTIC:
+                assert "[" not in substitute
+                # No run of original digits survives (« FR76 3000 1007 ... »).
+                digits = checksums.digits(original)
+                assert all(
+                    digits[i : i + 6] not in checksums.digits(substitute)
+                    for i in range(2, len(digits) - 5)
+                ), (original, substitute)
+    realistic = next(s for m, s in tables if m is ReplacementMode.REALISTIC)
+    assert checksums.iban_valid(checksums.compact(realistic[_iban_fr()]))
+    assert checksums.nir_valid(checksums.compact(realistic[nir]))
+    # Each mode stays stable across batches.
+    assert tables[0][1] == tables[2][1]
+
+
+def test_reshape_never_keeps_original_characters() -> None:
+    from anonyma.substitutes import reshape
+
+    assert reshape("FR76 3000 1007", "AB12") == "AB12 0000 0000"
+
+
+def test_realistic_nir_follows_the_substitute_birth_date() -> None:
+    body = "2850478006084"
+    nir = f"{body}{checksums.nir_key(body)}"
+    table, kept, _ = assign(
+        [("Camille Durand", "PERSONNE"), ("03/04/1985", "DATE_NAISSANCE"), (nir, "NIR")],
+        ReplacementMode.REALISTIC,
+    )
+    birth = sub(table, kept, "03/04/1985")
+    fake = sub(table, kept, nir)
+    _day, month, year = birth.split("/")
+    assert fake[1:5] == f"{year[2:]}{month}", (birth, fake)
+    assert fake[0] == "2" and checksums.nir_valid(fake)
+
+
+@pytest.mark.parametrize(
+    ("person", "address"),
+    [
+        ("Jean-Baptiste Kerguelen", "jean-baptiste.kerguelen@exemple.test"),
+        ("Bérénice Lagarde-Moreau", "berenice.lagarde-moreau@exemple.test"),
+    ],
+)
+def test_realistic_address_follows_the_display_name(person: str, address: str) -> None:
+    """Hyphens in the local part: the fake address still matches the fake name."""
+    table, kept, _ = assign([(person, "PERSONNE"), (address, "EMAIL")], ReplacementMode.REALISTIC)
+    name, mail = sub(table, kept, person), sub(table, kept, address)
+    given, surname = name.split(" ", 1)
+    local = mail.split("@")[0]
+    assert ascii_of(surname) in ascii_of(local) and ascii_of(given)[:1] == local[:1], (name, mail)
+
+
+def test_realistic_case_is_per_word_for_names_only() -> None:
+    from anonyma.replacer import _case_of
+
+    assert _case_of("ADRESSE", "12 rue des Lilas", "46 rue Emmanuelle Colas") == (
+        "46 rue Emmanuelle Colas"
+    )
+    assert _case_of("ADRESSE", "12 RUE DES LILAS", "46 rue Colas") == "46 RUE COLAS"
+    assert _case_of("PERSONNE", "Claire FONTAINE", "Paul Martin") == "Paul MARTIN"

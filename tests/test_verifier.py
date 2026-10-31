@@ -156,7 +156,25 @@ def test_original_names_are_searched() -> None:
     by_value = {r.value: r for r in result.residues}
     assert by_value["Contrat_zephyrin_QUINTAVALLE_signe"].certain
     assert by_value["Contrat_zephyrin_QUINTAVALLE_signe"].entity_type == "NOM_FICHIER"
-    assert not by_value["Quintavalle"].certain  # a word of the name: possible only
+    # A word masked in the name that reads as a proper name: certain (quarantine).
+    assert by_value["Quintavalle"].certain
+
+
+def test_words_of_original_names_certain_only_when_name_like() -> None:
+    names = ["Dossier/Contrat_zephyrin_QUINTAVALLE_ACME_signe.pdf"]
+
+    def residues(config: Config, output_name: str) -> dict[str, bool]:
+        doc = output("voir zephyrin, Quintavalle et ACME demain")
+        doc.name = output_name
+        result = Verifier(config, []).verify(doc, [], set(), names=names)
+        return {r.value: r.certain for r in result.residues}
+
+    found = residues(Config(), "Contrat_[PERSONNE_001]_ACME_signe.pdf")
+    # Lower-case in the original name: possible; still in the output name: nothing.
+    assert found == {"zephyrin": False, "Quintavalle": True}
+    # Neutral output names hide every word, masked or not: possible only.
+    neutral = residues(Config(neutral_filenames=True), "document_0001.pdf")
+    assert neutral == {"zephyrin": False, "Quintavalle": False}
 
 
 def test_names_still_in_output_names_are_not_residues() -> None:

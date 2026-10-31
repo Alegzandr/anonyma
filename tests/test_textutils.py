@@ -79,3 +79,36 @@ def test_masked_names_do_not_reveal_lengths(tmp_path: Path, canary_config: Confi
     result = Pipeline(config).run([tmp_path / "in"], tmp_path / "out")
     [top] = result.results
     assert top.output_name.split("/")[-2:] == ["Dossier █████", "Note █████.txt"]
+
+
+def test_normalize_with_map_fast_paths_match_the_char_by_char_reference() -> None:
+    """ASCII runs and cached characters give exactly the per-character result."""
+    import random
+    import unicodedata
+
+    from anonyma.textutils import normalize_with_map
+
+    def reference(text: str) -> tuple[str, list[int]]:
+        out: list[str] = []
+        index: list[int] = []
+        previous_space = False
+        for i, ch in enumerate(text):
+            if ch.isspace():
+                if not previous_space:
+                    out.append(" ")
+                    index.append(i)
+                previous_space = True
+                continue
+            previous_space = False
+            decomposed = unicodedata.normalize("NFD", ch)
+            for n in "".join(c for c in decomposed if not unicodedata.combining(c)).casefold():
+                out.append(n)
+                index.append(i)
+        return "".join(out), index
+
+    alphabet = [*"aZ e\t\n é É ß ﬁ œ İ x1-_.\r", "\u0301", "\u00a0", "\u2009", "\x1c"]
+    rng = random.Random(7)
+    for _ in range(3000):
+        text = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 40)))
+        assert normalize_with_map(text) == reference(text), repr(text)
+        assert normalize(text) == " ".join(reference(text)[0].split())

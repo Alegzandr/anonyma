@@ -12,7 +12,10 @@ Re-implements the pre/post-processing of the ``gliner`` library for span models
 * decoding: sigmoid, threshold, greedy non-overlapping selection.
 
 Long texts are cut into overlapping word windows that fit the encoder budget;
-windows of every text are batched together (sorted by length to limit padding).
+tiny texts (keys, cells, JSON values: a few words) are packed several to a window,
+separated by a ``.`` word, and a span crossing two of them is dropped: thousands
+of tiny segments no longer cost one padded window each. Windows are batched
+together (sorted by length to limit padding).
 """
 
 from __future__ import annotations
@@ -45,9 +48,18 @@ class GlinerSpan:
 
 @dataclass(frozen=True, slots=True)
 class _Window:
-    text_index: int
+    text_index: int  # -1 for a window of packed texts
     first_word: int  # index of the first word of the window in the text
-    word_count: int
+    word_count: int  # words of the window (separators of packed texts included)
+    #: Packed short texts: (text index, word count) of each, in order.
+    packed: tuple[tuple[int, int], ...] = ()
+
+
+#: Word put between two packed texts.
+PACK_SEPARATOR = "."
+#: Texts of at most this many words are packed (keys, cells, single values): a
+#: sentence keeps a window of its own, the model reads it out of any other context.
+PACK_MAX_WORDS = 4
 
 
 def split_words(text: str) -> list[tuple[int, int]]:
@@ -168,8 +180,64 @@ class GlinerOnnx:
             windows.append(_Window(text_index, start, end - start))
             if end >= n:
                 break
-            start = max(start + 1, end - self.window_overlap)
+            # At most half the window overlaps the next one: a short window (long
+            # prompt, long words) would otherwise advance one word at a time.
+            overlap = min(self.window_overlap, (end - start) // 2)
+            start = max(start + 1, end - overlap)
         return windows
+
+    def _pack(
+        self, pieces_by_text: list[list[list[int]]], budget: int, separator: int
+    ) -> list[_Window]:
+        """Windows of every text: texts cut by :meth:`_windows`, tiny ones packed in
+        order, as many as the budget and ``max_words`` allow."""
+        windows: list[_Window] = []
+        group: list[tuple[int, int]] = []
+        used = words = 0
+
+        def flush() -> None:
+            if len(group) == 1:
+                windows.append(_Window(group[0][0], 0, group[0][1]))
+            elif group:
+                windows.append(_Window(-1, 0, words, tuple(group)))
+            group.clear()
+
+        for i, pieces in enumerate(pieces_by_text):
+            if len(pieces) > PACK_MAX_WORDS or not pieces:
+                windows.extend(self._windows(i, pieces, budget))
+                continue
+            tokens = sum(len(p) for p in pieces)
+            extra_tokens = tokens + (separator if group else 0)
+            extra_words = len(pieces) + (1 if group else 0)
+            if group and (used + extra_tokens > budget or words + extra_words > self.max_words):
+                flush()
+                used = words = 0
+                extra_tokens, extra_words = tokens, len(pieces)
+            group.append((i, len(pieces)))
+            used += extra_tokens
+            words += extra_words
+        flush()
+        return windows
+
+    @staticmethod
+    def _layout(
+        window: _Window, pieces_by_text: list[list[list[int]]], separator: list[int]
+    ) -> tuple[list[list[int]], list[tuple[int, int] | None]]:
+        """Sub-tokens of each word of ``window`` and, per word, (text, word index), or
+        None for a separator between packed texts."""
+        if not window.packed:
+            first, count = window.first_word, window.word_count
+            pieces = pieces_by_text[window.text_index][first : first + count]
+            return pieces, [(window.text_index, first + j) for j in range(count)]
+        out: list[list[int]] = []
+        words_of: list[tuple[int, int] | None] = []
+        for k, (text_index, count) in enumerate(window.packed):
+            if k:
+                out.append(separator)
+                words_of.append(None)
+            out.extend(pieces_by_text[text_index])
+            words_of.extend((text_index, j) for j in range(count))
+        return out, words_of
 
     # -- inference -----------------------------------------------------------
 
@@ -197,33 +265,28 @@ class GlinerOnnx:
                 self._word_pieces([t[s:e] for s, e in spans])
                 for t, spans in zip(texts, words_by_text, strict=True)
             ]
-            windows: list[_Window] = []
-            for i, pieces in enumerate(pieces_by_text):
-                windows.extend(self._windows(i, pieces, budget))
-
-            def window_tokens(w: _Window) -> int:
-                pieces = pieces_by_text[w.text_index]
-                return sum(len(p) for p in pieces[w.first_word : w.first_word + w.word_count])
-
-            windows.sort(key=window_tokens)
+            separator = self._word_pieces([PACK_SEPARATOR])[0]
+            windows = self._pack(pieces_by_text, budget, len(separator))
+            layouts = [self._layout(w, pieces_by_text, separator) for w in windows]
+            layouts.sort(key=lambda layout: sum(len(p) for p in layout[0]))
             raw: list[list[tuple[int, int, int, float]]] = [[] for _ in texts]
-            for b in range(0, len(windows), self.batch_size):
-                batch = windows[b : b + self.batch_size]
-                logits = self._run(batch, pieces_by_text, prompt, suffix, len(label_tuple))
+            for b in range(0, len(layouts), self.batch_size):
+                batch = layouts[b : b + self.batch_size]
+                logits = self._run(
+                    [pieces for pieces, _ in batch], prompt, suffix, len(label_tuple)
+                )
                 probs = _sigmoid(logits)
-                for k, w in enumerate(batch):
-                    hits = np.argwhere(probs[k, : w.word_count] > threshold)
+                for k, (_, words_of) in enumerate(batch):
+                    hits = np.argwhere(probs[k, : len(words_of)] > threshold)
                     for i, width, c in hits:
                         end_word = int(i) + int(width)
-                        if end_word >= w.word_count:
+                        if end_word >= len(words_of):
                             continue
-                        raw[w.text_index].append(
-                            (
-                                w.first_word + int(i),
-                                w.first_word + end_word,
-                                int(c),
-                                float(probs[k, i, width, c]),
-                            )
+                        first, last = words_of[int(i)], words_of[end_word]
+                        if first is None or last is None or first[0] != last[0]:
+                            continue  # a separator, or two packed texts
+                        raw[first[0]].append(
+                            (first[1], last[1], int(c), float(probs[k, i, width, c]))
                         )
         for t, spans in enumerate(raw):
             words = words_by_text[t]
@@ -247,18 +310,17 @@ class GlinerOnnx:
 
     def _run(
         self,
-        batch: list[_Window],
-        pieces_by_text: list[list[list[int]]],
+        batch: list[list[list[int]]],
         prompt: list[int],
         suffix: list[int],
         num_labels: int,
     ) -> np.ndarray[Any, Any]:
+        """Logits of a batch of windows, each given as the sub-tokens of its words."""
         sequences: list[list[int]] = []
         masks: list[list[int]] = []
-        for w in batch:
+        for pieces in batch:
             ids = list(prompt)
             mask = [0] * len(prompt)
-            pieces = pieces_by_text[w.text_index][w.first_word : w.first_word + w.word_count]
             for word_index, piece in enumerate(pieces, start=1):
                 ids.extend(piece)
                 mask.append(word_index)
@@ -268,7 +330,7 @@ class GlinerOnnx:
             sequences.append(ids)
             masks.append(mask)
         seq_len = max(len(s) for s in sequences)
-        max_words = max(w.word_count for w in batch)
+        max_words = max(len(pieces) for pieces in batch)
         bsz = len(batch)
         input_ids = np.full((bsz, seq_len), self.pad_id, dtype=np.int64)
         attention = np.zeros((bsz, seq_len), dtype=np.int64)
@@ -277,14 +339,14 @@ class GlinerOnnx:
             input_ids[k, : len(ids)] = ids
             attention[k, : len(ids)] = 1
             words_mask[k, : len(mask)] = mask
-        text_lengths = np.array([[w.word_count] for w in batch], dtype=np.int64)
+        text_lengths = np.array([[len(pieces)] for pieces in batch], dtype=np.int64)
         starts = np.repeat(np.arange(max_words, dtype=np.int64), self.max_width)
         widths = np.tile(np.arange(self.max_width, dtype=np.int64), max_words)
         ends = starts + widths
         span_idx = np.zeros((bsz, max_words * self.max_width, 2), dtype=np.int64)
         span_mask = np.zeros((bsz, max_words * self.max_width), dtype=bool)
-        for k, w in enumerate(batch):
-            valid = ends < w.word_count
+        for k, pieces in enumerate(batch):
+            valid = ends < len(pieces)
             span_mask[k] = valid
             span_idx[k, :, 0] = np.where(valid, starts, 0)
             span_idx[k, :, 1] = np.where(valid, ends, 0)
