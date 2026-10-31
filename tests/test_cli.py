@@ -22,6 +22,8 @@ SECRET = "phrase secrète de test"
 
 
 def invoke(*args: str | Path, env: dict[str, str] | None = None, input: str | None = None) -> Any:
+    # Wide help and error panels (Typer's own consoles read COLUMNS).
+    env = {"COLUMNS": "250", **(env or {})}
     result = runner.invoke(cli.app, [str(a) for a in args], env=env, input=input)
     if result.exception and not isinstance(result.exception, SystemExit):
         raise result.exception
@@ -128,7 +130,8 @@ def test_materiel() -> None:
     result = invoke("materiel")
     assert result.exit_code == 0
     assert "Mémoire vive" in result.output
-    assert "Profil recommandé" in result.output
+    assert "Profil conseillé" in result.output
+    assert "recommandé" not in result.output
 
 
 # -- run ------------------------------------------------------------------------------
@@ -148,11 +151,16 @@ def test_run_anonymizes(
         assert leak not in text
         assert leak not in report.read_text(encoding="utf-8")
         assert leak not in result.output
-    assert "Anonymisé" in result.output
+    lines = result.output.splitlines()
+    assert lines[0] == "2 fichiers anonymisés et vérifiés."
+    assert "Personne" in result.output and "Occurrences" in result.output
+    assert f"Rapport : {report.resolve()}" in lines
+    assert f"Dossier de sortie : {out.resolve()}" in lines
     if report_name.endswith(".json"):
         data = json.loads(report.read_text(encoding="utf-8"))
         assert data["entites_par_type"] == {"PERSONNE": 3, "EMAIL": 1}
-        assert data["parametres"]["Mode"] == "balises"
+        assert data["parametres"]["Mode"] == "Balises"
+        assert data["verdict"] == "anonymise"
     if report_name.endswith(".html"):
         assert report.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
 
@@ -161,7 +169,7 @@ def test_run_unsupported_exits_1(tmp_path: Path, corpus: Path, business_list: Pa
     (corpus / "binaire.xyz").write_bytes(b"\x00\x01\x02")
     result = invoke(*_run_args(corpus, tmp_path / "sortie", business_list))
     assert result.exit_code == 1
-    assert "Non pris en charge" in result.output
+    assert result.output.splitlines()[0] == "2 anonymisés · 1 non pris en charge"
 
 
 def test_run_usage_errors(tmp_path: Path, corpus: Path, business_list: Path) -> None:
@@ -237,8 +245,11 @@ def test_missing_models_are_announced(
 def test_analyser_table(corpus: Path, business_list: Path) -> None:
     result = invoke("analyser", corpus, "-p", "leger", "--liste-metier", business_list, "-q")
     assert result.exit_code == 0
-    assert "PERSONNE" in result.output
-    assert "Mentions" in result.output
+    assert "PERSONNE" in result.output and "Personne" in result.output
+    assert "Entités" in result.output and "Occurrences" in result.output
+    # No raw internal status (« Statuts : Extrait : 2 »).
+    assert "Extrait" not in result.output and "Statuts" not in result.output
+    assert "profil Léger" in result.output
 
 
 # -- pseudonymization / reidentifier --------------------------------------------------
@@ -519,6 +530,203 @@ def test_unexpected_error_shows_its_type_only(
     assert "Quintavalle" not in captured.err + captured.out
 
 
+# -- help layout, errors, output encoding (agents and scripts) --------------------------
+
+
+def _option_names(command: str) -> list[str]:
+    import typer.main
+
+    group = typer.main.get_command(cli.app)
+    click_command = group.commands[command]  # type: ignore[attr-defined]
+    names = [name for p in click_command.params for name in (*p.opts, *p.secondary_opts)]
+    return [name for name in names if name.startswith("-")]
+
+
+@pytest.mark.parametrize("width", [80, 100, 120])
+@pytest.mark.parametrize("command", ["run", "analyser"])
+def test_help_never_truncates_option_names(command: str, width: int) -> None:
+    result = invoke(command, "--help", env={"COLUMNS": str(width)})
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    assert all(len(line) <= width for line in lines)
+    assert "…" not in result.output
+    words = set(result.output.replace("│", " ").split())
+    for name in _option_names(command):
+        assert name in words, name
+    assert "x>=0" not in result.output
+    assert "<auto|" not in result.output  # short metavars, choices in the help text
+
+
+def test_run_help_groups_and_lists_choices() -> None:
+    output = invoke("run", "--help").output
+    for panel in ("Sortie", "Détection", "Remplacement", "Images et PDF", "Organisations"):
+        assert f"─ {panel} ─" in output
+    assert "─ Divers ─" in output and "─ Options ─" not in output
+    for choice in ("leger", "standard", "complet", "balises", "realiste", "masquage"):
+        assert choice in output
+    assert "Utilisation : root run [OPTIONS] CHEMINS..." in output  # no « {CHEMINS...} »
+
+
+def test_commands_help_uses_infinitives() -> None:
+    output = invoke("--help").output
+    for verb in ("Anonymiser", "Analyser", "Afficher", "Lister", "retrouver"):
+        assert verb in output
+    assert "COMMANDE [ARGUMENTS]..." in output
+    assert "recommandé" not in output
+    models = invoke("modeles", "--help").output
+    for verb in ("Lister", "Télécharger", "Installer", "Supprimer"):
+        assert verb in models
+
+
+def test_usage_errors_use_french_quotes() -> None:
+    result = invoke("run", "x", "-o", "y", "--mode", "bidon")
+    assert result.exit_code == 2
+    assert "« --mode » / « -m »" in result.output and "« bidon »" in result.output
+    result = invoke("run", "x")
+    assert "Option obligatoire manquante : « --sortie » / « -o »." in result.output
+    result = invoke("run", "x", "-o", "y", "-j", "-2")
+    assert result.exit_code == 2
+    assert "indiquez 0 (automatique) ou un nombre positif" in result.output
+    assert cli.translate_usage_error("Option '-o' requires an argument.") == (
+        "L'option « -o » attend une valeur."
+    )
+    assert cli.translate_usage_error("Got unexpected extra argument(s) (a b)") == (
+        "Arguments inattendus : a b"
+    )
+
+
+def test_force_utf8(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+
+    buffer = io.BytesIO()
+    stdout = io.TextIOWrapper(buffer, encoding="cp1252")
+    monkeypatch.setattr("sys.stdout", stdout)
+    cli.force_utf8()
+    assert stdout.encoding == "utf-8"
+    stdout.write("Écriture → vérifiée")
+    stdout.flush()
+    assert buffer.getvalue().decode("utf-8") == "Écriture → vérifiée"
+
+
+def test_anonymiser_is_an_alias_of_run(tmp_path: Path, corpus: Path, business_list: Path) -> None:
+    args = _run_args(corpus, tmp_path / "sortie", business_list)
+    result = invoke("anonymiser", *args[1:])
+    assert result.exit_code == 0, result.output
+    assert "[PERSONNE_001]" in _all_text(tmp_path / "sortie")
+
+
+# -- run: output folder, quarantine, --json -------------------------------------------
+
+
+def test_invalid_output_fails_before_the_analysis(
+    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma.pipeline import Pipeline
+
+    def no_analysis(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("the analysis must not start")
+
+    monkeypatch.setattr(Pipeline, "analyze", no_analysis)
+    result = invoke(*_run_args(corpus, corpus / "sortie", business_list))
+    assert result.exit_code == 2
+    assert "distinct" in result.output
+    existing = tmp_path / "fichier.txt"
+    existing.write_text("x", encoding="utf-8")
+    result = invoke(*_run_args(corpus, existing, business_list))
+    assert result.exit_code == 2
+    assert "fichier existant" in result.output
+
+
+def _quarantined_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the pipeline report one clean file and one file in quarantine."""
+    from datetime import datetime
+
+    from anonyma.models import DocumentResult, VerificationResult
+    from anonyma.pipeline import BatchResult, Pipeline, quarantine_dir
+
+    def fake_run(self: Pipeline, inputs: Any, output_dir: Path, **kwargs: Any) -> BatchResult:
+        output_dir = Path(output_dir).resolve()
+        quarantine = quarantine_dir(output_dir)
+        return BatchResult(
+            "lot-test",
+            output_dir,
+            [
+                DocumentResult(
+                    "d1",
+                    "entree/lettre.txt",
+                    "txt",
+                    "txt",
+                    cli.DocumentStatus.ANONYMIZED,
+                    output_path=output_dir / "entree" / "lettre.txt",
+                    entity_counts={"PERSONNE": 2},
+                ),
+                DocumentResult(
+                    "d2",
+                    "entree/[PERSONNE_001].md",
+                    "md",
+                    "md",
+                    cli.DocumentStatus.RESIDUE,
+                    output_path=quarantine / "entree" / "[PERSONNE_001].md",
+                    entity_counts={"PERSONNE": 1},
+                    residue_count=1,
+                    verification=VerificationResult(verified=True),
+                ),
+            ],
+            started_at=datetime(2026, 1, 1, 10, 0, 0),
+        )
+
+    monkeypatch.setattr(Pipeline, "run", fake_run)
+
+
+def test_run_prints_the_quarantine_path(
+    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma.pipeline import quarantine_dir
+
+    _quarantined_run(monkeypatch)
+    out = tmp_path / "sortie"
+    result = invoke(*_run_args(corpus, out, business_list))
+    assert result.exit_code == 1
+    lines = result.output.splitlines()
+    assert lines[0] == "1 anonymisé · 1 en quarantaine (ne pas diffuser)"
+    assert f"Quarantaine (ne pas diffuser) : {quarantine_dir(out.resolve())}" in lines
+
+
+def test_run_json_summary(
+    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "sortie"
+    report = tmp_path / "rapport.md"
+    result = invoke(*_run_args(corpus, out, business_list, "--json", "--rapport", report))
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)  # stdout holds the JSON only
+    assert data["verdict"] == "anonymise" and data["code_sortie"] == 0
+    assert data["fichiers"] == 2 and data["statuts"] == {"anonymise": 2}
+    assert data["occurrences_par_type"] == {"EMAIL": 1, "PERSONNE": 3}
+    assert data["dossier_sortie"] == str(out.resolve())
+    assert data["dossier_quarantaine"] is None
+    assert data["rapport"] == str(report.resolve())
+    assert data["parametres"] == {"profil": "leger", "mode": "balises", "regime": "anonymisation"}
+    assert {d["statut"] for d in data["documents"]} == {"anonymise"}
+    assert "uintavalle" not in result.stdout
+    assert "fichiers anonymisés et vérifiés" in result.output  # human summary on stderr
+
+    _quarantined_run(monkeypatch)
+    result = invoke(*_run_args(corpus, tmp_path / "s2", business_list, "--json"))
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)
+    assert data["verdict"] == "quarantaine" and data["code_sortie"] == 1
+    assert data["quarantaine"] == 1
+    assert data["dossier_quarantaine"] == str((tmp_path / "s2_quarantaine").resolve())
+    assert [d["quarantaine"] for d in data["documents"]] == [False, True]
+
+
+def test_run_json_usage_error_leaves_stdout_empty(tmp_path: Path) -> None:
+    result = invoke("run", tmp_path / "absent", "-o", tmp_path / "o", "--json")
+    assert result.exit_code == 2
+    assert result.stdout == ""
+
+
 def _env_spy(seen: list[str | None], method: Any) -> Any:
     def spy(self: Any, *args: Any, **kwargs: Any) -> Any:
         # Worker processes and LibreOffice inherit this environment.
@@ -545,16 +753,3 @@ def test_passphrase_never_reaches_child_processes(
     result = invoke("analyser", corpus, "-p", "leger", "-q", env={cli.PASSPHRASE_ENV: SECRET})
     assert result.exit_code == 0, result.output
     assert seen == [None, None]
-
-
-def test_force_utf8(monkeypatch: pytest.MonkeyPatch) -> None:
-    import io
-
-    buffer = io.BytesIO()
-    stdout = io.TextIOWrapper(buffer, encoding="cp1252")
-    monkeypatch.setattr("sys.stdout", stdout)
-    cli.force_utf8()
-    assert stdout.encoding == "utf-8"
-    stdout.write("Écriture → vérifiée")
-    stdout.flush()
-    assert buffer.getvalue().decode("utf-8") == "Écriture → vérifiée"
