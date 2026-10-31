@@ -81,7 +81,11 @@ class LegacyOfficeWriter(Writer):
         intermediate = ctx.temp_path(f".{modern}")
         issues = _ooxml.write(document, plan, intermediate, ctx, FLAVORS[document.format]())
         converted = libreoffice.convert(
-            intermediate, TO_LEGACY[document.format], ctx.temp_path("-lo"), soffice
+            intermediate,
+            TO_LEGACY[document.format],
+            ctx.temp_path("-lo"),
+            soffice,
+            timeout=ctx.config.libreoffice_timeout,
         )
         shutil.move(str(converted), destination)
         return issues

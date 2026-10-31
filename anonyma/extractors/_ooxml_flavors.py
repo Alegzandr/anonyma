@@ -431,7 +431,7 @@ class XlsxFlavor(Flavor):
                     continue
                 if local == "f":
                     units.append(Unit("text", text, child, slot="text", payload=("f", ref)))
-                elif cell_type == "str":
+                elif cell_type in ("str", "d"):
                     units.append(Unit("text", text, child, slot="text", payload=("v", ref)))
                 elif cell_type == "n" and len(_DIGITS.findall(text)) >= MIN_NUMBER_DIGITS:
                     units.append(Unit("cellnum", text, c, payload=("n", ref, child)))

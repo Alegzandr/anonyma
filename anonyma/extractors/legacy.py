@@ -67,7 +67,9 @@ class LegacyOfficeExtractor(Extractor):
             _modern, target = TO_MODERN[document.format]
             work = ctx.temp_path("-lo")
             try:
-                converted = libreoffice.convert(source, target, work, soffice)
+                converted = libreoffice.convert(
+                    source, target, work, soffice, timeout=ctx.config.libreoffice_timeout
+                )
             except libreoffice.ConversionError:
                 document.add_issue(
                     Severity.ERROR,
