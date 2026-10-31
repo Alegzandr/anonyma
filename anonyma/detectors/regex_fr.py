@@ -63,8 +63,12 @@ _ANGLE = regex.compile(r"<[^<>\s]+>")
 def _context_regex(words: Sequence[str]) -> regex.Pattern[str] | None:
     if not words:
         return None
+    """Whole-word alternation; a trailing ``*`` marks a stem (``immatricul*``)."""
     alternatives = sorted({normalize(w) for w in words}, key=len, reverse=True)
-    body = "|".join(regex.escape(w) for w in alternatives)
+    body = "|".join(
+        regex.escape(w[:-1]) + r"[a-z]*" if w.endswith("*") else regex.escape(w)
+        for w in alternatives
+    )
     return regex.compile(rf"(?<![a-z0-9])(?:{body})(?![a-z0-9])")
 
 
@@ -310,7 +314,10 @@ class RegexDetector(Detector):
             if entity_type != EntityType.DATE:
                 out.append(item)
                 continue
-            window = normalize(text[max(0, start - 40) : start])
+            window = text[max(0, start - 40) : start]
+            for boundary in (". ", "\n", ";", "!", "?"):
+                window = window.rsplit(boundary, 1)[-1]
+            window = normalize(window)
             if dob_label or (self.dob_context is not None and self.dob_context.search(window)):
                 out.append((EntityType.DATE_OF_BIRTH, start, end, 0.95, attrs))
             elif self.detect_dates:

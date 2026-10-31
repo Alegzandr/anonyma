@@ -72,7 +72,11 @@ class SubstitutionTable:
             return BLACKOUT_CHAR * max(len(entity.value), 1)
         assert entity.cluster_id is not None
         variant = self.by_variant.get((entity.cluster_id, normalize(entity.value)))
-        return variant if variant is not None else self.by_cluster[entity.cluster_id]
+        substitute = variant if variant is not None else self.by_cluster[entity.cluster_id]
+        if self.mode is ReplacementMode.REALISTIC:
+            # Case variants share one normalized key: adapt to this mention.
+            substitute = fk.match_case(entity.value, substitute)
+        return substitute
 
     def all_substitutes(self) -> set[str]:
         return set(self.by_cluster.values()) | set(self.by_variant.values())

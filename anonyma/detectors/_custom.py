@@ -350,6 +350,26 @@ class PersonRecognizer(CustomRecognizer):
     def _glued(text: str, left: _Token, right: _Token) -> bool:
         return bool(_GAP.match(text[left.end : right.start]))
 
+    def _particles(self, text: str, tokens: list[_Token], j: int) -> int | None:
+        """Index after the particle run starting at ``j`` if a name word follows."""
+        k = j
+        while (
+            k < len(tokens)
+            and tokens[k].key in PARTICLES
+            and not tokens[k].is_upper
+            and (k == j or self._glued(text, tokens[k - 1], tokens[k]))
+        ):
+            k += 1
+        if (
+            k < len(tokens)
+            and k > j
+            and self._glued(text, tokens[k - 1], tokens[k])
+            and tokens[k].key not in PARTICLES
+            and _surname_token(tokens[k])
+        ):
+            return k
+        return None
+
     def _civility(self, text: str, tokens: list[_Token]) -> list[Any]:
         out: list[Any] = []
         starts = {t.start: i for i, t in enumerate(tokens)}
@@ -369,12 +389,13 @@ class PersonRecognizer(CustomRecognizer):
                 if taken and not self._glued(text, taken[-1], tok):
                     break
                 if tok.key in PARTICLES and not tok.is_upper:
-                    # particle inside a name: needs a following name word
-                    if j + 1 < len(tokens) and _surname_token(tokens[j + 1]):
-                        taken.append(tok)
-                        j += 1
-                        continue
-                    break
+                    # particles inside a name ("de La"): need a following name word
+                    after = self._particles(text, tokens, j)
+                    if after is None:
+                        break
+                    taken.extend(tokens[j:after])
+                    j = after
+                    continue
                 if tok.is_initial:
                     taken.append(tok)
                     j += 1
@@ -444,14 +465,15 @@ class PersonRecognizer(CustomRecognizer):
                 j += 1
             k = j
             surname: list[_Token] = []
-            while k + 1 < n and len(surname) < 3 and self._glued(text, tokens[k], tokens[k + 1]):
+            while k + 1 < n and len(surname) < 5 and self._glued(text, tokens[k], tokens[k + 1]):
                 nxt = tokens[k + 1]
                 if nxt.key in PARTICLES and not nxt.is_upper:
-                    if k + 2 < n and _surname_token(tokens[k + 2]):
-                        surname.append(nxt)
-                        k += 1
-                        continue
-                    break
+                    after = self._particles(text, tokens, k + 1)
+                    if after is None:
+                        break
+                    surname.extend(tokens[k + 1 : after])
+                    k = after - 1
+                    continue
                 if not _surname_token(nxt):
                     break
                 if tok.is_upper and not nxt.is_upper:
@@ -485,8 +507,12 @@ _CITY = (
 )
 _CP = r"(?:0[1-9]|[1-8]\d|9[0-8]|2[AB])" + SP + r"?\d{3}"
 _STREET_NAME_WORD = (
-    rf"(?:[{UPPER}0-9][\w'’\-\.]*|(?i:de|du|des|la|le|les|l'|d'|aux|au|à|sur|sous|en|et|"
-    r"saint|sainte|st|ste|grande?|petite?|vieille|vieux|haute?|basse?|neuve?|nouvelle))"
+    rf"(?:[{UPPER}0-9][\w'’\-\.]*|(?:(?i:l'|d')(?=\w))|(?i:de|du|des|la|le|les|aux|au|à|sur|sous|"
+    r"en|et|saint|sainte|st|ste|grande?|petite?|vieille|vieux|haute?|basse?|neuve?|nouvelle|"
+    r"g[ée]n[ée]ral|mar[ée]chal|pr[ée]sident|docteur|abb[ée]|colonel|capitaine|commandant|"
+    r"lieutenant|professeur|notre-dame|fr[èe]res|martyrs|r[ée]sistance|lib[ée]ration|paix|"
+    r"gare|[ée]glise|mairie|poste|march[ée]|moulin|ch[âa]teau|pont|bois|lac|port|fontaine|"
+    r"croix|puits|four|ville|plaine|vigne|vignes|prairie|forge|halle|halles)(?![\w'’\-]))"
 )
 _ADDRESS_STRICT = regex.compile(
     rf"(?<![\w,])(?P<num>{_NUM}){SP}*,?{SP}+(?i:{STREET_TYPES})\.?{SP}+"
@@ -497,8 +523,8 @@ _ADDRESS_STRICT = regex.compile(
 )
 _ADDRESS_LOOSE = regex.compile(
     rf"(?<![\w,])(?P<num>{_NUM}){SP}*,?{SP}+(?i:{STREET_TYPES})\.?{SP}+"
-    rf"(?P<name>[^\n,;]{{2,60}}?)"
-    rf"(?={SP}*(?:,|;|\r?\n|$|(?<=\w{{3}})\.(?:\s|$)|{SP}+{_CP}(?!\d)))",
+    rf"(?P<name>[^\s,;]+(?:{SP}+[^\s,;]+){{0,5}}?)"
+    rf"(?={SP}*(?:,|;|\r?\n|\Z|(?<=\w{{3}})\.(?:\s|\Z)|{SP}+{_CP}(?!\d)))",
     regex.MULTILINE,
 )
 _STREET_NO_NUMBER = regex.compile(
@@ -554,10 +580,17 @@ class AddressRecognizer(CustomRecognizer):
 
     def analyze(self, text: str, entities: list[str], nlp_artifacts: Any = None) -> list[Any]:
         out: list[Any] = []
+        strict: dict[int, int] = {}
         for m in _ADDRESS_STRICT.finditer(text, timeout=2):
             score = 0.95 if m.group("tail") else 0.85
+            strict[m.start()] = m.end()
             out.append(_result(EntityType.ADDRESS, m.start(), m.end(), score))
         for m in _ADDRESS_LOOSE.finditer(text, timeout=2):
+            end = strict.get(m.start())
+            if end is not None and end < m.end():
+                extra = text[end : m.end()].split()
+                if all(w.islower() and is_common_word(w) for w in extra):
+                    continue  # the loose form only adds ordinary words of the sentence
             out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.8))
         for m in _STREET_NO_NUMBER.finditer(text, timeout=2):
             out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.55))

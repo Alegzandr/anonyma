@@ -410,7 +410,7 @@ RULES: tuple[Rule, ...] = (
             "r.c.s",
             "societe",
             "entreprise",
-            "immatricul",
+            "immatricul*",
             "sas",
             "sarl",
             "registre du commerce",
@@ -453,7 +453,7 @@ RULES: tuple[Rule, ...] = (
         EntityType.LICENSE_PLATE,
         r"(?<![A-Za-z0-9\-])[A-HJ-NP-TV-Z]{2}-\d{3}-[A-HJ-NP-TV-Z]{2}(?![A-Za-z0-9\-])",
         0.85,
-        context=("immatricul", "plaque", "vehicule", "voiture", "carte grise", "auto", "moto"),
+        context=("immatricul*", "plaque", "vehicule", "voiture", "carte grise", "auto", "moto"),
     ),
     Rule(
         "plaque_siv_compacte",
@@ -464,7 +464,7 @@ RULES: tuple[Rule, ...] = (
         + SP
         + r"?[A-HJ-NP-TV-Z]{2}(?![A-Za-z0-9\-])",
         0.5,
-        context=("immatricul", "plaque", "vehicule", "voiture", "carte grise", "auto", "moto"),
+        context=("immatricul*", "plaque", "vehicule", "voiture", "carte grise", "auto", "moto"),
     ),
     Rule(
         "plaque_fni",
@@ -472,7 +472,7 @@ RULES: tuple[Rule, ...] = (
         r"(?<![A-Za-z0-9])\d{1,4}[ \-]?[A-Z]{1,3}[ \-]?(?:0[1-9]|[1-8]\d|9[0-5]|2A|2B|97[1-6])"
         r"(?![A-Za-z0-9])",
         0.3,
-        context=("immatricul", "plaque", "vehicule", "voiture", "carte grise"),
+        context=("immatricul*", "plaque", "vehicule", "voiture", "carte grise"),
         context_score=0.85,
         needs_context=True,
     ),

@@ -19,6 +19,7 @@ from anonyma.config import Config
 from anonyma.data import first_name, lexicon
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment
 from anonyma.registry import register_detector
+from anonyma.textsearch import MultiMatcher
 from anonyma.textutils import normalize
 
 _WORD = regex.compile(r"\p{L}+(?:['’\-]\p{L}+)*")
@@ -97,6 +98,11 @@ class ParanoidDetector(Detector):
         super().__init__(config)
         self.active = config.paranoid
         self.lexicon = lexicon() if self.active else frozenset()
+        # Whitelisted phrases protect every word they contain ("Plougastel Industries").
+        self.allowed: MultiMatcher[str] = MultiMatcher()
+        for value in config.whitelist:
+            if value.strip():
+                self.allowed.add(value, value)
 
     def _proper(self, word: str, text: str, start: int) -> bool:
         letters = [c for c in word if c.isalpha()]
@@ -152,7 +158,10 @@ class ParanoidDetector(Detector):
                     )
             for m in _DIGIT_RUN.finditer(text):
                 spans.append((m.start(), m.end(), EntityType.SUSPICIOUS_TOKEN, SCORE_SUSPICIOUS))
+            safe = [(m.start, m.end) for m in self.allowed.find(text)] if len(self.allowed) else []
             for start, end, entity_type, score in spans:
+                if any(s <= start and end <= e for s, e in safe):
+                    continue
                 found.append(
                     Entity(
                         entity_type=entity_type,

@@ -206,16 +206,24 @@ class _PersonIndex:
     by_surname: dict[str, set[str]] = field(default_factory=dict)
     by_given: dict[str, set[str]] = field(default_factory=dict)
     initials: dict[str, set[str]] = field(default_factory=dict)  # cluster -> initials
+    logins: dict[str, set[str]] = field(default_factory=dict)  # "jdupont" -> clusters
 
     def add(self, cluster_id: str, person: PersonName) -> None:
         if not person.is_full:
             return
+        for form in login_forms(person).values():
+            self.logins.setdefault(form, set()).add(cluster_id)
         self.full.setdefault(f"{person.given_key}|{person.surname_key}", cluster_id)
         self.by_surname.setdefault(person.surname_key, set()).add(cluster_id)
         self.by_given.setdefault(person.given_key, set()).add(cluster_id)
         self.initials.setdefault(cluster_id, set()).add(person.initials)
 
-    def link(self, person: PersonName) -> str | None:
+    def link(self, person: PersonName, value: str = "") -> str | None:
+        compact = value.strip()
+        if compact and " " not in compact:
+            owners = self.logins.get(compact.casefold(), set())
+            if len(owners) == 1:
+                return next(iter(owners))
         if person.is_full:
             swapped = self.full.get(f"{person.surname_key}|{person.given_key}")
             return self.full.get(f"{person.given_key}|{person.surname_key}") or swapped
@@ -330,7 +338,7 @@ def resolve(
             cluster = exact.get(ckey)
             person = person_of(entity)
             if cluster is None and person is not None:
-                linked = people.link(person)
+                linked = people.link(person, entity.value)
                 cluster = clusters.get(linked) if linked else None
             if cluster is None:
                 cid = _cluster_id(ckey)

@@ -19,6 +19,7 @@ words (``Petit``, ``Rose``) only count when capitalized.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Sequence
 
 from anonyma import checksums
@@ -37,8 +38,9 @@ from anonyma.models import (
     VerificationResult,
 )
 from anonyma.names import PARTICLES, civility_of
+from anonyma.replacer import BLACKOUT_CHAR
 from anonyma.resolver import NAME_TYPES, cluster_forms
-from anonyma.textsearch import MultiMatcher
+from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import normalize, normalize_with_map
 
 ORIGINAL_VALUE = "original_value"
@@ -47,6 +49,8 @@ TABLE_DETECTOR = "table"
 TABLE_VARIANT_DETECTOR = "table_variante"
 MIN_VALUE_LENGTH = 3
 MIN_DIGITS = 4
+#: Blackout substitutes (any length) count as substitutes.
+_BLACKOUT = re.compile(re.escape(BLACKOUT_CHAR) + "+")
 
 
 def worth_checking(value: str) -> bool:
@@ -103,8 +107,9 @@ class Verifier:
             for segment in doc.segments:
                 prepared = normalize_with_map(segment.text)
                 spans = [(m.start, m.end) for m in subs.find(segment.text, prepared=prepared)]
+                spans += [(m.start(), m.end()) for m in _BLACKOUT.finditer(segment.text)]
                 covered[segment.id] = spans
-                for m in table.find(segment.text, prepared=prepared):
+                for m in leftmost_longest(table.find(segment.text, prepared=prepared)):
                     if _inside(m.start, m.end, spans):
                         continue
                     entity_type, source = m.payloads[0]

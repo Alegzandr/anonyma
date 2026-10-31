@@ -97,6 +97,37 @@ def mirror_case(original: str, fake: str) -> str:
     return fake
 
 
+_RUN = re.compile(r"[^\W\d_]+")
+
+
+def _case_like(original: str, word: str) -> str:
+    if original.isupper() and (len(original) > 1 or len(word) == 1):
+        return word.upper()
+    if original.islower():
+        return word.lower()
+    if original[:1].isupper() and original[1:].islower():
+        return word[:1].upper() + word[1:].lower()
+    return word
+
+
+def match_case(original: str, fake: str) -> str:
+    """Case of each letter run of ``original`` applied to the matching run of ``fake``
+    (``Claire FONTAINE`` + ``Paul Martin`` -> ``Paul MARTIN``); falls back to
+    :func:`mirror_case` when the runs do not line up."""
+    runs = _RUN.findall(original)
+    targets = list(_RUN.finditer(fake))
+    if not runs or len(runs) != len(targets):
+        return mirror_case(original, fake)
+    out: list[str] = []
+    pos = 0
+    for run, m in zip(runs, targets, strict=True):
+        out.append(fake[pos : m.start()])
+        out.append(_case_like(run, m.group()))
+        pos = m.end()
+    out.append(fake[pos:])
+    return "".join(out)
+
+
 def reshape(original: str, fake_chars: str) -> str:
     """Write ``fake_chars`` into the alphanumeric positions of ``original``."""
     out: list[str] = []
@@ -191,8 +222,7 @@ def login_like(template: str, original: str, fake: FakePerson) -> str:
     )
     if parts is None:
         return original
-    form = _LOGIN_TEMPLATES[template](*parts)
-    return mirror_case(original, form) if original.isupper() else form
+    return match_case(original, _LOGIN_TEMPLATES[template](*parts))
 
 
 def fake_initials(fake: FakePerson) -> str:
@@ -580,6 +610,7 @@ __all__ = [
     "fake_username",
     "fake_vat_fr",
     "login_like",
+    "match_case",
     "mirror_case",
     "random_like",
     "render_person",
