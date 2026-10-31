@@ -29,6 +29,11 @@ INCOMPLETE_INTRO = (
     "contenu n'a pas été vérifié. Les fichiers sont « À revoir » et placés en quarantaine "
     "(_quarantaine) : contrôlez-les visuellement avant toute diffusion."
 )
+RESIDUE_INTRO = (
+    "Résidu certain : le fichier est placé en quarantaine (_quarantaine) et ne doit pas "
+    "être diffusé. Résidu possible : signal statistique (souvent une balise mal relue par "
+    "l'OCR), le fichier est « À revoir » : vérifiez la zone indiquée avant diffusion."
+)
 REVIEW_INTRO = (
     "Entités détectées avec une faible confiance : elles sont masquées, mais peuvent être "
     "de fausses détections. Retrouvez-les dans le fichier produit grâce à leur remplacement."
@@ -150,11 +155,14 @@ class BatchReport:
                 "",
                 "## Résidus",
                 "",
-                "| Emplacement | Zone | Type | Origine |",
-                "|---|---|---|---|",
+                RESIDUE_INTRO,
+                "",
+                "| Emplacement | Zone | Type | Origine | Certitude |",
+                "|---|---|---|---|---|",
             ]
             lines += [
-                f"| {c(r['emplacement'])} | {c(r['zone'])} | {c(r['type'])} | {c(r['origine'])} |"
+                f"| {c(r['emplacement'])} | {c(r['zone'])} | {c(r['type'])} | {c(r['origine'])} "
+                f"| {c(r['certitude'])} |"
                 for r in self.residues
             ]
         if self.review:
@@ -182,6 +190,11 @@ class BatchReport:
         path.write_text(self.to_markdown(), encoding="utf-8")
 
     # -- HTML -----------------------------------------------------------------
+
+    @property
+    def quarantined(self) -> bool:
+        """At least one certain residue: some output was sent to quarantine."""
+        return any(r.get("certitude") == "certain" for r in self.residues)
 
     def to_html(self) -> str:
         """Self-contained HTML page: inline CSS, no script, no external resource."""
@@ -232,16 +245,15 @@ class BatchReport:
             rows = "".join(
                 f"<tr><td>{e(r['emplacement'])}</td><td>{e(r['zone'])}</td>"
                 f"<td>{e(r['type'])}</td><td>{e(r['origine'])}</td>"
-                f"<td>{e(r['detecteur'])}</td></tr>"
+                f"<td>{e(r['detecteur'])}</td><td>{e(r['certitude'])}</td></tr>"
                 for r in self.residues
             )
             parts.append(
                 _section(
                     "Résidus",
-                    ["Emplacement", "Zone", "Type", "Origine", "Détecteur"],
+                    ["Emplacement", "Zone", "Type", "Origine", "Détecteur", "Certitude"],
                     rows,
-                    intro="Ces fichiers ont été placés en quarantaine (<code>_quarantaine</code>) "
-                    "et ne doivent pas être diffusés.",
+                    intro=e(RESIDUE_INTRO),
                 )
             )
         if self.review:

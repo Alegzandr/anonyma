@@ -829,7 +829,7 @@ def _print_run_summary(report: Any, output_dir: Path, quarantine: str) -> None:
         problems = " ; ".join(failure["problemes"]) or failure["statut"]
         out.print(f"[red]•[/] {_markup_escape(failure['fichier'])} : {_markup_escape(problems)}")
     out.print(f"Dossier de sortie : {output_dir}")
-    if report.residues or (output_dir / quarantine).exists():
+    if report.quarantined or (output_dir / quarantine).exists():
         out.print(
             f"[yellow]Des fichiers ont été placés en quarantaine dans « {quarantine} » : "
             "ne les diffusez pas.[/]"

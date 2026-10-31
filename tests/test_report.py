@@ -75,6 +75,10 @@ def test_from_result_counts(tmp_path: Path) -> None:
     ]
     assert "[NIR_001]" in report.to_markdown() and "[NIR_001]" in report.to_html()
     assert report.to_dict()["a_revoir"] == report.review
+    assert report.quarantined  # the fixture's residue is certain
+    report.residues[0]["certitude"] = "possible"
+    assert not report.quarantined
+    assert "| possible |" in report.to_markdown()
 
 
 @pytest.mark.parametrize("suffix", [".json", ".md", ".html", ".htm", ".markdown"])
