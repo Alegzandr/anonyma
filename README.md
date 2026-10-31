@@ -84,7 +84,38 @@ En mode source, `data/` et `models/` sont créés à la racine du projet. La var
 
 ## Interface graphique
 
-_Section à compléter par le chantier de l'interface graphique._
+Lancez l'interface avec `uv run python -m anonyma.app` (ou l'exécutable portable). Tout se
+passe en local : aucune donnée ne quitte le poste.
+
+- **Traitement** : déposez des fichiers ou des dossiers, choisissez un dossier de sortie
+  distinct des originaux, puis cliquez sur « Anonymiser ». Le réglage **Relecture** décide
+  si ce bouton s'arrête pour une revue : *aucune* (écriture directe), *entités incertaines
+  seulement* (par défaut) ou *systématique*. « Analyser », « Revoir » et « Appliquer »
+  restent disponibles pour garder la main. En pseudonymisation, une phrase secrète protège
+  la table de correspondance chiffrée.
+- **Revue** (facultative) : une ligne par entité, par exemple « Bérénice Lagarde —
+  PERSONNE — 14 occurrences dans 6 fichiers », les plus incertaines d'abord, avec le motif
+  de détection. Une décision (valider, rejeter, changer le type) s'applique à toutes les
+  occurrences du lot. Dépliez une ligne pour voir chaque occurrence dans son contexte et y
+  accéder dans la vue côte à côte : texte (en-têtes de courriel regroupés), ou rendu
+  visuel des PDF et des images avec les zones encadrées. Un compteur « 12 / 40 décidées »,
+  le bouton « Suivante non décidée », la recherche et les actions groupées accélèrent la
+  relecture. Sélectionnez du texte pour ajouter une entité oubliée. Anonyma propose
+  ensuite d'ajouter un faux positif à la liste blanche, ou de toujours masquer un ajout
+  (modification annulable). Raccourcis : N / P naviguer, Maj+N suivante non décidée,
+  V valider, R rejeter, T type, A ajouter.
+- **Rapport** : bilan du lot, exportable en JSON, Markdown ou HTML. Les fichiers en
+  quarantaine (`_quarantaine`) sont expliqués et ne doivent pas être diffusés. Chaque
+  résidu s'ouvre à son emplacement dans le fichier produit, et « Corriger et réappliquer »
+  ramène à la revue puis remplace les fichiers produits précédemment.
+- **Modèles** et **Réglages** : matériel détecté, modèles installés (le téléchargement est
+  la seule action réseau, toujours à votre demande) et réglages enregistrés dans
+  `data/config.json`.
+
+Statuts d'un fichier : **Anonymisé** (vérifié, rien à signaler) ; **À revoir** (vérifié,
+mais des entités incertaines ont été masquées par précaution ou un détecteur statistique
+signale un résidu possible) ; **Résidus** (une valeur d'origine a été retrouvée : fichier
+en quarantaine) ; **Échec** ou **Non pris en charge** (rien n'est produit).
 
 ## Utilisation en ligne de commande
 
@@ -136,7 +167,26 @@ configuration invalide…). Les fichiers dont la vérification échoue sont plac
 
 ## Formats
 
-_Section à compléter : liste des formats pris en charge (voir `anonyma-cli formats`)._
+Principe : vous choisissez un fichier ou un dossier ; chaque fichier est lu, anonymisé
+puis restitué **dans son format d'origine**, avec la même arborescence et la même mise en
+forme. Les noms de fichiers et de dossiers sont anonymisés comme le contenu
+(`CV Jean Dupont.pdf` devient `CV [PERSONNE_001].pdf`). Les originaux ne sont jamais
+modifiés. `anonyma-cli formats` affiche la liste exacte disponible sur le poste.
+
+| Famille | Formats | Ce qui est traité |
+|---|---|---|
+| Bureautique | docx, xlsx, pptx (et variantes à macros ou modèles), odt, ods, odp, rtf | Texte (y compris les noms coupés par la mise en forme), tableaux, en-têtes et pieds de page, notes, commentaires (conservés, anonymisés, auteur « Anonyme »), révisions (acceptées), zones de texte, graphiques, noms de feuilles et formules, liens, textes alternatifs, images incorporées (OCR). Métadonnées, historique, miniatures et macros purgés. |
+| Anciens formats | doc, xls, ppt | Convertis par le LibreOffice embarqué, anonymisés, puis réécrits dans leur format d'origine. Sans LibreOffice (version allégée), les xls sont restitués en xlsx (valeurs seules) et les doc/ppt échouent explicitement. |
+| PDF | pdf texte et numérisé | Suppression réelle du texte (redaction, pas un simple cache), OCR des pages numérisées, formulaires, pièces jointes, signets, liens, métadonnées et XMP purgés. |
+| Courriels | eml, msg, mbox, pst | Tous les en-têtes (From, To, Cc, Bcc, Reply-To, Sender, Return-Path, Received, Message-ID, In-Reply-To, References…), noms d'affichage, corps texte et HTML (attributs `href`, `alt`, `title` compris), citations, signatures, images incorporées (OCR), pièces jointes et messages joints, récursivement. Les msg sont réécrits nativement en msg ; un pst est restitué sous forme de **dossier d'eml** reproduisant l'arborescence de la boîte. Signatures DKIM/ARC supprimées (elles deviendraient invalides). |
+| Données et texte | txt, log, md, csv, tsv, json, xml, html | Contenu, clés et nombres JSON, attributs et commentaires XML/HTML ; encodage, délimiteurs, indentation et balisage conservés à l'identique hors des valeurs remplacées. |
+| Images | png, jpg, tiff (multipage), bmp, heic, webp | OCR puis masquage opaque des zones, métadonnées EXIF/XMP/IPTC et GPS purgées. Sans moteur OCR, l'image est signalée en échec (son texte ne peut pas être vérifié). |
+| Archives | zip, 7z | Contenu traité récursivement sans limite arbitraire de profondeur, avec protection contre les bombes d'archives (taille, taux de compression, nombre de fichiers). Les entrées chiffrées sont signalées et omises. |
+
+Un élément qui ne peut pas être anonymisé (format inconnu, fichier chiffré, lecture
+impossible) n'est **jamais recopié tel quel** : il est absent de la sortie et signalé dans
+le rapport. Un fichier dans lequel la vérification retrouve une valeur d'origine est placé
+dans `_quarantaine/` du dossier de sortie.
 
 ## Profils et matériel
 
@@ -238,6 +288,34 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
   produits non anonymisés).
 - macOS : la copie de LibreOffice embarquée est l'application officielle signée de The
   Document Foundation ; ne modifiez pas son contenu, sa signature serait invalidée.
+
+## Choix techniques
+
+Choix faits là où le cahier des charges ne tranchait pas, en privilégiant la simplicité et
+la sûreté :
+
+- **Rappel avant précision** : une seule détection suffit à masquer ; les entités sous le
+  seuil de confiance sont masquées *et* envoyées en revue, jamais laissées visibles.
+- **Vérification à deux niveaux** : une valeur d'origine retrouvée, ou un détecteur
+  déterministe sûr, met le fichier en quarantaine ; un signalement d'un détecteur
+  statistique seul (GLiNER, LLM) le marque « À revoir », car ces modèles réagissent au
+  nouveau contexte créé par les balises.
+- **Liste blanche stricte** : rien n'est masqué à l'intérieur d'une valeur de la liste
+  blanche (un e-mail conservé reste intact même si son identifiant est masqué ailleurs).
+- **Éléments non anonymisables omis** plutôt que recopiés ; ils sont toujours signalés.
+- **Commentaires bureautiques conservés et anonymisés** (auteur « Anonyme »), révisions
+  suivies acceptées (les suppressions disparaissent entièrement).
+- **PST restitué en dossier d'eml** : aucun outil libre ne sait réécrire un PST de façon
+  fiable.
+- **PyMuPDF limité à la version 1.x** : la 2.0 embarque du code initialement publié sous
+  licence non commerciale. **OpenCV en version « headless »** : la version complète
+  embarque Qt et entre en conflit avec PySide6.
+- **Pas de boîtes de dialogue de fichiers natives de Qt** : elles mémorisent les dossiers
+  récents dans le registre Windows, hors du dossier portable.
+- **Garde réseau** : toute connexion sortante est bloquée au niveau du processus, sauf
+  pendant un téléchargement de modèle déclenché par l'utilisateur.
+- **Effacement des temporaires** par suppression simple : sur SSD, un effacement « sécurisé »
+  n'est pas garanti ; chiffrez le disque pour les données les plus sensibles.
 
 ## Développement
 
