@@ -66,23 +66,42 @@ if have("faker"):
 # installed, so the spec works at every stage of the project.
 OPTIONAL = {
     # module: (submodules, data files, dynamic libs, metadata distribution)
-    "presidio_analyzer": (True, True, False, "presidio_analyzer"),
-    "presidio_anonymizer": (True, True, False, "presidio_anonymizer"),
+    # OCR: PP-OCR models (*.onnx) and config.yaml live inside the package.
+    "rapidocr_onnxruntime": (True, True, False, "rapidocr-onnxruntime"),
     "rapidocr": (True, True, False, "rapidocr"),
-    "rapidocr_onnxruntime": (True, True, False, None),
-    "pillow_heif": (False, True, True, None),
     "onnxruntime": (False, False, True, None),
+    "cv2": (False, False, False, None),  # contrib hook (opencv-python-headless)
+    "pyclipper": (False, False, True, None),
+    "shapely": (False, False, False, None),  # contrib hook (GEOS libs)
+    # Images.
+    "pillow_heif": (True, True, True, "pillow-heif"),
+    # PDF (PyMuPDF, AGPL-3.0).
+    "pymupdf": (True, True, True, "pymupdf"),  # (the deprecated ``fitz`` shim is not used)
+    # Mails: extract-msg pulls RTFDE (lark grammars), oletools, compressed_rtf, ebcdic.
+    "extract_msg": (True, True, False, "extract-msg"),
+    "RTFDE": (True, True, False, "RTFDE"),
+    "lark": (True, True, False, "lark"),
+    "oletools": (True, True, False, "oletools"),
+    "compressed_rtf": (True, False, False, None),
+    "ebcdic": (True, False, False, None),
+    "tzlocal": (True, False, False, None),
+    "bs4": (False, False, False, None),
+    "pypff": (False, False, False, "libpff-python"),
+    # Archives: py7zr loads its codecs lazily.
+    "py7zr": (True, False, False, "py7zr"),
+    "pyzstd": (True, False, False, None),
+    "pyppmd": (True, False, False, None),
+    "pybcj": (True, False, False, None),
+    "inflate64": (True, False, False, None),
+    "multivolumefile": (True, False, False, None),
+    "brotli": (False, False, False, None),
+    # Office / data formats.
+    "lxml": (False, False, False, None),  # PyInstaller hooks
+    "xlrd": (True, False, False, None),
+    "olefile": (True, False, False, None),
+    # Future LLM detector.
     "llama_cpp": (True, True, True, None),
     "tokenizers": (False, False, True, None),
-    "fitz": (False, True, True, None),
-    "pymupdf": (True, True, True, "pymupdf"),
-    "extract_msg": (True, True, False, "extract_msg"),
-    "py7zr": (True, False, False, None),
-    "docx": (False, True, False, None),
-    "pptx": (False, True, False, None),
-    "odf": (True, False, False, None),
-    "tldextract": (False, True, False, None),
-    "phonenumbers": (True, True, False, None),
 }
 for module, (subs, data, dylibs, dist) in OPTIONAL.items():
     if not have(module):

@@ -41,6 +41,33 @@ lecture seule (« App Translocation ») : Anonyma ne retrouverait alors ni ses m
 sa configuration. Ne déplacez pas `Anonyma.app` hors de son dossier : `models/` et
 `data/` doivent rester à côté.
 
+### LibreOffice embarqué
+
+Le dossier portable contient une copie de **LibreOffice 26.2.6** (MPL-2.0) dans
+`libreoffice/` : les anciens formats Office (`.doc`, `.xls`, `.ppt`) sont ainsi
+toujours restitués **dans leur format d'origine**, sans rien installer. Cette copie est
+utilisée en priorité (avant un éventuel LibreOffice installé sur la machine), en mode
+invisible, avec un profil jetable créé dans `data/tmp/` puis supprimé : aucune
+préférence n'est écrite hors du dossier, les macros sont désactivées.
+
+LibreOffice est récupéré **au moment de la construction** de l'archive (version
+épinglée, empreinte SHA-256 vérifiée), jamais par l'application. Sous Windows, la copie
+est allégée des dictionnaires orthographiques et des langues d'interface autres que le
+français et l'anglais. Tailles indicatives (Windows x86_64) :
+
+| Archive | Dossier décompressé | Archive zip |
+|---|---|---|
+| complète (avec LibreOffice) | 1,1 Go | 484 Mo |
+| légère (`--sans-libreoffice`) | 470 Mo | 207 Mo |
+
+Sans LibreOffice (archive légère, installation depuis les sources), les `.doc` et `.ppt`
+ne sont pas pris en charge et les `.xls` sont produits au format `.xlsx`. Un LibreOffice
+installé ailleurs peut être désigné par
+`anonyma-cli config definir libreoffice_path "C:\chemin\vers\LibreOffice"`.
+
+Sous Linux, la copie embarquée utilise les bibliothèques graphiques usuelles du système
+(X11, fontconfig, cairo, CUPS), présentes sur tout poste de bureau.
+
 ### Depuis les sources
 
 Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python 3.12 si nécessaire).
@@ -205,19 +232,31 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
   construites pour l'architecture du système de construction (Apple Silicon pour macOS).
 - Ne lancez pas deux instances d'Anonyma sur le même dossier portable en même temps :
   le nettoyage des fichiers temporaires au démarrage pourrait gêner l'autre instance.
+- Windows : gardez le chemin du dossier portable sous une centaine de caractères
+  (par exemple `C:\Outils\Anonyma`). Au-delà, LibreOffice ne peut plus créer son profil
+  temporaire et les `.doc`, `.xls` et `.ppt` échouent (fichiers signalés en échec, jamais
+  produits non anonymisés).
+- macOS : la copie de LibreOffice embarquée est l'application officielle signée de The
+  Document Foundation ; ne modifiez pas son contenu, sa signature serait invalidée.
 
 ## Développement
 
 ```sh
 uv sync
 uv run ruff check . && uv run ruff format . && uv run mypy && uv run pytest
-uv run python packaging/build.py          # dossier portable + test de fumée + zip
+uv run python packaging/build.py          # dossier portable complet + tests de fumée + zip
+uv run python packaging/build.py --sans-libreoffice   # archive légère, sans LibreOffice
 uv run python packaging/gen_licenses.py   # régénère LICENSES.md
 ```
 
 L'intégration continue (`.github/workflows/ci.yml`) lance l'analyse statique et les
-tests sous Windows, macOS et Linux, puis construit l'archive portable de chaque système
-(brouillon de publication GitHub pour les étiquettes `v*`).
+tests sous Windows, macOS et Linux (avec LibreOffice installé sur les machines de test,
+les fixtures `.doc`/`.ppt` étant générées si elles sont absentes), puis construit
+l'archive portable complète de chaque système, LibreOffice compris (brouillon de
+publication GitHub pour les étiquettes `v*`). La construction lance l'interface en mode
+hors écran et anonymise avec l'exécutable figé un lot de fixtures (docx, xlsx, pdf, eml,
+msg, zip, png avec OCR, doc, xls, ppt) qui doivent toutes ressortir « Anonymisé » avec
+leur extension d'origine.
 
 ## Licences
 
