@@ -14,8 +14,11 @@ propagation, substitute assignment) run in the calling process.
 
 from __future__ import annotations
 
+import io
 import os
+import re
 import shutil
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -263,6 +266,25 @@ _detector_cache: dict[str, list[Detector]] = {}
 _ocr_cache: dict[str, OcrEngine | None] = {}
 
 
+class _StderrToLog(io.TextIOBase):
+    """A worker's stderr: what multiprocessing prints there (the traceback of a worker
+    dying with its pool) never reaches the terminal, where an agent or a user would
+    read it as a failure of the batch. Only the exception type goes to the log: the
+    message may quote a value."""
+
+    _TYPE = re.compile(r"^([A-Za-z_][\w.]*(?:Error|Exception|Interrupt))(?::|$)")
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, text: str) -> int:
+        for line in text.splitlines():
+            match = self._TYPE.match(line)
+            if match:
+                log.warning("worker process error: %s", match.group(1))
+        return len(text)
+
+
 def _worker_init() -> None:
     from anonyma import logs, netguard
 
@@ -270,6 +292,7 @@ def _worker_init() -> None:
     netguard.install()
     # Like the main process: records go to data/logs, never to the user's terminal.
     logs.setup_logging(worker=True)
+    sys.stderr = _StderrToLog()
 
 
 #: Seconds given to idle worker processes to exit once a pool is shut down, before

@@ -883,3 +883,16 @@ def test_neutral_names_drop_empty_archive_folders(tmp_path: Path, canary_config:
     assert top.output_path is not None
     with zipfile.ZipFile(top.output_path) as zf:
         assert zf.namelist() == ["piece_jointe_0001.txt"]
+
+
+def test_worker_stderr_goes_to_the_log_as_exception_type_only(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from anonyma.pipeline import _StderrToLog
+
+    sink = _StderrToLog()
+    with caplog.at_level("WARNING", logger="anonyma"):
+        sink.write("Process SpawnProcess-7:\nTraceback (most recent call last):\n")
+        sink.write('  File "queues.py", line 104, in get\n')
+        sink.write("OSError: [WinError 6] secret-value\n")
+    assert [r.getMessage() for r in caplog.records] == ["worker process error: OSError"]
