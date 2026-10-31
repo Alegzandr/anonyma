@@ -359,6 +359,8 @@ def test_mail_header_and_metadata_labels(detector: RegexDetector) -> None:
         detector, "Bérénice Quintal", "PERSONNE", kind=SegmentKind.METADATA, label="dc:creator"
     )
     assert meta == ["Bérénice Quintal"]
+    for software in ("pdfmake", "wkhtmltopdf", "iText"):
+        assert not found(detector, software, "PERSONNE", kind=SegmentKind.METADATA, label="creator")
     org = found(
         detector, "Exemple Industries", "ORGANISATION", kind=SegmentKind.METADATA, label="Company"
     )

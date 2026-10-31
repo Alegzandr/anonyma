@@ -4,8 +4,9 @@
   shrunk to the glyph centres (MuPDF removes every glyph whose box merely
   touches the rectangle); a second pass with the full rectangle blanks image
   pixels and removes vector graphics fully covered. The visible box is then
-  painted: white with the substitute fitted inside (tags / realistic mode) or
-  black (blackout mode).
+  painted: white with the substitute on the original baseline (tags / realistic
+  mode) or black (blackout mode). Boxes are clipped vertically so that they spare
+  the neighbouring lines; substitutes keep a readable size (see ``layout_text``).
 * Invisible text (render mode 3, transparent, tiny, off-page, white on white,
   hidden layer) is deleted when ``config.remove_invisible_text`` (otherwise only
   its replaced spans are, the substitute being written invisibly).
@@ -30,6 +31,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import math
 import secrets
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -41,7 +44,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from anonyma.extractors._archive import UniqueNames
 from anonyma.extractors._media import BLANKED_CODE, blanked_message
-from anonyma.extractors._pdf import encode_pdf_string, iter_strings, object_sources
+from anonyma.extractors._pdf import TEXT_FLAGS, encode_pdf_string, iter_strings, object_sources
 from anonyma.extractors._pdfobjects import (
     LayerState,
     delete_keys,
@@ -77,6 +80,23 @@ REMOVED_LINKS = frozenset(
 #: Fraction of the edge characters / line height trimmed from glyph-removal boxes.
 H_INSET = 0.3
 V_INSET = 0.3
+#: Ink extent around the baseline, in font sizes: descenders of the line above,
+#: accented capitals of the line below. A painted box stops there...
+INK_DESCENT = 0.25
+INK_ASCENT = 0.95
+#: ...but always covers this much of its own line.
+KEEP_ABOVE = 0.6
+KEEP_BELOW = 0.15
+#: Substitutes drawn on the page (see ``layout_text``): narrowest horizontal
+#: scale, readable font size (fraction of the original, absolute minimum in
+#: points), smallest size before running over the following words.
+MIN_CONDENSE = 0.6
+MIN_SIZE_RATIO = 0.65
+MIN_SIZE = 5.0
+HARD_SIZE_RATIO = 0.5
+HARD_MIN_SIZE = 4.0
+#: Space kept between a substitute and the next word, in font sizes.
+WORD_GAP = 0.15
 #: Keys removed from every object (private application data, metadata streams).
 PURGED_KEYS = ("Metadata", "PieceInfo")
 
@@ -128,25 +148,234 @@ def _inside(rect: pymupdf.Rect, container: pymupdf.Rect) -> bool:
     return not overlap.is_empty and abs(overlap) >= 0.5 * abs(rect)
 
 
-def fit_text(page: pymupdf.Page, rect: pymupdf.Rect, text: str, *, invisible: bool = False) -> None:
-    """Write ``text`` inside ``rect``, shrinking the font so that it fits."""
+@dataclass(frozen=True, slots=True)
+class TextLine:
+    """One horizontal span of the original page: glyph box, baseline, font size."""
+
+    rect: pymupdf.Rect
+    baseline: float
+    size: float
+
+
+def page_lines(page: pymupdf.Page) -> list[TextLine]:
+    """Horizontal text spans of ``page`` (geometry only, no text kept)."""
+    lines: list[TextLine] = []
+    data = page.get_text("dict", flags=TEXT_FLAGS)
+    for block in data.get("blocks", []):
+        for line in block.get("lines", []):
+            dx, dy = line.get("dir", (1.0, 0.0))
+            if dx <= 0 or abs(dy) > 0.01:
+                continue
+            for span in line.get("spans", []):
+                size = float(span.get("size", 0.0))
+                if size < 1.0 or not str(span.get("text", "")).strip():
+                    continue
+                rect = pymupdf.Rect(span["bbox"])
+                if not rect.is_empty:
+                    lines.append(TextLine(rect, float(span["origin"][1]), size))
+    return lines
+
+
+@dataclass(frozen=True, slots=True)
+class Placement:
+    """Where a replaced line is painted: its box (clear of the neighbouring lines),
+    the original baseline and font size when known."""
+
+    box: pymupdf.Rect
+    baseline: float | None
+    size: float
+
+
+def place(rect: pymupdf.Rect, lines: Sequence[TextLine]) -> Placement:
+    """Box painted over a replaced line, clipped vertically so that it spares the
+    lines above and below.
+
+    Glyph boxes span the font's whole ascender..descender range, taller than the
+    line pitch of ordinary paragraphs (10 pt Helvetica: 13.7 pt boxes for ~12 pt
+    leading): painted whole, the box cut the descenders of the line above. The
+    original glyphs are removed from the content stream beforehand (pass 1), so
+    the box only needs to cover the line's own ink zone, which it keeps:
+    at least ``KEEP_ABOVE`` / ``KEEP_BELOW`` font sizes around the baseline.
+    """
+    fallback = Placement(rect, None, rect.height * 0.75)
+    own = max(lines, key=lambda line: abs(line.rect & rect), default=None)
+    if own is None or abs(own.rect & rect) < 0.3 * abs(rect):
+        return fallback
+    base, size = own.baseline, own.size
+    y0, y1 = rect.y0, rect.y1
+    for line in lines:
+        if line.rect.x1 <= rect.x0 or line.rect.x0 >= rect.x1:
+            continue
+        if abs(line.baseline - base) < 0.5 * min(size, line.size):
+            continue  # same line (another span, an overlapping text layer)
+        if line.baseline < base and line.rect.y1 > y0:
+            y0 = max(y0, min(line.baseline + INK_DESCENT * line.size, base - KEEP_ABOVE * size))
+        elif line.baseline > base and line.rect.y0 < y1:
+            y1 = min(y1, max(line.baseline - INK_ASCENT * line.size, base + KEEP_BELOW * size))
+    if y1 - y0 < 1.0:
+        return Placement(rect, base, size)
+    return Placement(pymupdf.Rect(rect.x0, y0, rect.x1, y1), base, size)
+
+
+@dataclass(frozen=True, slots=True)
+class TextLayout:
+    """A substitute laid out from ``origin``: font size, horizontal scale, width."""
+
+    origin: pymupdf.Point
+    size: float
+    scale: float
+    width: float
+
+
+def layout_text(
+    rect: pymupdf.Rect,
+    text: str,
+    *,
+    size: float | None = None,
+    baseline: float | None = None,
+    room: float | None = None,
+    overflow: bool = False,
+) -> TextLayout | None:
+    """Lay ``text`` out at the left of ``rect`` within ``room`` points of width.
+
+    Substitutes are often wider than the words they replace (a six-letter name
+    → ``[PERSONNE_001]``); fitted by shrinking alone, they became unreadable 3–4 pt
+    text. Tags cannot be abbreviated (they are batch-wide identifiers) and the
+    following words cannot be moved (that would mean rewriting the content stream
+    with another font). Options compared for a substitute that does not fit:
+    shrinking only (unreadable), condensing only (illegible below ~60 %),
+    drawing over the following words (both texts illegible), or painting the box
+    over them (the line then reads as if words were missing: misleading, tried
+    and rejected as the usual fallback). Hence, in this order:
+
+    1. the free space after the word is used (``room``, computed by the caller:
+       whitespace, right margin, up to the next glyph, box or cell border);
+    2. the font shrinks and the glyphs are condensed in equal proportion, down to
+       ``MIN_SIZE_RATIO`` of the original size (``MIN_SIZE`` points at least) and
+       ``MIN_CONDENSE`` of their width: readable, and enough for a tag about
+       2.5 times wider than the room;
+    3. then the font shrinks further, down to ``HARD_SIZE_RATIO`` (``HARD_MIN_SIZE``
+       points at least): smaller, still readable, the line stays intact;
+    4. only then, with ``overflow`` (text lines), the text extends to the right at
+       that size and the caller paints its box over the glyphs it runs into (they
+       stay in the text layer). Without ``overflow`` (OCR boxes over image
+       content, invisible text) it keeps shrinking to stay inside ``rect``.
+    """
     if not text.strip() or rect.width <= 0 or rect.height <= 0:
-        return
-    size = rect.height * 0.75
-    length = pymupdf.get_text_length(text, fontname="helv", fontsize=size)
-    if length > rect.width:
-        size *= rect.width / length
-    size = max(size, 2.0)
-    baseline = rect.y0 + (rect.height + size * 0.7) / 2
+        return None
+    nominal = size if size and size > 0 else rect.height * 0.75
+    room = max(room or rect.width, rect.width)
+    natural = pymupdf.get_text_length(text, fontname="helv", fontsize=nominal)
+    font_size, scale = nominal, 1.0
+    if natural > room:
+        ratio = room / natural
+        floor = min(nominal, max(MIN_SIZE_RATIO * nominal, MIN_SIZE))
+        font_size = max(floor, nominal * math.sqrt(ratio))
+        scale = min(1.0, max(MIN_CONDENSE, ratio * nominal / font_size))
+        fitting = room / (natural / nominal * scale)
+        if fitting < font_size:
+            hard = min(nominal, max(HARD_SIZE_RATIO * nominal, HARD_MIN_SIZE))
+            font_size = max(hard if overflow else 2.0, fitting)
+    if baseline is None:
+        baseline = rect.y0 + (rect.height + font_size * 0.7) / 2
+    width = natural * font_size / nominal * scale
+    return TextLayout(pymupdf.Point(rect.x0, baseline), font_size, scale, width)
+
+
+def draw_text(
+    page: pymupdf.Page, layout: TextLayout, text: str, *, invisible: bool = False
+) -> None:
+    """Write ``text`` as laid out (Helvetica, condensed by a horizontal scale)."""
+    morph = None
+    if layout.scale < 1.0:
+        morph = (layout.origin, pymupdf.Matrix(layout.scale, 0, 0, 1, 0, 0))
     page.insert_text(
-        (rect.x0, baseline),
+        layout.origin,
         text,
-        fontsize=size,
+        fontsize=layout.size,
         fontname="helv",
         color=(0, 0, 0),
         overlay=True,
         render_mode=3 if invisible else 0,
+        morph=morph,
     )
+
+
+def fit_text(page: pymupdf.Page, rect: pymupdf.Rect, text: str, *, invisible: bool = False) -> None:
+    """Write ``text`` inside ``rect`` (condensed, then shrunk, so that it fits)."""
+    layout = layout_text(rect, text)
+    if layout is not None:
+        draw_text(page, layout, text, invisible=invisible)
+
+
+@dataclass(slots=True)
+class _Obstacles:
+    """What a substitute must not run over on a page: remaining glyphs, painted
+    boxes, vector graphics and images (a table cell bounds its content)."""
+
+    glyphs: list[pymupdf.Rect]
+    boxes: list[pymupdf.Rect]
+    containers: list[pymupdf.Rect]
+    right: float
+
+    @classmethod
+    def of(cls, page: pymupdf.Page, boxes: list[pymupdf.Rect]) -> _Obstacles:
+        glyphs: list[pymupdf.Rect] = []
+        data = page.get_text("rawdict", flags=TEXT_FLAGS)
+        for block in data.get("blocks", []):
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    for char in span.get("chars", []):
+                        if str(char.get("c", "")).strip():
+                            glyphs.append(pymupdf.Rect(char["bbox"]))
+        art: list[pymupdf.Rect] = []
+        with contextlib.suppress(Exception):
+            art.extend(pymupdf.Rect(d.get("rect") or (0, 0, 0, 0)) for d in page.get_drawings())
+        with contextlib.suppress(Exception):
+            art.extend(pymupdf.Rect(info["bbox"]) for info in page.get_image_info())
+        art = [r for r in art if r.width > 0 or r.height > 0]
+        # Rotated pages: text and page coordinates differ, no extension at all.
+        right = page.rect.x1 if page.rotation == 0 else 0.0
+        return cls(glyphs, boxes, art, right)
+
+    @staticmethod
+    def _bands(placement: Placement) -> tuple[float, float, float, float]:
+        """Vertical span of the line's ink (for graphics) and of its glyph centres."""
+        box = placement.box
+        if placement.baseline is None:
+            mid, half = (box.y0 + box.y1) / 2, box.height / 2
+            return mid - 0.4 * half, mid + 0.4 * half, mid - half, mid + half
+        base, size = placement.baseline, placement.size
+        return base - 0.6 * size, base + 0.1 * size, base - 0.9 * size, base + 0.3 * size
+
+    def _line_glyphs(self, placement: Placement) -> list[pymupdf.Rect]:
+        """Remaining glyphs on the same line as ``placement``."""
+        _, _, low, high = self._bands(placement)
+        return [g for g in self.glyphs if low <= (g.y0 + g.y1) / 2 <= high]
+
+    def room(self, placement: Placement, gap: float) -> float:
+        """Width available from the box's left edge to the next obstacle."""
+        box = placement.box
+        top, bottom, _, _ = self._bands(placement)
+        right = self.right - gap
+        eps = 0.01
+        art = [r for r in self.containers if r.y1 > top and r.y0 < bottom]
+        boxes = [r for r in self.boxes if r.y1 > top and r.y0 < bottom]
+        for rect in (*self._line_glyphs(placement), *boxes, *art):
+            if rect.x0 >= box.x1 - eps:
+                right = min(right, rect.x0 - gap)
+        for rect in art:
+            if rect.x0 <= box.x0 + eps and rect.x1 >= box.x1 - eps:
+                right = min(right, rect.x1 - gap)  # cell, frame or background edge
+        return float(max(box.width, right - box.x0))
+
+    def covered(self, placement: Placement, right: float) -> float:
+        """Right edge of a box reaching ``right``, widened to whole glyphs."""
+        box = placement.box
+        for glyph in self._line_glyphs(placement):
+            if glyph.x1 > box.x1 and glyph.x0 < right:
+                right = max(right, glyph.x1)
+        return right
 
 
 def paint_boxes(
@@ -558,6 +787,15 @@ class PdfWriter(Writer):
                 continue
             page = doc[page_number]
             regions = work.regions
+            # Painted boxes, measured on the original text layer (neighbouring lines).
+            lines = page_lines(page) if any(r.kind == "text" for r in regions) else []
+            placements = {
+                id(region): [
+                    place(full_rect(boxes), lines if region.kind == "text" else [])
+                    for boxes in region.lines
+                ]
+                for region in regions
+            }
             # Pass 1: remove glyphs (boxes shrunk so that neighbours survive; OCR
             # regions whole: their glyphs, if any, have no usable text).
             for region in regions:
@@ -575,10 +813,11 @@ class PdfWriter(Writer):
             if not visible:
                 self._paint_hidden(page, regions, mode)
                 continue
-            # Pass 2: blank image pixels and covered vector graphics, keep text.
+            # Pass 2: blank image pixels and covered vector graphics, keep text
+            # (within the painted boxes: what lies under the neighbouring lines stays).
             for region in visible:
-                for boxes in region.lines:
-                    page.add_redact_annot(full_rect(boxes), fill=False)
+                for placement in placements[id(region)]:
+                    page.add_redact_annot(placement.box, fill=False)
             page.apply_redactions(
                 images=pymupdf.PDF_REDACT_IMAGE_PIXELS,
                 graphics=pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED,
@@ -590,16 +829,68 @@ class PdfWriter(Writer):
                 removed_fields += self._remove_covered_fields(page, ocr_rects)
             fields = [pymupdf.Rect(w.rect) for w in page.widgets() or []]
             skipped = fields + signature_rects.get(page_number, [])
-            for region in visible:
-                rects = [full_rect(boxes) for boxes in region.lines]
-                if region.kind == "text" and any(_inside(rects[0], f) for f in skipped):
-                    continue  # a form field redraws its own (anonymized) value
+            drawn = [
+                r
+                for r in visible
+                if not (
+                    r.kind == "text" and any(_inside(full_rect(r.lines[0]), f) for f in skipped)
+                )  # a form field redraws its own (anonymized) value
+            ]
+            layouts: dict[int, TextLayout] = {}
+            obstacles: _Obstacles | None = None
+            if mode is not ReplacementMode.BLACKOUT:
+                layouts, obstacles = self._layouts(page, drawn, placements)
+            for region in drawn:
+                rects = [p.box for p in placements[id(region)]]
+                layout = layouts.get(id(region))
+                if layout is not None and layout.width > rects[0].width:
+                    # The substitute runs past the word: its box follows it (over
+                    # whole glyphs if it had to run into the next word).
+                    first = rects[0]
+                    right = first.x0 + layout.width
+                    if obstacles is not None:
+                        right = obstacles.covered(placements[id(region)][0], right)
+                    rects[0] = pymupdf.Rect(first.x0, first.y0, right, first.y1)
                 for rect in rects:
                     page.draw_rect(rect, color=None, fill=fill, overlay=True, width=0)
-                if mode is not ReplacementMode.BLACKOUT:
-                    fit_text(page, rects[0], region.substitute)
+                if layout is not None:
+                    draw_text(page, layout, region.substitute)
             self._paint_hidden(page, regions, mode)
         return removed_fields
+
+    @staticmethod
+    def _layouts(
+        page: pymupdf.Page, regions: list[_Region], placements: dict[int, list[Placement]]
+    ) -> tuple[dict[int, TextLayout], _Obstacles | None]:
+        """Substitute layouts: on the original baseline, at the original size when
+        possible; text lines may use the free space after the word (see
+        ``layout_text``), OCR boxes stay within themselves. Also returns the
+        page's obstacles when they were needed."""
+        layouts: dict[int, TextLayout] = {}
+        obstacles: _Obstacles | None = None
+        for region in regions:
+            first = placements[id(region)][0]
+            room: float | None = None
+            if region.kind == "text":
+                natural = pymupdf.get_text_length(
+                    region.substitute, fontname="helv", fontsize=first.size
+                )
+                if natural > first.box.width:
+                    if obstacles is None:
+                        painted = [p.box for r in regions for p in placements[id(r)]]
+                        obstacles = _Obstacles.of(page, painted)
+                    room = obstacles.room(first, WORD_GAP * first.size)
+            layout = layout_text(
+                first.box,
+                region.substitute,
+                size=first.size,
+                baseline=first.baseline,
+                room=room,
+                overflow=region.kind == "text",
+            )
+            if layout is not None:
+                layouts[id(region)] = layout
+        return layouts, obstacles
 
     @staticmethod
     def _paint_hidden(page: pymupdf.Page, regions: list[_Region], mode: ReplacementMode) -> None:

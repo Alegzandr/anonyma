@@ -77,7 +77,9 @@ GENERIC_ORG_WORDS = frozenset(
      "sasu", "sa", "sarl", "gmbh", "ag", "bv", "nv", "spa", "srl", "co", "company",
      "compagnie", "group", "groupe", "france", "europe", "international", "systems",
      "technologies", "technology", "software", "services", "cloud", "ireland", "emea",
-     "eu", "the", "&", "et", "and", "de", "la", "le", "les", "des", "du", "by"}
+     "eu", "the", "&", "et", "and", "de", "la", "le", "les", "des", "du", "by",
+     # product names built on a listed name (« Oodrive Sign », oodrive-sign.com)
+     "sign", "esign", "signature", "suite", "pro", "business", "enterprise", "online"}
 )  # fmt: skip
 #: Second-level public suffixes: the organization label is the one before them.
 TWO_LEVEL_SUFFIXES = frozenset(
@@ -179,7 +181,10 @@ class OrgList:
             return self.matches_host(stripped)
         if _compact(stripped) in self.compacts:
             return True
-        tokens = _NAME_TOKEN.findall(normalize(stripped))
+        return self._matches_tokens(_NAME_TOKEN.findall(normalize(stripped)))
+
+    def _matches_tokens(self, tokens: list[str]) -> bool:
+        """Listed names, possibly mixed with generic words; at least one listed name."""
         i, matched = 0, False
         while i < len(tokens):
             for name in self.names:
@@ -198,7 +203,11 @@ class OrgList:
         if any(host == d or host.endswith("." + d) for d in self.domains):
             return True
         label = organization_label(host)
-        return label is not None and label.replace("-", "") in self.compacts
+        if label is None:
+            return False
+        if label.replace("-", "") in self.compacts:
+            return True
+        return "-" in label and self._matches_tokens([p for p in label.split("-") if p])
 
 
 @lru_cache(maxsize=16)

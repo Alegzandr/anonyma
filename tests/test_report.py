@@ -49,6 +49,8 @@ def _result(tmp_path: Path) -> BatchResult:
         DocumentStatus.ANONYMIZED,
         entity_counts={"EMAIL": 1},
         children=[child],
+        review_count=1,
+        review_items=[("NIR", "[NIR_001]")],
     )
     return BatchResult(
         "20260101-000000-abcdef",
@@ -68,6 +70,11 @@ def test_from_result_counts(tmp_path: Path) -> None:
         "pj.txt",
     ]
     assert report.residues[0]["type"] == "PERSONNE"
+    assert report.review == [
+        {"fichier": "dossier/b.md", "type": "NIR", "remplacement": "[NIR_001]"}
+    ]
+    assert "[NIR_001]" in report.to_markdown() and "[NIR_001]" in report.to_html()
+    assert report.to_dict()["a_revoir"] == report.review
 
 
 @pytest.mark.parametrize("suffix", [".json", ".md", ".html", ".htm", ".markdown"])

@@ -48,6 +48,7 @@ from anonyma.models import (
     OcrEngine,
     Profile,
     Regime,
+    ReplacementMode,
     ReviewDecisions,
     ReviewStatus,
     Segment,
@@ -881,8 +882,16 @@ def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[Docu
     result.possible_residue_count = len(verification.possible_residues)
     result.issues.extend(verification.issues)
     tree_ids = {d.id for d in job.document.walk()}
-    result.review_count = len(
-        {e.cluster_id for e in job.entities if e.document_id in tree_ids} & job.review_clusters
+    review_ids = {
+        e.cluster_id for e in job.entities if e.document_id in tree_ids
+    } & job.review_clusters
+    result.review_count = len(review_ids)
+    review_types = {e.cluster_id: e.entity_type for e in job.entities if e.cluster_id in review_ids}
+    blackout = job.table.mode is ReplacementMode.BLACKOUT
+    result.review_items = sorted(
+        (review_types[c], "" if blackout else job.table.by_cluster.get(c, ""))
+        for c in review_ids
+        if c is not None
     )
     quarantine = quarantine_dir(job.output_dir)
     if not verification.clean:

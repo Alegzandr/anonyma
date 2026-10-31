@@ -455,12 +455,58 @@ def progress_display(enabled: bool) -> Iterator[Callable[[ProgressEvent], None] 
         yield update
 
 
+#: French names of detectors that may be missing (model not installed...).
+_DETECTOR_LABELS = {"gliner": "GLiNER", "llm": "modèle de langage local"}
+
+
+def _missing_detectors(config: Config) -> list[str]:
+    """French names of the detectors the profile enables but cannot run."""
+    from anonyma import registry
+
+    names = registry.missing_detectors(config, config.effective_profile())
+    return [_DETECTOR_LABELS.get(name, name) for name in names]
+
+
+def _profile_warning(config: Config) -> str | None:
+    """Say when the detection actually run is below the chosen or recommended profile."""
+    from anonyma import hardware
+
+    effective = config.effective_profile()
+    if config.profile is None:
+        recommended = hardware.recommend_profile(hardware.detect_hardware())
+        if recommended is effective:
+            return None
+        return (
+            f"Profil appliqué : {hardware.PROFILE_LABELS[effective]}. Le profil "
+            f"{hardware.PROFILE_LABELS[recommended]} recommandé pour cette machine demande "
+            "des modèles non installés (voir « anonyma modeles liste »)."
+        )
+    missing = _missing_detectors(config)
+    if not missing:
+        return None
+    return (
+        f"Profil {hardware.PROFILE_LABELS[effective]} choisi, mais non disponible : "
+        f"{', '.join(missing)}. La détection se fait sans ce(s) détecteur(s) "
+        "(voir « anonyma modeles liste »)."
+    )
+
+
+def _warn_profile(config: Config) -> None:
+    warning = _profile_warning(config)
+    if warning:
+        err.print(f"[bold yellow]Attention :[/] {_markup_escape(warning)}")
+
+
 def _settings(config: Config) -> dict[str, str]:
     from anonyma.hardware import PROFILE_LABELS
 
     profile = config.effective_profile()
+    label = PROFILE_LABELS.get(profile, profile.value)
+    missing = _missing_detectors(config)
+    if missing:
+        label += f" — non disponible : {', '.join(missing)}"
     return {
-        "Profil": PROFILE_LABELS.get(profile, profile.value),
+        "Profil": label,
         "Mode": config.mode.value,
         "Régime": config.regime.value,
         "Mode paranoïaque": "oui" if config.paranoid else "non",
@@ -729,6 +775,7 @@ def run(
             numbering=numbering,
         ),
     )
+    _warn_profile(config)
     store = None
     if config.regime is Regime.PSEUDONYMIZATION:
         store = open_store(store_path(config, table), create=True)
@@ -833,6 +880,7 @@ def analyse(
             organization_blacklist=organization_blacklist,
         ),
     )
+    _warn_profile(config)
     pipeline = Pipeline(config)
     try:
         with progress_display(not quiet and not as_json) as progress:

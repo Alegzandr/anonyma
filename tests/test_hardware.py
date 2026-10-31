@@ -91,6 +91,28 @@ def test_forced_profile_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Config(profile=Profile.FULL).effective_profile() is Profile.FULL
 
 
+def test_auto_profile_capped_to_installed_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    from anonyma import registry
+
+    monkeypatch.setattr(hardware, "recommend_profile", lambda info: Profile.FULL)
+    detectors = registry.detector_classes()
+    available = {"llm": False, "gliner": False}
+
+    for name in available:
+        monkeypatch.setattr(
+            detectors[name], "is_available", classmethod(lambda cls, config, f=name: available[f])
+        )
+    assert Config().effective_profile() is Profile.LIGHT
+    assert registry.missing_detectors(Config(), Profile.FULL) == ["gliner", "llm"]
+    available["gliner"] = True
+    assert Config().effective_profile() is Profile.STANDARD
+    available["llm"] = True
+    assert Config().effective_profile() is Profile.FULL
+    # A forced profile is kept as chosen; the CLI warns about what is missing.
+    available.update(gliner=False, llm=False)
+    assert Config(profile=Profile.FULL).effective_profile() is Profile.FULL
+
+
 def test_summary_is_french(fake_catalog: list[ModelSpec]) -> None:
     lines = dict(hardware.summary(HardwareInfo(ram_bytes=16 * GIB, cpu_count=8)))
     assert lines["Mémoire vive"] == "16,0 Go"

@@ -116,6 +116,38 @@ def supported_extensions() -> dict[str, str]:
     return dict(_extensions)
 
 
+def detector_classes() -> dict[str, type[Detector]]:
+    load_plugins()
+    return dict(_detectors)
+
+
+def missing_detectors(config: Config, profile: Profile) -> list[str]:
+    """Detectors ``profile`` enables whose dependency or model is missing (sorted names)."""
+    load_plugins()
+    return sorted(
+        name
+        for name, cls in _detectors.items()
+        if cls.min_profile.rank <= profile.rank and not cls.is_available(config)
+    )
+
+
+def usable_profile(config: Config, profile: Profile) -> Profile:
+    """The most thorough profile up to ``profile`` that installed models can serve.
+
+    A profile above LIGHT is usable when at least one detector it adds is available
+    (GLiNER for STANDARD, the LLM for FULL). Running FULL without its LLM would only
+    cost speed (a single worker) and claim a detection that does not happen.
+    """
+    load_plugins()
+    for candidate in (Profile.FULL, Profile.STANDARD):
+        if candidate.rank > profile.rank:
+            continue
+        added = [cls for cls in _detectors.values() if cls.min_profile is candidate]
+        if any(cls.is_available(config) for cls in added):
+            return candidate
+    return Profile.LIGHT
+
+
 def build_detectors(config: Config, profile: Profile | None = None) -> list[Detector]:
     """Instantiate every detector enabled for ``profile`` and available."""
     load_plugins()
