@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PySide6.QtWidgets import QTableWidgetItem
 
-from anonyma import paths
+from anonyma import libreoffice, paths
 from anonyma.config import Config
 from anonyma.gui import theme
 from anonyma.gui.main_window import MainWindow
-from anonyma.gui.pages.settings import validate_patterns
+from anonyma.gui.pages.settings import libreoffice_status, validate_patterns
 from anonyma.models import Profile, Regime, ReplacementMode
 
 
@@ -172,3 +173,28 @@ def test_invalid_opaque_id_pattern_is_refused(window: MainWindow) -> None:
     page.opaque_id_whitelist.setPlainText(r"re:FACT-(\d{6}")
     assert not page.save()
     assert "Identifiants techniques" in page.banner.text()
+
+
+def test_libreoffice_status_says_what_is_used(
+    window: MainWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = window.settings
+    exe = tmp_path / "LibreOffice" / "program" / "soffice.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"")
+    monkeypatch.setattr(libreoffice, "bundled_locations", lambda: [])
+    monkeypatch.setattr(libreoffice, "standard_locations", lambda: [])
+    monkeypatch.setattr(libreoffice.shutil, "which", lambda name: None)
+    page.use_libreoffice.setChecked(True)
+    page.libreoffice_path.setText("")
+    status = page.libreoffice_status.text()
+    assert status.startswith("Aucun LibreOffice trouvé")
+    assert "les .xls sont restitués en .xlsx" in status
+    page.libreoffice_path.setText(str(exe.parent.parent))
+    assert page.libreoffice_status.text().startswith("LibreOffice utilisé")
+    assert str(exe) in page.libreoffice_status.text()
+    page.use_libreoffice.setChecked(False)
+    assert page.libreoffice_status.text().startswith("LibreOffice désactivé")
+    assert libreoffice_status(True, str(tmp_path / "absent")).startswith(
+        "Aucun LibreOffice à ce chemin ni ailleurs"
+    )

@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from anonyma import paths
+from anonyma import libreoffice, paths
 from anonyma.config import Config, load_business_list
 from anonyma.frenchtext import plural, typo
 from anonyma.gui import dialogs, theme
@@ -130,6 +130,27 @@ def _two_column_table(headers: tuple[str, str]) -> QTableWidget:
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.setMinimumHeight(140)
     return table
+
+
+#: What the legacy formats become without LibreOffice.
+NO_LIBREOFFICE_EFFECT = (
+    "les .doc et .ppt ne sont pas pris en charge, les .xls sont restitués en .xlsx."
+)
+
+
+def libreoffice_status(enabled: bool, path: str) -> str:
+    """Status line under the LibreOffice settings: the executable that will be used
+    (configured path, bundled copy or installation found), or the consequence of
+    having none."""
+    if not enabled:
+        return f"LibreOffice désactivé : {NO_LIBREOFFICE_EFFECT}"
+    found = libreoffice.find_soffice(Config(use_libreoffice=True, libreoffice_path=path))
+    if found is None:
+        where = "à ce chemin ni ailleurs" if path else "trouvé"
+        return f"Aucun LibreOffice {where} : {NO_LIBREOFFICE_EFFECT}"
+    if path and libreoffice.configured_soffice(path) is None:
+        return f"Aucun LibreOffice à ce chemin ; celui-ci sera utilisé : {found}"
+    return f"LibreOffice utilisé : {found}"
 
 
 class _Form(QGridLayout):
@@ -427,7 +448,13 @@ class SettingsPage(QWidget):
         lo_row.addWidget(lo_button)
         lo_widget = QWidget()
         lo_widget.setLayout(lo_row)
-        self._row(f, "&Chemin de LibreOffice", lo_widget)
+        self.libreoffice_status = muted("")
+        self.libreoffice_status.setObjectName("LibreOfficeStatus")
+        self.libreoffice_status.setWordWrap(True)
+        self.libreoffice_status.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._row(f, "&Chemin de LibreOffice", lo_widget, self.libreoffice_status)
         self.theme = QComboBox()
         for key, label in theme.THEMES.items():
             self.theme.addItem(label, key)
@@ -490,6 +517,8 @@ class SettingsPage(QWidget):
         self.regime.currentIndexChanged.connect(self._update_store_visibility)
         self.context.config_changed.connect(self._external_change)
         self.use_libreoffice.toggled.connect(lo_widget.setEnabled)
+        self.use_libreoffice.toggled.connect(lambda _on: self._update_libreoffice_status())
+        self.libreoffice_path.textChanged.connect(lambda _t: self._update_libreoffice_status())
         self.load()
 
     # -- layout helpers -------------------------------------------------------------
@@ -647,7 +676,18 @@ class SettingsPage(QWidget):
         self._update_organization_lists()
         self._update_store_visibility()
         self._check_patterns()
+        self._update_libreoffice_status()
         self._set_dirty(False)
+
+    def _update_libreoffice_status(self) -> None:
+        """Say which LibreOffice the current settings use, or what happens without."""
+        self.libreoffice_status.setText(
+            typo(
+                libreoffice_status(
+                    self.use_libreoffice.isChecked(), self.libreoffice_path.text().strip()
+                )
+            )
+        )
 
     def collect(self) -> Config:
         """Build a new ``Config`` from the widgets. Raises ValueError (French)."""
