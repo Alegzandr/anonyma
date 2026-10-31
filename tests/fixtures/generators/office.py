@@ -856,7 +856,51 @@ def make_pdf(path: Path) -> None:
     path.write_bytes(pdf_document())
 
 
+# ---------------------------------------------------------------------------
+# Legacy binary formats
+# ---------------------------------------------------------------------------
+
+
+def make_xls(path: Path) -> None:
+    import xlwt
+
+    book = xlwt.Workbook(encoding="utf-8")
+    sheet = book.add_sheet(P)  # sheet named after the canary
+    sheet.write(0, 0, "Nom")
+    sheet.write(0, 1, P)
+    sheet.write(1, 0, "Courriel")
+    sheet.write(1, 1, E)
+    sheet.write(2, 0, "Téléphone")
+    sheet.write(2, 1, 612345678)
+    summary = book.add_sheet("Synthèse")
+    summary.write(0, 0, f"Responsable : {P.upper()}")
+    buffer = io.BytesIO()
+    book.save(buffer)
+    path.write_bytes(buffer.getvalue())
+
+
+def make_legacy_with_libreoffice() -> None:
+    """``.doc``/``.ppt`` fixtures need LibreOffice (converted from the OOXML ones)."""
+    import tempfile
+
+    from anonyma import libreoffice
+    from anonyma.config import Config
+
+    soffice = libreoffice.find_soffice(Config())
+    if soffice is None:
+        print("LibreOffice introuvable : fixtures .doc/.ppt non générées.")
+        return
+    for modern, legacy, target in (
+        ("rapport.docx", "rapport.doc", "doc:MS Word 97"),
+        ("presentation.pptx", "presentation.ppt", "ppt:MS PowerPoint 97"),
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = libreoffice.convert(OUT / modern, target, Path(tmp) / "work", soffice)
+            (OUT / legacy).write_bytes(result.read_bytes())
+
+
 GENERATORS = {
+    "tableau.xls": make_xls,
     "rapport.pdf": make_pdf,
     "lettre.rtf": make_rtf,
     "contacts.csv": make_csv,
@@ -876,6 +920,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, generator in GENERATORS.items():
         generator(OUT / name)
+    make_legacy_with_libreoffice()
 
 
 if __name__ == "__main__":

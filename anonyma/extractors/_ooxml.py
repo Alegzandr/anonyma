@@ -612,9 +612,8 @@ def group_replacements(
         if seg.id == FILENAME_SEGMENT_ID:
             continue
         reps = plan.for_segment(seg.id)
-        if reps:
-            part, index = seg.locator[0], seg.locator[1]
-            by_part.setdefault(str(part), {})[int(index)] = reps
+        if reps and len(seg.locator) == 2 and isinstance(seg.locator[1], int):
+            by_part.setdefault(str(seg.locator[0]), {})[seg.locator[1]] = reps
     return by_part
 
 
