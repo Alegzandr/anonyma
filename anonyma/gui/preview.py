@@ -17,6 +17,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 
 from anonyma.models import (
+    FILENAME_SEGMENT_ID,
     Document,
     Entity,
     EntityCluster,
@@ -129,15 +130,19 @@ def cluster_state(cluster_id: str, analysis: BatchAnalysis, decisions: ReviewDec
 def entity_rows(
     analysis: BatchAnalysis,
     decisions: ReviewDecisions,
-    effective: EffectiveState,
+    effective: EffectiveState | None,
     document_ids: Iterable[str] | None = None,
+    entities: Sequence[Entity] | None = None,
 ) -> list[EntityRow]:
     """Every mention of the selected documents: detected ones (whatever their
-    decision) plus mentions coming from manual additions."""
+    decision) plus mentions coming from manual additions.
+
+    ``entities``: the analysis entities to consider (e.g. ``ReviewIndex.by_document``),
+    to avoid scanning the whole batch."""
     wanted = set(document_ids) if document_ids is not None else None
     rows: list[EntityRow] = []
     known: set[MentionKey] = set()
-    for e in analysis.entities:
+    for e in analysis.entities if entities is None else entities:
         if wanted is not None and e.document_id not in wanted:
             continue
         cid = e.cluster_id or ""
@@ -154,7 +159,14 @@ def entity_rows(
                 needs_review=state is RowState.REVIEW,
             )
         )
-    for e in effective.entities:
+    extra: Sequence[Entity] = []
+    if effective is not None:
+        extra = (
+            effective.entities
+            if wanted is None
+            else [e for d in wanted for e in effective.for_document(d)]
+        )
+    for e in extra:
         if e.key in known or (wanted is not None and e.document_id not in wanted):
             continue
         rows.append(
@@ -263,3 +275,111 @@ def clean_selection(text: str) -> str:
 
 def same_value(a: str, b: str) -> bool:
     return normalize(a) == normalize(b)
+
+
+# ---------------------------------------------------------------------------
+# Cluster-centric review queue
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class ReviewIndex:
+    """Lookups built once per analysis (in the analysis thread)."""
+
+    by_cluster: dict[str, list[Entity]] = field(default_factory=dict)
+    by_document: dict[str, list[Entity]] = field(default_factory=dict)
+    documents: dict[str, Document] = field(default_factory=dict)
+    top_of: dict[str, str] = field(default_factory=dict)
+    doc_order: dict[str, int] = field(default_factory=dict)
+    cluster_documents: dict[str, int] = field(default_factory=dict)
+    #: Cluster ids, most uncertain first (review needed, then lowest score).
+    order: list[str] = field(default_factory=list)
+
+
+def build_index(analysis: BatchAnalysis) -> ReviewIndex:
+    index = ReviewIndex()
+    for top in analysis.documents:
+        for doc in top.walk():
+            index.documents[doc.id] = doc
+            index.top_of[doc.id] = top.id
+            index.doc_order[doc.id] = len(index.doc_order)
+    for e in analysis.entities:
+        index.by_cluster.setdefault(e.cluster_id or "", []).append(e)
+        index.by_document.setdefault(e.document_id, []).append(e)
+
+    def position(e: Entity) -> tuple[int, bool, str, int]:
+        return (
+            index.doc_order.get(e.document_id, 0),
+            e.segment_id != FILENAME_SEGMENT_ID,
+            e.segment_id,
+            e.start,
+        )
+
+    for mentions in (*index.by_cluster.values(), *index.by_document.values()):
+        mentions.sort(key=position)
+    for cid, mentions in index.by_cluster.items():
+        index.cluster_documents[cid] = len({e.document_id for e in mentions})
+    index.order = sorted(
+        (cid for cid in analysis.clusters if cid in index.by_cluster),
+        key=lambda cid: (
+            not analysis.clusters[cid].needs_review,
+            analysis.clusters[cid].max_score,
+            normalize(analysis.clusters[cid].canonical),
+        ),
+    )
+    return index
+
+
+def is_decided(cluster_id: str, analysis: BatchAnalysis, decisions: ReviewDecisions) -> bool:
+    """Explicit decision taken (manual additions count as decided)."""
+    return (
+        cluster_id in decisions.confirmed_clusters
+        or cluster_id in decisions.rejected_clusters
+        or cluster_id in decisions.retyped_clusters
+        or cluster_id not in analysis.clusters
+        or analysis.clusters[cluster_id].review is ReviewStatus.MANUAL
+    )
+
+
+def _num(value: float) -> str:
+    return f"{value:.2f}".replace(".", ",")
+
+
+def flag_reason(cluster: EntityCluster, threshold: float, manual: bool = False) -> str:
+    """Why the entity is masked / sent to review (French, value-free)."""
+    if manual or cluster.review is ReviewStatus.MANUAL:
+        return "ajout manuel"
+    detectors = sorted(cluster.detectors - {"propagation"}) or sorted(cluster.detectors)
+    who = ", ".join(detectors)
+    if cluster.needs_review:
+        return f"score {_num(cluster.max_score)} sous le seuil de revue ({_num(threshold)}) · {who}"
+    if detectors == ["listes_metier"]:
+        return "liste métier ou terme toujours masqué"
+    return f"score {_num(cluster.max_score)} · {who}"
+
+
+def occurrences_label(occurrences: int, documents: int) -> str:
+    occ = "occurrence" if occurrences == 1 else "occurrences"
+    files = "fichier" if documents == 1 else "fichiers"
+    return f"{occurrences} {occ} dans {documents} {files}"
+
+
+def snippet(
+    text: str, start: int, end: int, width: int = 40, before_width: int = 24
+) -> tuple[str, str, str]:
+    """(before, value, after) around ``text[start:end]``, whitespace collapsed."""
+    before = " ".join(text[max(0, start - before_width * 2) : start].split())[-before_width:]
+    after = " ".join(text[end : end + width * 2].split())[:width]
+    if start > 0 and text[:start].strip() and len(before) == before_width:
+        before = "…" + before
+    if end < len(text) and len(after) == width:
+        after += "…"
+    if text[start - 1 : start].isspace() and before:
+        before += " "
+    if text[end : end + 1].isspace() and after:
+        after = " " + after
+    return before, " ".join(text[start:end].split()), after
+
+
+def search_key(value: str) -> str:
+    return normalize(value)
