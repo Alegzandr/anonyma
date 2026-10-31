@@ -254,3 +254,46 @@ def test_unreadable_item_name_is_anonymized(tmp_path: Path, canary_config: Confi
     top = result.results[0]
     assert top.status is DocumentStatus.UNSUPPORTED
     assert "uintavalle" not in top.output_name.casefold()
+
+
+class _FolderWriter(TextWriter):
+    """Writes a txt as a folder holding the anonymized text twice."""
+
+    directory_output = True
+
+    def output_extension(self, document):  # type: ignore[no-untyped-def]
+        return ""
+
+    def output_format(self, document):  # type: ignore[no-untyped-def]
+        return "dossier"
+
+    def write(self, document, plan, destination, ctx):  # type: ignore[no-untyped-def]
+        (destination / "sous").mkdir(parents=True)
+        super().write(document, plan, destination / "a.txt", ctx)
+        super().write(document, plan, destination / "sous" / "b.txt", ctx)
+        return []
+
+
+def test_folder_output(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import zipfile
+
+    registry.load_plugins()
+    monkeypatch.setitem(registry._writers, "txt", _FolderWriter)
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "boite.txt").write_text(f"{CANARY_PERSON}\n", encoding="utf-8")
+    with zipfile.ZipFile(src / "lot.zip", "w") as z:
+        z.writestr("boite.txt", f"{CANARY_PERSON}\n")
+    result = Pipeline(canary_config).run([src], tmp_path / "out")
+    folder, archive = sorted(result.results, key=lambda r: r.format)
+    assert folder.status is DocumentStatus.ANONYMIZED, [i.message for i in folder.issues]
+    assert folder.output_path is not None and folder.output_path.is_dir()
+    assert (folder.output_path / "sous" / "b.txt").read_text(encoding="utf-8") == (
+        "[PERSONNE_001]\n"
+    )
+    assert archive.status is DocumentStatus.ANONYMIZED, [i.message for i in archive.issues]
+    assert archive.output_path is not None
+    with zipfile.ZipFile(archive.output_path) as z:
+        assert z.namelist() == ["boite.zip"]

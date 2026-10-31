@@ -49,7 +49,10 @@ Public API (`anonyma/pipeline.py`): `Pipeline(config, store=None)`,
   `write(document, plan, destination, ctx) -> list[Issue]`. Writes a copy, applies
   `plan.for_segment(seg.id)` replacements, **purges metadata**. Container writers
   use `ctx.child_outputs[child.id]` (`path is None` ⇒ omit the child, never embed
-  original bytes; `name` is the anonymized entry name).
+  original bytes; `name` is the anonymized entry name). A writer with
+  `directory_output = True` receives a folder path to create (e.g. PST restored as
+  a tree of eml); the pipeline re-reads the folder for verification and, below the
+  top level, packs it into a `.zip`.
 * `Detector`: `name`, `min_profile`, `is_available(config)`,
   `detect(segments, document_id) -> list[Entity]`.
 * `OcrEngine.recognize(PIL.Image) -> list[OcrLine]`, created by

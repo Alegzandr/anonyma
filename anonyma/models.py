@@ -216,6 +216,8 @@ class Segment:
 
 
 FILENAME_SEGMENT_ID = "__filename__"
+#: Format id of a folder output re-read by the pipeline for verification.
+FOLDER_FORMAT = "dossier"
 
 
 @dataclass(frozen=True, slots=True)
@@ -590,6 +592,11 @@ class Writer(ABC):
 
     name: ClassVar[str]
     formats: ClassVar[frozenset[str]]
+    #: When True, ``write`` receives a folder path (not yet created) that it creates
+    #: and fills (e.g. a PST restored as a tree of eml files). Below the top level the
+    #: pipeline packs that folder into a ``.zip`` so that containers get one file.
+    #: ``output_format`` should then return ``FOLDER_FORMAT``.
+    directory_output: ClassVar[bool] = False
 
     def output_extension(self, document: Document) -> str:
         """Extension (with dot) of the produced file. Override when the format is

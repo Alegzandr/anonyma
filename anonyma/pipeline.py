@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import shutil
 import threading
+import zipfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import CancelledError, Future, ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
@@ -29,6 +30,7 @@ from anonyma.config import Config
 from anonyma.logs import get_logger
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
+    FOLDER_FORMAT,
     ArchiveBombError,
     ChildOutput,
     Detector,
@@ -295,6 +297,8 @@ def extract_file(
     """Extract one file (recursively for containers). Never raises except for
     cancellation and, below the top level, archive bombs."""
     budget = budget or config.limits.budget()
+    if source.is_dir():
+        return _extract_folder(source, name, config, work_dir, budget, depth, parent, cancel)
     fmt = registry.detect_format(source) if source.is_file() else None
     doc = Document(
         source=source,
@@ -319,6 +323,69 @@ def extract_file(
         )
     )
     return doc
+
+
+def _extract_folder(
+    source: Path,
+    name: str,
+    config: Config,
+    work_dir: Path,
+    budget: ExpansionBudget,
+    depth: int,
+    parent: Document | None,
+    cancel: CancelToken | None,
+) -> Document:
+    """A folder produced by a ``directory_output`` writer, read back for verification:
+    every file becomes a child named by its path relative to the folder."""
+    doc = Document(
+        source=source,
+        name=name,
+        format=FOLDER_FORMAT,
+        depth=depth,
+        parent_id=parent.id if parent else None,
+        status=DocumentStatus.EXTRACTED,
+        extractor="dossier",
+    )
+    for path, _ in collect_inputs([source]):
+        relative = path.relative_to(source).as_posix()
+        doc.children.append(
+            extract_file(
+                path,
+                relative,
+                config,
+                work_dir,
+                budget=budget,
+                depth=depth + 1,
+                parent=doc,
+                cancel=cancel,
+            )
+        )
+    doc.segments.append(
+        Segment(
+            id=FILENAME_SEGMENT_ID,
+            text=name,
+            locator=(),
+            context=SegmentContext(SegmentKind.FILENAME, label="nom de dossier"),
+        )
+    )
+    return doc
+
+
+def _zip_folder(folder: Path, destination: Path) -> None:
+    """Pack ``folder`` (files and empty dirs) into ``destination`` without metadata."""
+    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(folder.rglob("*")):
+            arcname = path.relative_to(folder).as_posix()
+            info = zipfile.ZipInfo(arcname + ("/" if path.is_dir() else ""))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, b"" if path.is_dir() else path.read_bytes())
+
+
+def _remove_output(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        path.unlink(missing_ok=True)
 
 
 def _extract_into(
@@ -471,6 +538,10 @@ def _write_tree(
     entities = by_doc.get(doc.id, [])
     writer = registry.writer_for(doc.format) if doc.status is DocumentStatus.EXTRACTED else None
     extension = writer.output_extension(doc) if writer else PurePosixPath(doc.name).suffix
+    # Embedded folder outputs are packed into a zip (containers need one file).
+    pack_folder = writer is not None and writer.directory_output and doc.depth > 0
+    if pack_folder:
+        extension += ".zip"
     name = anonymized_name(doc, entities, job.table, extension)
     result = DocumentResult(
         document_id=doc.id,
@@ -505,16 +576,20 @@ def _write_tree(
     else:
         destination = job.work_dir / new_id() / PurePosixPath(name).name
     destination.parent.mkdir(parents=True, exist_ok=True)
+    target = destination.with_name(new_id()) if pack_folder else destination
     plan = build_plan(doc, entities, job.table)
     try:
         result.issues.extend(
-            writer.write(
-                doc, plan, destination, _WriteContext(job.config, child_outputs, job.work_dir)
-            )
+            writer.write(doc, plan, target, _WriteContext(job.config, child_outputs, job.work_dir))
         )
+        if pack_folder:
+            _zip_folder(target, destination)
+            shutil.rmtree(target, ignore_errors=True)
+            result.output_format = "zip"
     except Exception as exc:
         log.warning("write failed for %s: %s", doc.id, type(exc).__name__)
-        destination.unlink(missing_ok=True)
+        _remove_output(target)
+        _remove_output(destination)
         result.status = DocumentStatus.FAILED
         result.issues.append(
             Issue(
@@ -525,7 +600,7 @@ def _write_tree(
         )
         return result, None
     if any(i.severity is Severity.ERROR for i in result.issues):
-        destination.unlink(missing_ok=True)
+        _remove_output(destination)
         result.status = DocumentStatus.FAILED
         return result, None
     result.output_path = destination
