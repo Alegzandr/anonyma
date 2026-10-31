@@ -8,8 +8,9 @@ from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt, QUrl
 from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent
 
 from anonyma.gui import errors, icons, theme
-from anonyma.gui.controller import OUTPUT_CONFLICT, Phase
+from anonyma.gui.controller import Phase
 from anonyma.gui.main_window import PAGES, MainWindow
+from anonyma.pipeline import OUTPUT_CONFLICT_MESSAGE
 from tests.gui.conftest import DialogRecorder
 
 
@@ -127,7 +128,7 @@ def test_output_folder_inside_inputs_is_refused(window: MainWindow, tmp_path: Pa
     window.controller.add_inputs([src])
     page = window.processing
     assert not page.set_output_dir(src / "sortie")
-    assert page.output_error.text() == OUTPUT_CONFLICT
+    assert page.output_error.text() == OUTPUT_CONFLICT_MESSAGE
     assert window.controller.output_dir is None
     assert not page.set_output_dir(tmp_path)  # contains the inputs
     assert page.set_output_dir(tmp_path / "out")

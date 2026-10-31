@@ -88,6 +88,9 @@ class InMemoryMappingStore:
             if batch_id is None or batch == batch_id
         )
 
+    def close(self) -> None:
+        """Nothing to release (same interface as the encrypted store)."""
+
 
 @dataclass(frozen=True, slots=True)
 class MappingEntry:

@@ -8,7 +8,6 @@ re-extraction of produced files are all background tasks.
 
 from __future__ import annotations
 
-import contextlib
 import copy
 import enum
 import shutil
@@ -37,7 +36,6 @@ from anonyma.models import (
     Document,
     DocumentResult,
     ManualEntity,
-    MappingStore,
     Regime,
     ReviewDecisions,
 )
@@ -46,17 +44,18 @@ from anonyma.pipeline import (
     BatchAnalysis,
     BatchResult,
     CancelToken,
+    OutputDirError,
     Pipeline,
     ProgressEvent,
     collect_inputs,
     extract_file,
     validate_output_dir,
 )
+from anonyma.store import EncryptedMappingStore
 from anonyma.textutils import normalize
 
 log = get_logger("gui.controller")
 
-OUTPUT_CONFLICT = OUTPUT_CONFLICT_MESSAGE
 DEFAULT_STORE_NAME = "correspondances.db"
 
 #: Config.review_policy values -> French labels.
@@ -69,7 +68,7 @@ DEFAULT_REVIEW_POLICY = "incertaines"
 
 
 def review_policy(config: Config) -> str:
-    policy = getattr(config, "review_policy", DEFAULT_REVIEW_POLICY)
+    policy = config.review_policy
     return policy if policy in REVIEW_POLICIES else DEFAULT_REVIEW_POLICY
 
 
@@ -83,7 +82,7 @@ def output_conflict(inputs: Iterable[Path], output: Path) -> bool:
     """True when ``output`` is, contains, or lies inside one of the inputs."""
     try:
         validate_output_dir(list(inputs), output)
-    except ValueError:
+    except OutputDirError:
         return True
     return False
 
@@ -92,19 +91,9 @@ def default_store_path(config: Config) -> Path:
     return Path(config.store_path) if config.store_path else paths.data_dir() / DEFAULT_STORE_NAME
 
 
-def open_store(path: Path, passphrase: str, create: bool) -> MappingStore:
-    """Open the encrypted mapping store (raises ``StoreError``/``NotImplementedError``)."""
-    from anonyma.store import EncryptedMappingStore
-
-    path.parent.mkdir(parents=True, exist_ok=True)
+def open_store(path: Path, passphrase: str, create: bool) -> EncryptedMappingStore:
+    """Open the encrypted mapping store (raises ``StoreError``)."""
     return EncryptedMappingStore.open(path, passphrase, create=create)
-
-
-def close_store(store: object) -> None:
-    close = getattr(store, "close", None)
-    if callable(close):
-        with contextlib.suppress(Exception):
-            close()
 
 
 def remove_outputs(result: BatchResult) -> None:
@@ -290,7 +279,7 @@ class BatchController(QObject):
     def check_output_dir(self, path: Path) -> str:
         """French error message, or "" when ``path`` is acceptable."""
         if output_conflict(self.inputs, path):
-            return OUTPUT_CONFLICT
+            return OUTPUT_CONFLICT_MESSAGE
         if path.exists() and not path.is_dir():
             return "Le chemin de sortie désigne un fichier, pas un dossier."
         return ""
@@ -495,7 +484,7 @@ class BatchController(QObject):
         self._cancel = token
 
         def work(report: Report) -> BatchResult:
-            store: MappingStore | None = None
+            store: EncryptedMappingStore | None = None
             if pseudonymize:
                 assert passphrase is not None
                 store = open_store(store_path, passphrase, create)
@@ -507,7 +496,7 @@ class BatchController(QObject):
                 )
             finally:
                 if store is not None:
-                    close_store(store)
+                    store.close()
 
         task = self._start(work, Phase.APPLYING)
 
