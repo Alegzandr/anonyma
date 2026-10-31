@@ -545,3 +545,16 @@ def test_passphrase_never_reaches_child_processes(
     result = invoke("analyser", corpus, "-p", "leger", "-q", env={cli.PASSPHRASE_ENV: SECRET})
     assert result.exit_code == 0, result.output
     assert seen == [None, None]
+
+
+def test_force_utf8(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+
+    buffer = io.BytesIO()
+    stdout = io.TextIOWrapper(buffer, encoding="cp1252")
+    monkeypatch.setattr("sys.stdout", stdout)
+    cli.force_utf8()
+    assert stdout.encoding == "utf-8"
+    stdout.write("Écriture → vérifiée")
+    stdout.flush()
+    assert buffer.getvalue().decode("utf-8") == "Écriture → vérifiée"

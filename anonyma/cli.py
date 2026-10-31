@@ -1458,15 +1458,46 @@ def config_set(
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    multiprocessing.freeze_support()
+def force_utf8() -> None:
+    """Write UTF-8 on stdout and stderr whatever the console code page, so that output
+    redirected to a file or a pipe is never mojibake (Windows defaults to cp1252)."""
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
-            reconfigure(errors="replace")
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):  # pragma: no cover - stream already in use
+                reconfigure(errors="replace")
+
+
+def _stdout_closed() -> bool:
+    """Whether stdout is a pipe whose reader has gone (Windows reports EINVAL, not EPIPE)."""
+    try:
+        sys.stdout.flush()
+    except OSError:
+        return True
+    return False
+
+
+def _silence_stdout() -> None:
+    """Point stdout at the null device so that the interpreter's final flush is quiet."""
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+    except (OSError, ValueError, AttributeError):  # pragma: no cover - no real stdout
+        pass
+
+
+def main() -> None:
+    multiprocessing.freeze_support()
+    force_utf8()
     try:
         app()
     except Exception as exc:
+        if isinstance(exc, OSError) and _stdout_closed():
+            # ``anonyma ... | head``: the reader left, nothing more to say.
+            _silence_stdout()
+            raise SystemExit(EXIT_PARTIAL) from None
         # Type only: messages and tracebacks may quote file names or values.
         from anonyma.logs import get_logger
 
