@@ -1,9 +1,9 @@
 """Outlook data files (.pst/.ost) through pypff (libpff-python, LGPL-3.0+).
 
 Every message of the folder tree is converted to an eml child named
-``<folder>/<sub folder>/message-0001.eml``; the writer produces a zip archive of
-the anonymized eml files (``output_format`` ``zip``) so that verification re-reads
-it like any archive. Folder names are part of the entry names, hence anonymized.
+``<folder>/<sub folder>/message-0001.eml``; the writer produces a folder tree of
+the anonymized eml files (``directory_output``) that verification re-reads
+like any folder. Folder names are part of the entry names, hence anonymized.
 Non-mail items (contacts, appointments...) keep every string property in their
 plain body. Orphan/deleted items recoverable from free space are not exported.
 """

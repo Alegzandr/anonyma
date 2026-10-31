@@ -9,7 +9,7 @@ import pytest
 
 from anonyma import registry
 from anonyma.config import Config
-from anonyma.models import DocumentStatus
+from anonyma.models import FOLDER_FORMAT, DocumentStatus
 from anonyma.pipeline import Pipeline, extract_file
 from tests.canary import CANARY_EMAIL, CANARY_PERSON
 
@@ -60,16 +60,30 @@ def test_pst_children_are_eml(tmp_path: Path, canary_config: Config) -> None:
     assert [c.name for c in child.children] == [f"{CANARY_PERSON}.txt"]
 
 
-def test_pst_output_is_zip_of_anonymized_eml(tmp_path: Path, canary_config: Config) -> None:
+def test_pst_output_is_folder_of_anonymized_eml(tmp_path: Path, canary_config: Config) -> None:
     src = tmp_path / "in"
     src.mkdir()
     (src / "boite.pst").write_bytes(_pst())
     top = Pipeline(canary_config).run([src / "boite.pst"], tmp_path / "out").results[0]
     assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]
-    assert top.output_name == "boite.zip"
-    assert top.output_format == "zip"
+    assert top.output_name == "boite"
+    assert top.output_format == FOLDER_FORMAT
+    assert top.output_path is not None and top.output_path.is_dir()
+    files = sorted(p.relative_to(top.output_path).as_posix() for p in top.output_path.rglob("*"))
+    assert files == ["Dossier [PERSONNE_001]", "Dossier [PERSONNE_001]/message-0001.eml"]
+    data = (top.output_path / "Dossier [PERSONNE_001]" / "message-0001.eml").read_bytes()
+    assert b"uintavalle" not in data.lower()
+    parsed = email.message_from_bytes(data, policy=compat32)
+    assert parsed["From"] == "[PERSONNE_001] <[EMAIL_001]>"
+
+
+def test_embedded_pst_is_packed_as_zip(tmp_path: Path, canary_config: Config) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    with zipfile.ZipFile(src / "lot.zip", "w") as zf:
+        zf.writestr("boite.pst", _pst())
+    top = Pipeline(canary_config).run([src / "lot.zip"], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]
     assert top.output_path is not None
     with zipfile.ZipFile(top.output_path) as zf:
-        assert zf.namelist() == ["Dossier [PERSONNE_001]/message-0001.eml"]
-        data = zf.read(zf.namelist()[0])
-    assert b"uintavalle" not in data.lower()
+        assert zf.namelist() == ["boite.zip"]

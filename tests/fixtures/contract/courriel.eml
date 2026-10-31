@@ -14,13 +14,13 @@ X-Sender: zephyrin.quintavalle@exemple.test
 Thread-Topic: Dossier =?utf-8?q?Z=C3=A9phyrin?= Quintavalle
 DKIM-Signature: v=1; a=rsa-sha256; d=exemple.test; s=sel; b=AAAA
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="===============1405732686926431168=="
+Content-Type: multipart/mixed; boundary="===============2260230161047698311=="
 
---===============1405732686926431168==
+--===============2260230161047698311==
 Content-Type: multipart/alternative;
- boundary="===============2274866072089118966=="
+ boundary="===============7310409530213537255=="
 
---===============2274866072089118966==
+--===============7310409530213537255==
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: quoted-printable
 
@@ -36,12 +36,12 @@ le.test> a =C3=A9crit :
 --=20
 Z=C3=A9phyrin Quintavalle
 
---===============2274866072089118966==
+--===============7310409530213537255==
 MIME-Version: 1.0
 Content-Type: multipart/related;
- boundary="===============8112195149085047382=="
+ boundary="===============3621219052925223678=="
 
---===============8112195149085047382==
+--===============3621219052925223678==
 Content-Type: text/html; charset="utf-8"
 Content-Transfer-Encoding: base64
 
@@ -51,7 +51,7 @@ bGVAZXhlbXBsZS50ZXN0Ij56ZXBoeXJpbi5xdWludGF2YWxsZUBleGVtcGxlLnRlc3Q8L2E+KS48
 L3A+PHA+PGltZyBzcmM9ImNpZDppbWFnZTAwMUBleGVtcGxlLnRlc3QiIGFsdD0iU2lnbmF0dXJl
 Ij48L3A+PC9ib2R5PjwvaHRtbD4NCg==
 
---===============8112195149085047382==
+--===============3621219052925223678==
 Content-Type: image/png
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment;
@@ -482,11 +482,11 @@ eAYAAAAAQAPBMwAAAAAAGgieAQAAAADQQPAMAAAAAIAGgmcAAAAAADQQPAMAAAAAoIHgGQAAAAAA
 DQTPAAAAAABoIHgGAAAAAEADwTMAAAAAABoIngEAAAAA0EDwDAAAAACATt3/AQBDXX+y7xaUAAAA
 AElFTkSuQmCC
 
---===============8112195149085047382==--
+--===============3621219052925223678==--
 
---===============2274866072089118966==--
+--===============7310409530213537255==--
 
---===============1405732686926431168==
+--===============2260230161047698311==
 Content-Type: text/plain
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment;
@@ -496,7 +496,7 @@ MIME-Version: 1.0
 Tm90ZSBjb25jZXJuYW50IFrDqXBoeXJpbiBRdWludGF2YWxsZQ0KQ29udGFjdCA6IHplcGh5cmlu
 LnF1aW50YXZhbGxlQGV4ZW1wbGUudGVzdA0K
 
---===============1405732686926431168==
+--===============2260230161047698311==
 Content-Type: message/rfc822
 Content-Transfer-Encoding: 8bit
 MIME-Version: 1.0
@@ -518,4 +518,4 @@ Cordialement,
 Zéphyrin Quintavalle
 zephyrin.quintavalle@exemple.test
 
---===============1405732686926431168==--
+--===============2260230161047698311==--

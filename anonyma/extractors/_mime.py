@@ -1,6 +1,6 @@
 """MIME messages (eml): extraction and faithful re-serialisation.
 
-Shared by the eml, msg (converted to eml), mbox and pst plugins.
+Shared by the eml, mbox and pst plugins (and the msg plugin for headers).
 
 Extraction (:func:`extract_mime`) parses the message with the ``compat32`` policy
 and exposes:
