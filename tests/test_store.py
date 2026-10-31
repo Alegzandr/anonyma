@@ -11,7 +11,6 @@ from anonyma.config import Config
 from anonyma.models import MappingStore, Profile, Regime
 from anonyma.pipeline import Pipeline
 from anonyma.store import (
-    SCHEMA_VERSION,
     EncryptedMappingStore,
     InMemoryMappingStore,
     KdfParams,
@@ -101,7 +100,6 @@ def test_errors(tmp_path: Path) -> None:
 def test_newer_schema_refused(tmp_path: Path) -> None:
     path = tmp_path / "t.db"
     _open(path).close()
-    assert EncryptedMappingStore.schema_version(path) == SCHEMA_VERSION
     with sqlite3.connect(path) as db:
         db.execute("UPDATE meta SET value = ? WHERE name = 'schema'", (b"99",))
     with pytest.raises(StoreError, match="plus récente"):
@@ -125,9 +123,8 @@ def test_tampered_row_detected(tmp_path: Path) -> None:
 def test_pragmas(tmp_path: Path) -> None:
     path = tmp_path / "t.db"
     with _open(path) as store:
-        db = store._conn()
-        assert db.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
-        assert db.execute("PRAGMA secure_delete").fetchone()[0] == 1
+        assert store._execute("PRAGMA journal_mode") == [("delete",)]
+        assert store._execute("PRAGMA secure_delete") == [(1,)]
     assert not (tmp_path / "t.db-wal").exists()
 
 
@@ -222,3 +219,13 @@ def test_neutral_filenames_encrypted(tmp_path: Path) -> None:
     memory = InMemoryMappingStore()
     memory.save_filename("lot-1", "document_0001.pdf", original)
     assert [e.original for e in memory.filenames("lot-1")] == [original]
+
+
+def test_sqlite_failures_are_store_errors(tmp_path: Path) -> None:
+    path = tmp_path / "t.db"
+    with _open(path) as store:
+        store._execute("DROP TABLE mapping")
+        with pytest.raises(StoreError, match="Lecture impossible"):
+            store.lookup("PERSONNE", "x")
+        with pytest.raises(StoreError, match="Écriture impossible"):
+            store.save("PERSONNE", "x", "X", "[PERSONNE_001]")

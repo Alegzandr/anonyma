@@ -36,7 +36,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import hashes
@@ -129,6 +129,8 @@ _MAGIC = b"anonyma-mapping-store"
 _CHECK_LABEL = b"anonyma/check/v1"
 _NONCE = 12
 _SALT = 16
+_READ_ERROR = "Lecture impossible dans la table de correspondance."
+_WRITE_ERROR = "Écriture impossible dans la table de correspondance."
 
 
 def _derive(passphrase: str, salt: bytes, params: KdfParams) -> tuple[bytes, bytes, bytes, bytes]:
@@ -325,10 +327,15 @@ class EncryptedMappingStore:
     ) -> None:
         self.close()
 
-    def _conn(self) -> sqlite3.Connection:
-        if self._db is None:
-            raise StoreError("La table de correspondance est fermée.")
-        return self._db
+    def _execute(self, sql: str, params: tuple[Any, ...] = (), *, write: bool = False) -> list[Any]:
+        """Run one statement; every SQLite failure becomes a :class:`StoreError`."""
+        with self._lock:
+            if self._db is None:
+                raise StoreError("La table de correspondance est fermée.")
+            try:
+                return self._db.execute(sql, params).fetchall()
+            except sqlite3.Error as exc:
+                raise StoreError(_WRITE_ERROR if write else _READ_ERROR) from exc
 
     # -- crypto helpers --------------------------------------------------------
 
@@ -358,13 +365,8 @@ class EncryptedMappingStore:
 
     def lookup(self, entity_type: str, key: str) -> str | None:
         index = self._lookup_index(entity_type, key)
-        with self._lock:
-            row = (
-                self._conn()
-                .execute("SELECT substitute FROM mapping WHERE lookup = ?", (index,))
-                .fetchone()
-            )
-        return self._open(bytes(row[0]), b"s" + index) if row else None
+        rows = self._execute("SELECT substitute FROM mapping WHERE lookup = ?", (index,))
+        return self._open(bytes(rows[0][0]), b"s" + index) if rows else None
 
     def save(self, entity_type: str, key: str, original: str, substitute: str) -> None:
         index = self._lookup_index(entity_type, key)
@@ -374,29 +376,20 @@ class EncryptedMappingStore:
             self._seal(f"{entity_type}\0{original}", b"o" + index),
             self._seal(substitute, b"s" + index),
         )
-        with self._lock:
-            try:
-                self._conn().execute(
-                    "INSERT INTO mapping (lookup, sub_index, original, substitute)"
-                    " VALUES (?, ?, ?, ?) ON CONFLICT(lookup) DO UPDATE SET"
-                    " sub_index = excluded.sub_index, original = excluded.original,"
-                    " substitute = excluded.substitute",
-                    row,
-                )
-            except sqlite3.Error as exc:
-                raise StoreError("Écriture impossible dans la table de correspondance.") from exc
+        self._execute(
+            "INSERT INTO mapping (lookup, sub_index, original, substitute)"
+            " VALUES (?, ?, ?, ?) ON CONFLICT(lookup) DO UPDATE SET"
+            " sub_index = excluded.sub_index, original = excluded.original,"
+            " substitute = excluded.substitute",
+            row,
+            write=True,
+        )
 
     def reverse(self, substitute: str) -> str | None:
-        index = self._sub_index(substitute)
-        with self._lock:
-            rows = (
-                self._conn()
-                .execute(
-                    "SELECT lookup, original, substitute FROM mapping WHERE sub_index = ?",
-                    (index,),
-                )
-                .fetchall()
-            )
+        rows = self._execute(
+            "SELECT lookup, original, substitute FROM mapping WHERE sub_index = ?",
+            (self._sub_index(substitute),),
+        )
         for lookup, original, sub in rows:
             entry = self._decode_row(bytes(lookup), bytes(original), bytes(sub))
             if entry.substitute == substitute:
@@ -413,22 +406,17 @@ class EncryptedMappingStore:
         data = f"filename\0{batch_id}\0{output_name}".encode()
         index = hmac.new(self._idx_key, data, hashlib.sha256).digest()
         entry = self._seal(f"{batch_id}\0{output_name}\0{original}", b"f" + index)
-        with self._lock:
-            try:
-                self._conn().execute(
-                    "INSERT INTO filenames (id, entry) VALUES (?, ?)"
-                    " ON CONFLICT(id) DO UPDATE SET entry = excluded.entry",
-                    (index, entry),
-                )
-            except sqlite3.Error as exc:
-                raise StoreError("Écriture impossible dans la table de correspondance.") from exc
+        self._execute(
+            "INSERT INTO filenames (id, entry) VALUES (?, ?)"
+            " ON CONFLICT(id) DO UPDATE SET entry = excluded.entry",
+            (index, entry),
+            write=True,
+        )
 
     def filenames(self, batch_id: str | None = None) -> list[FilenameEntry]:
         """Every neutral name of the store (of one batch when ``batch_id`` is given)."""
-        with self._lock:
-            rows = self._conn().execute("SELECT id, entry FROM filenames").fetchall()
         entries = []
-        for index, entry in rows:
+        for index, entry in self._execute("SELECT id, entry FROM filenames"):
             batch, output, original = self._open(bytes(entry), b"f" + bytes(index)).split("\0", 2)
             if batch_id is None or batch == batch_id:
                 entries.append(FilenameEntry(batch, output, original))
@@ -438,27 +426,14 @@ class EncryptedMappingStore:
 
     def items(self) -> Iterator[MappingEntry]:
         """Every decrypted mapping (re-identification, export)."""
-        with self._lock:
-            rows = (
-                self._conn().execute("SELECT lookup, original, substitute FROM mapping").fetchall()
-            )
+        rows = self._execute("SELECT lookup, original, substitute FROM mapping")
         for lookup, original, substitute in rows:
             yield self._decode_row(bytes(lookup), bytes(original), bytes(substitute))
 
     def count(self) -> int:
         """Number of mappings. (Deliberately not ``__len__``: callers test the store
         for truthiness, and an empty store must stay truthy.)"""
-        with self._lock:
-            return int(self._conn().execute("SELECT COUNT(*) FROM mapping").fetchone()[0])
-
-    @staticmethod
-    def schema_version(path: Path) -> int:
-        """Schema version of a store file without unlocking it (0 if not a store)."""
-        try:
-            with contextlib.closing(sqlite3.connect(Path(path))) as db:
-                return int(db.execute("PRAGMA user_version").fetchone()[0])
-        except sqlite3.Error:
-            return 0
+        return int(self._execute("SELECT COUNT(*) FROM mapping")[0][0])
 
 
 __all__ = [
