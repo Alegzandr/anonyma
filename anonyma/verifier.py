@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 
@@ -181,6 +182,7 @@ class Verifier:
         kept = frozenset([*allowed, *self.config.whitelist])
         kept_matcher = _cached(("kept", kept), lambda: _substitutes(set(kept)))
         name_table = _name_table(names, [d.name for d in output.walk()], allowed_keys)
+        kinds: list[SegmentKind] = []  # of each residue, for neutral labels
 
         for doc in output.walk():
             gaps = [
@@ -240,6 +242,7 @@ class Verifier:
                     if keeps(entity_type, value, self.config):
                         continue
                     flagged.append((start, end))
+                    kinds.append(segment.context.kind)
                     result.residues.append(
                         Residue(
                             location=doc.name,
@@ -267,6 +270,7 @@ class Verifier:
                         continue
                     if keeps(entity.entity_type, value, self.config):
                         continue
+                    kinds.append(segment.context.kind)
                     result.residues.append(
                         Residue(
                             location=doc.name,
@@ -279,6 +283,7 @@ class Verifier:
                             and entity.score >= CERTAIN_DETECTOR_SCORE,
                         )
                     )
+        result.residues = neutral_places(result.residues, kinds)
         return result
 
     def verify_raw(
@@ -297,7 +302,7 @@ class Verifier:
             ("raw", tuple(sensitive), frozenset(substitutes), frozenset(kept)),
             lambda: RawScanner(sensitive, substitutes, allowed_keys, kept, self.config),
         )
-        return raw_residues(scanner.scan(output))
+        return neutral_places(raw_residues(scanner.scan(output)))
 
     @staticmethod
     def _values(
@@ -409,6 +414,50 @@ def _derived(entity_type: str, values: set[str]) -> Iterator[tuple[str, bool]]:
     for form, cap in forms.items():
         if form not in values:
             yield form, cap
+
+
+#: Zone shown instead of a segment label that holds a residue (a key, a sheet or
+#: attribute name, a path...).
+NEUTRAL_LABELS: dict[SegmentKind, str] = {
+    SegmentKind.BODY: "texte",
+    SegmentKind.HEADER: "en-tête",
+    SegmentKind.CELL: "cellule",
+    SegmentKind.METADATA: "métadonnée",
+    SegmentKind.OCR: "texte reconnu (OCR)",
+    SegmentKind.ATTRIBUTE: "attribut ou clé",
+    SegmentKind.COMMENT: "commentaire",
+    SegmentKind.NOTE: "note",
+    SegmentKind.FILENAME: "nom du fichier",
+    SegmentKind.HIDDEN: "contenu masqué",
+    SegmentKind.BARCODE: "code-barres",
+    SegmentKind.SIGNATURE: "signature",
+}
+#: Path component shown instead of an output name that holds a residue.
+MASKED_NAME = "[nom masqué]"
+
+
+def neutral_places(residues: Sequence[Residue], kinds: Sequence[SegmentKind] = ()) -> list[Residue]:
+    """``residues`` whose location and zone never echo one of their values: a name
+    or label holding a residue (a file or folder name, a JSON key, an attribute or
+    sheet name) is replaced by a neutral one (``kinds``: segment kind of each)."""
+    keys = {k for k in (normalize(spaced_name(r.value)) for r in residues) if len(k) >= 3}
+    if not keys:
+        return list(residues)
+
+    def leaks(text: str) -> bool:
+        flat = normalize(spaced_name(text))
+        return any(key in flat for key in keys)
+
+    out: list[Residue] = []
+    for i, residue in enumerate(residues):
+        label, location = residue.segment_label, residue.location
+        if leaks(label):
+            kind = kinds[i] if i < len(kinds) else None
+            label = NEUTRAL_LABELS.get(kind, "zone") if kind is not None else "zone"
+        if leaks(location):
+            location = "/".join(MASKED_NAME if leaks(p) else p for p in location.split("/"))
+        out.append(replace(residue, segment_label=label, location=location))
+    return out
 
 
 def _inside(start: int, end: int, spans: Sequence[tuple[int, int]]) -> bool:

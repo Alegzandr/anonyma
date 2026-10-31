@@ -211,3 +211,29 @@ def test_save_time_of_today_is_not_a_residue() -> None:
     assert not verify(metadata(f"{today}T10:15:00Z", "created"), [(today, "DATE")], set()).clean
     old = metadata("2019-03-04T10:15:00Z", "modified")
     assert not verify(old, [("2019-03-04", "DATE")], set()).clean
+
+
+def test_residue_places_never_echo_the_value() -> None:
+    """A residue in a key, a sheet or a file name: the report shows a neutral zone."""
+    doc = Document(
+        source=Path("x"),
+        name="Dossier_Zephyrin_Quintavalle/note.txt",
+        format="txt",
+        status=DocumentStatus.EXTRACTED,
+    )
+    doc.segments = [
+        Segment(
+            "k",
+            "Zéphyrin Quintavalle",
+            (0,),
+            SegmentContext(SegmentKind.ATTRIBUTE, "/fiche/@Zephyrin-Quintavalle"),
+        ),
+        Segment("t", "voir le dossier", (1,), SegmentContext(SegmentKind.BODY, "texte")),
+    ]
+    result = verify(doc, [("Zéphyrin Quintavalle", "PERSONNE")], set())
+    assert result.residues
+    for residue in result.residues:
+        assert "uintavalle" not in residue.segment_label.casefold()
+        assert "uintavalle" not in residue.location.casefold()
+    assert result.residues[0].segment_label == "attribut ou clé"
+    assert result.residues[0].location == "[nom masqué]/note.txt"
