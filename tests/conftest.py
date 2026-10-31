@@ -22,6 +22,21 @@ def portable_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     yield home
 
 
+class _BlankOcr:
+    """An OCR engine that reads no text on any image."""
+
+    def recognize(self, image: object) -> list[object]:
+        return []
+
+
+@pytest.fixture
+def blank_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pages and images are read by an OCR that finds nothing, for tests about something
+    else than OCR: the real engine costs about half a second per rendered page."""
+    blank = _BlankOcr()
+    monkeypatch.setattr(pipeline, "ocr_for", lambda config: blank if config.ocr_enabled else None)
+
+
 @pytest.fixture
 def canary_config() -> Config:
     """Light profile, inline execution, canary terms always masked."""

@@ -191,6 +191,7 @@ def test_7z_encrypted_headers(tmp_path: Path, canary_config: Config) -> None:
 # -- memory: sizes charged before anything is materialised -------------------------
 
 
+@pytest.mark.usefixtures("blank_ocr")  # the budget, not OCR
 def test_pdf_embedded_file_is_charged_before_it_is_read(
     tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:

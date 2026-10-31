@@ -31,6 +31,7 @@ def content_streams(doc: pymupdf.Document) -> bytes:
     return data
 
 
+@pytest.mark.usefixtures("blank_ocr")  # glyphs and objects, not OCR
 def test_redaction_removes_glyphs_and_keeps_neighbours(
     tmp_path: Path, canary_config: Config
 ) -> None:
@@ -61,6 +62,7 @@ def _with_javascript(path: Path) -> None:
     doc.close()
 
 
+@pytest.mark.usefixtures("blank_ocr")  # glyphs and objects, not OCR
 def test_metadata_and_active_content_purged(tmp_path: Path, canary_config: Config) -> None:
     source = tmp_path / "actif.pdf"
     _with_javascript(source)
@@ -86,6 +88,7 @@ def test_metadata_and_active_content_purged(tmp_path: Path, canary_config: Confi
         assert "[PERSONNE_001]" in attached and CANARY_PERSON not in attached
 
 
+@pytest.mark.usefixtures("blank_ocr")  # glyphs and objects, not OCR
 def test_blackout_paints_black_boxes(tmp_path: Path, canary_config: Config) -> None:
     config = Config(
         profile=canary_config.profile,
