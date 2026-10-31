@@ -65,11 +65,13 @@ class Marker:
     def __init__(self) -> None:
         self.count = 0
         self.originals: dict[str, str] = {}
+        self.places: dict[str, str] = {}
 
-    def __call__(self, original: str) -> str:
+    def __call__(self, original: str, place: str = "nom") -> str:
         self.count += 1
         marker = f"QZ{self.count:05d}X"
         self.originals[marker] = original
+        self.places.setdefault(original.strip(), place)
         return marker
 
 
@@ -88,7 +90,14 @@ def write_everything(doc: Document, config: Config, tmp: Path, marker: Marker) -
         if seg.id == FILENAME_SEGMENT_ID or not seg.text.strip():
             continue
         plan.by_segment[seg.id] = [
-            Replacement(0, len(seg.text), seg.text, marker(seg.text), "TEST", "c")
+            Replacement(
+                0,
+                len(seg.text),
+                seg.text,
+                marker(seg.text, f"{seg.context.kind}:{seg.context.label}"),
+                "TEST",
+                "c",
+            )
         ]
     destination = tmp / new_id() / f"sortie{writer.output_extension(doc)}"
     destination.parent.mkdir(parents=True)
@@ -171,5 +180,7 @@ def test_every_segment_is_rewritten(fixture: Path, tmp_path: Path) -> None:
             and original.strip() in joined
         }
     )
-    assert not survivors, f"segments left untouched by the {fmt} writer: {survivors[:10]}"
+    assert not survivors, f"segments left untouched by the {fmt} writer: " + ", ".join(
+        f"{t!r} ({marker.places.get(t)})" for t in survivors
+    )
     assert any(m in joined for m in marker.originals), "no marker visible in the output"

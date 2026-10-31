@@ -39,7 +39,10 @@ def run_pipeline(source: Path, tmp_path: Path, config: Config) -> tuple[BatchRes
         pipeline.close(analysis)
     top = result.results[0]
     assert top.output_path is not None, [i.message for i in top.issues]
-    assert top.status in (DocumentStatus.ANONYMIZED, DocumentStatus.NEEDS_REVIEW), [
-        i.message for i in top.issues
-    ]
+    residues = top.verification.residues if top.verification else []
+    assert top.status in (DocumentStatus.ANONYMIZED, DocumentStatus.NEEDS_REVIEW), (
+        [i.message for i in top.issues],
+        # Synthetic test data: values may be shown.
+        [(r.segment_label, r.entity_type, r.detector, r.value) for r in residues],
+    )
     return result, top.output_path
