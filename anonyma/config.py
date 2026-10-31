@@ -157,16 +157,20 @@ class Config:
 def load_business_list(path: Path) -> list[tuple[str, str]]:
     """Read a CSV of values to always mask: ``valeur[,type]`` per row.
 
-    The delimiter (``,`` or ``;``) is sniffed; a header row starting with
+    The delimiter (``;``, tab or ``,``) is guessed; a header row starting with
     ``valeur``/``value`` is skipped.
     """
     text = path.read_text(encoding="utf-8-sig")
-    try:
-        dialect: type[csv.Dialect] | csv.Dialect = csv.Sniffer().sniff(text[:4096], ";,\t")
-    except csv.Error:
-        dialect = csv.excel
+    # csv.Sniffer is unreliable when some rows have a single column: pick the most
+    # frequent candidate delimiter of the first lines instead.
+    # On ties ";" and tab win over "," (commas often appear inside names).
+    head = "\n".join(text.splitlines()[:20])
+    counts = {d: head.count(d) for d in (";", "\t", ",")}
+    delimiter = max(counts, key=lambda d: counts[d])
+    if counts[delimiter] == 0:
+        delimiter = "\x1f"  # single column: never split
     rows: list[tuple[str, str]] = []
-    for i, row in enumerate(csv.reader(text.splitlines(), dialect)):
+    for i, row in enumerate(csv.reader(text.splitlines(), delimiter=delimiter)):
         if not row or not row[0].strip():
             continue
         if i == 0 and row[0].strip().lower() in {"valeur", "value", "nom", "name"}:

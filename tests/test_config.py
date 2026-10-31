@@ -41,3 +41,13 @@ def test_business_list(tmp_path: Path) -> None:
     ]
     config = Config(business_lists=[str(csv_file)], always_mask=[{"value": "X1"}])
     assert len(config.mask_terms()) == 3
+
+
+def test_business_list_semicolon_with_missing_types(tmp_path: Path) -> None:
+    csv_file = tmp_path / "l.csv"
+    csv_file.write_text("Acme Industrie\nProjet Hélios;PROJET\nDupont, Jean\n", encoding="utf-8")
+    assert load_business_list(csv_file) == [
+        ("Acme Industrie", "TERME_METIER"),
+        ("Projet Hélios", "PROJET"),
+        ("Dupont, Jean", "TERME_METIER"),
+    ]

@@ -210,3 +210,37 @@ def test_process_pool(tmp_path: Path, canary_config: Config) -> None:
     canary_config.workers = 2
     result = Pipeline(canary_config).run([src], tmp_path / "out")
     assert [r.status for r in result.results] == [DocumentStatus.ANONYMIZED] * 3
+
+
+def test_rejected_mention_survives_manual_propagation(
+    tmp_path: Path, canary_config: Config
+) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "a.txt").write_text("Bérénice écrit à Quintavalle.\n", encoding="utf-8")
+    canary_config.always_mask.append({"value": "Quintavalle", "type": "PERSONNE"})
+    pipeline = Pipeline(canary_config)
+    analysis = pipeline.analyze([src])
+    mention = next(e for e in analysis.entities if e.value == "Quintavalle")
+    decisions = ReviewDecisions(
+        rejected_mentions={mention.key}, manual=[ManualEntity("Bérénice", "PERSONNE")]
+    )
+    resolved = pipeline.resolve_decisions(analysis, decisions)
+    assert mention.key not in {e.key for e in resolved.entities}
+    assert "Quintavalle" in resolved.allowed
+    result = pipeline.apply(analysis, tmp_path / "out", decisions)
+    top = result.results[0]
+    assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]
+    assert top.output_path is not None
+    assert top.output_path.read_text(encoding="utf-8") == "[PERSONNE_001] écrit à Quintavalle.\n"
+    pipeline.close(analysis)
+
+
+def test_progress_reports_item_index(tmp_path: Path, canary_config: Config) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    for i in range(2):
+        (src / f"{i}.txt").write_text("x", encoding="utf-8")
+    events = []
+    Pipeline(canary_config).run([src], tmp_path / "out", progress=events.append)
+    assert [e.index for e in events if e.stage == "analyse"] == [None, 0, 1]

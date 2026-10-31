@@ -55,7 +55,7 @@ from anonyma.models import (
 )
 from anonyma.replacer import Replacer, SubstitutionTable, build_plan
 from anonyma.resolver import propagate, resolve
-from anonyma.textutils import find_all, safe_filename
+from anonyma.textutils import find_all, normalize, safe_filename
 from anonyma.verifier import Verifier
 
 log = get_logger("pipeline")
@@ -75,6 +75,9 @@ class ProgressEvent:
     done: int
     total: int
     message: str = ""  # French, never sensitive
+    #: Index of the item just finished, in input order (``BatchAnalysis.documents``
+    #: order); None for start/global events.
+    index: int | None = None
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
@@ -122,6 +125,17 @@ class BatchAnalysis:
 
     def review_clusters(self) -> list[EntityCluster]:
         return [c for c in self.clusters.values() if c.needs_review]
+
+
+@dataclass(slots=True)
+class ResolvedDecisions:
+    """Entities and clusters after applying the review decisions."""
+
+    entities: list[Entity]
+    #: Active (non-rejected) clusters.
+    clusters: dict[str, EntityCluster]
+    #: Values the verifier must tolerate (rejected clusters and mentions).
+    allowed: list[str]
 
 
 @dataclass(slots=True)
@@ -648,7 +662,7 @@ class Pipeline:
                     break
                 results[i] = fn(*job)
                 if progress:
-                    progress(ProgressEvent(stage, i + 1, total))
+                    progress(ProgressEvent(stage, i + 1, total, index=i))
             return results
         with ProcessPoolExecutor(self._workers(total), initializer=_worker_init) as pool:
             futures: dict[Future[Any], int] = {
@@ -661,7 +675,7 @@ class Pipeline:
                     break
                 results[futures[future]] = future.result()
                 if progress:
-                    progress(ProgressEvent(stage, done, total))
+                    progress(ProgressEvent(stage, done, total, index=futures[future]))
         return results
 
     # -- public API ----------------------------------------------------------
@@ -719,46 +733,14 @@ class Pipeline:
     ) -> BatchResult:
         decisions = decisions or ReviewDecisions()
         output_dir = Path(output_dir).resolve()
-        self._check_output_dir(analysis, output_dir)
+        self.check_output_dir(analysis, output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        clusters = {
-            cid: replace(c, variants=set(c.variants), detectors=set(c.detectors))
-            for cid, c in analysis.clusters.items()
-        }
-        for cid, new_type in decisions.retyped_clusters.items():
-            if cid in clusters:
-                clusters[cid].entity_type = new_type
-        for cid in decisions.confirmed_clusters:
-            if cid in clusters:
-                clusters[cid].review = ReviewStatus.CONFIRMED
-                clusters[cid].needs_review = False
-        rejected = set(decisions.rejected_clusters)
-        for cid in rejected:
-            if cid in clusters:
-                clusters[cid].review = ReviewStatus.REJECTED
-
-        entities = [
-            replace(e, entity_type=clusters[e.cluster_id].entity_type)
-            if e.cluster_id in clusters
-            else replace(e)
-            for e in analysis.entities
-            if e.cluster_id not in rejected and e.key not in decisions.rejected_mentions
-        ]
-        if decisions.manual:
-            manual = self._manual_entities(analysis, decisions)
-            entities, clusters = resolve([*entities, *manual], self.config, clusters)
-            extra = propagate(analysis.documents, clusters, entities, self.config)
-            entities, clusters = resolve([*entities, *extra], self.config, clusters)
-        for cid in decisions.confirmed_clusters:
-            if cid in clusters:
-                clusters[cid].needs_review = False
-
-        active = {cid: c for cid, c in clusters.items() if cid not in rejected}
-        entities = [e for e in entities if e.cluster_id in active]
+        resolved = self.resolve_decisions(analysis, decisions)
+        entities, active = resolved.entities, resolved.clusters
         table = Replacer(self.config, self.store).assign(active, entities)
         sensitive = sorted({(v, c.entity_type) for c in active.values() for v in c.variants})
-        allowed = sorted({v for cid in rejected if cid in clusters for v in clusters[cid].variants})
+        allowed = resolved.allowed
         review = {cid for cid, c in active.items() if c.needs_review}
 
         jobs: list[tuple[Any, ...]] = []
@@ -806,9 +788,63 @@ class Pipeline:
     def close(self, analysis: BatchAnalysis) -> None:
         shutil.rmtree(analysis.work_dir, ignore_errors=True)
 
-    # -- helpers ---------------------------------------------------------------
+    def resolve_decisions(
+        self, analysis: BatchAnalysis, decisions: ReviewDecisions
+    ) -> ResolvedDecisions:
+        """Apply review decisions to an analysis without touching it.
 
-    def _manual_entities(self, analysis: BatchAnalysis, decisions: ReviewDecisions) -> list[Entity]:
+        Pure (no store, no I/O): the GUI uses it for previews, ``apply`` for output.
+        """
+        clusters = {
+            cid: replace(c, variants=set(c.variants), detectors=set(c.detectors))
+            for cid, c in analysis.clusters.items()
+        }
+        for cid, new_type in decisions.retyped_clusters.items():
+            if cid in clusters:
+                clusters[cid].entity_type = new_type
+        for cid in decisions.confirmed_clusters:
+            if cid in clusters:
+                clusters[cid].review = ReviewStatus.CONFIRMED
+        rejected = set(decisions.rejected_clusters)
+        for cid in rejected:
+            if cid in clusters:
+                clusters[cid].review = ReviewStatus.REJECTED
+
+        entities = [
+            replace(e, entity_type=clusters[e.cluster_id].entity_type)
+            if e.cluster_id in clusters
+            else replace(e)
+            for e in analysis.entities
+            if e.cluster_id not in rejected
+        ]
+        if decisions.manual:
+            manual = self.manual_entities(analysis, decisions)
+            entities, clusters = resolve([*entities, *manual], self.config, clusters)
+            extra = propagate(analysis.documents, clusters, entities, self.config)
+            entities, clusters = resolve([*entities, *extra], self.config, clusters)
+        for cid in decisions.confirmed_clusters:
+            if cid in clusters:
+                clusters[cid].needs_review = False
+
+        active = {cid: c for cid, c in clusters.items() if cid not in rejected}
+        # Filter single-mention rejections last so propagation cannot bring them back.
+        dropped = [e for e in entities if e.key in decisions.rejected_mentions]
+        entities = [
+            e
+            for e in entities
+            if e.cluster_id in active and e.key not in decisions.rejected_mentions
+        ]
+        used = {e.cluster_id for e in entities}
+        active = {cid: c for cid, c in active.items() if cid in used}
+        kept_values = {normalize(e.value) for e in entities}
+        allowed = {v for cid in rejected if cid in clusters for v in clusters[cid].variants}
+        # A rejected mention stays visible; it is only allowed by the verifier when the
+        # same value is not masked elsewhere (otherwise it is a genuine residue).
+        allowed |= {e.value for e in dropped if normalize(e.value) not in kept_values}
+        return ResolvedDecisions(entities, active, sorted(allowed))
+
+    def manual_entities(self, analysis: BatchAnalysis, decisions: ReviewDecisions) -> list[Entity]:
+        """Every occurrence in the batch of the user-added values."""
         found: list[Entity] = []
         for manual in decisions.manual:
             for doc in analysis.all_documents():
@@ -832,8 +868,11 @@ class Pipeline:
         return found
 
     @staticmethod
-    def _check_output_dir(analysis: BatchAnalysis, output_dir: Path) -> None:
-        """Refuse an output folder that contains, or lies inside, the inputs."""
+    def check_output_dir(analysis: BatchAnalysis, output_dir: Path) -> None:
+        """Refuse an output folder that contains, or lies inside, the inputs.
+
+        Raises ``ValueError`` with a French message."""
+        output_dir = Path(output_dir).resolve()
         roots = [*analysis.inputs, *(d.source.resolve() for d in analysis.documents)]
         for root in roots:
             folder = root if root.is_dir() else root.parent
@@ -853,6 +892,7 @@ __all__ = [
     "Pipeline",
     "ProgressCallback",
     "ProgressEvent",
+    "ResolvedDecisions",
     "collect_inputs",
     "detect_tree",
     "extract_file",

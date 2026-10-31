@@ -13,3 +13,4 @@ dist/
 /data/
 /models/
 !tests/fixtures/**
+.claude/
