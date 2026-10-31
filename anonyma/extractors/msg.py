@@ -34,6 +34,7 @@ from anonyma.extractors._msgfile import (
     PropObject,
     TextItem,
     decode_string,
+    rtf_only,
     split_headers,
     text_items,
 )
@@ -184,8 +185,19 @@ class MsgExtractor(Extractor):
         tree = MsgTree(entries)
         if tree.root is None:
             raise ValueError("pas un message Outlook")
+        rtf_bodies = set()
         for item in text_items(tree):
             document.segments.extend(item_segments(item))
+            if item.kind == "rtf":
+                rtf_bodies.add(item.owner)
+        if any(
+            o.kind == "message" and rtf_only(o) and o.path not in rtf_bodies for o in tree.objects
+        ):  # the writer always drops the compressed RTF
+            document.add_issue(
+                Severity.WARNING,
+                "msg.rtf_unreadable",
+                "Corps de message RTF illisible : il est supprimé.",
+            )
         children: dict[str, str] = {}
         for index, obj in enumerate(tree.attachments(), start=1):
             ctx.check_cancelled()

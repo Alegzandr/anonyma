@@ -426,6 +426,21 @@ def test_msg_rtf_only_body_and_removed_attachments(tmp_path: Path, canary_config
     assert struct.unpack_from("<I", header, 20)[0] == 1  # attachment count updated
 
 
+def test_msg_unreadable_rtf_body_is_reported(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import compressed_rtf
+
+    def broken(_data: bytes) -> bytes:
+        raise ValueError("corrupt")
+
+    source = tmp_path / "r.msg"
+    source.write_bytes(_rtf_only_msg())
+    monkeypatch.setattr(compressed_rtf, "decompress", broken)
+    doc = extract_file(source, "r.msg", canary_config, tmp_path / "w")
+    assert "msg.rtf_unreadable" in {i.code for i in doc.issues}
+
+
 # -- mbox ----------------------------------------------------------------------
 
 

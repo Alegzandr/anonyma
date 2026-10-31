@@ -337,7 +337,7 @@ def text_items(tree: MsgTree) -> Iterator[TextItem]:
                 yield TextItem(obj.path, name, pid, ptype, "headers", text, label)
             else:
                 yield TextItem(obj.path, name, pid, ptype, "string", text, label)
-        if obj.kind == "message" and _rtf_only(obj):
+        if obj.kind == "message" and rtf_only(obj):
             rtf_text = rtf_body(obj)
             if rtf_text is not None:
                 name = stream_name(PR_BODY, PT_UNICODE)
@@ -346,7 +346,8 @@ def text_items(tree: MsgTree) -> Iterator[TextItem]:
                 )
 
 
-def _rtf_only(obj: PropObject) -> bool:
+def rtf_only(obj: PropObject) -> bool:
+    """The body of ``obj`` exists only as compressed RTF."""
     has_rtf = obj.stream(PR_RTF_COMPRESSED, PT_BINARY) is not None
     has_body = any(
         obj.stream(pid, ptype) is not None
