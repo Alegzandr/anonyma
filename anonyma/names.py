@@ -340,16 +340,96 @@ def needs_capital(word: str) -> bool:
     return " " not in word.strip() and is_common_word(word)
 
 
+# -- functional names --------------------------------------------------------------
+
+#: Words naming a function, a team, a mailbox or a channel rather than a person
+#: (normalized): « Service Client Entreprises », « Protection des données »,
+#: ``facturation@``, ``offres@``.
+ROLE_WORDS = frozenset(
+    {
+        "accueil", "achat", "achats", "admin", "administratif", "administration", "agence",
+        "alerte", "alertes", "alerts", "assistance", "billing", "boutique", "bureau",
+        "cabinet", "care", "careers", "centre", "clientele", "client", "clients", "commande",
+        "commandes", "commercial", "commerciale", "commerciaux", "communication", "compta",
+        "comptabilite", "conformite", "conseil", "contact", "contacts", "contentieux",
+        "contrats", "customer", "desk", "direction", "donnees", "dpo", "entreprise",
+        "entreprises", "equipe", "expedition", "facturation", "factures", "gestion", "help",
+        "helpdesk", "hotline", "info", "infos", "informatique", "juridique", "litiges",
+        "livraison", "logistique", "mail", "maintenance", "marketing", "newsletter",
+        "noreply", "notification", "notifications", "offres", "office", "operations", "paie",
+        "partenaires", "particuliers", "planning", "pole", "postmaster", "presse",
+        "professionnels", "projet", "projets", "promotions", "protection", "qualite",
+        "reception", "reclamation", "reclamations", "recouvrement", "recrutement",
+        "relation", "relations", "rgpd", "rh", "sales", "sav", "secretariat", "securite",
+        "service", "services", "siege", "social", "standard", "support", "systeme",
+        "team", "technique", "ventes", "webmaster",
+    }
+)  # fmt: skip
+#: Capitals-only tokens read as acronyms inside a functional name (« Projets IRVE »).
+_ACRONYM_MAX = 5
+_VERSION = re.compile(r"^v?\d+(?:[.,]\d+)*$", re.IGNORECASE)
+
+
+def is_role_word(word: str) -> bool:
+    return normalize(word.strip(".,;:()")) in ROLE_WORDS
+
+
+def is_functional_name(value: str, local_part: str = "") -> bool:
+    """A display name or field value that names a team, a mailbox or a piece of
+    software, not a person: every word is an ordinary word, a particle, an acronym or
+    a version number, at least one names a function (:data:`ROLE_WORDS`) and none
+    is a given name (« Service Client Entreprises », « Protection des données »,
+    « Projets IRVE », « Hexagone Facturation 4.2 »; never « Pierre Boulanger »).
+
+    ``local_part`` (the address next to a display name) vetoes it when it reads as
+    a person's login (``jean.boulanger``)."""
+    words = [w.strip(".,;:()\"'«»") for w in value.split()]
+    words = [w for w in words if w and w not in ("&", "-", "–", "|", "/")]
+    if not words:
+        return False
+    role = version = False
+    for word in words:
+        key = normalize(word)
+        if _VERSION.match(word):
+            version = True
+            continue
+        if not any(c.isalpha() for c in word):
+            return False
+        if given_like(word) or civility_of(word) is not None:
+            return False
+        if key in ROLE_WORDS:
+            role = True
+        elif key in PARTICLES or key in ("et", "a", "aux", "au", "pour", "en", "sur"):
+            continue
+        elif word.isupper() and len(word) <= _ACRONYM_MAX:
+            continue  # « IRVE », « DSI »: an acronym, given a role word elsewhere
+        elif not is_common_word(word):
+            return False
+    generic_box = bool(local_part) and all(
+        is_role_word(p) for p in re.split(r"[._\-+]", local_part) if p
+    )
+    if not (role or (version and len(words) > 1) or generic_box):
+        return False  # « Promo <offres@…> »: ordinary words over a function mailbox
+    if local_part:
+        parts = [p for p in re.split(r"[._\-+]", local_part) if p]
+        if any(given_like(p) and not is_initial(p) and not is_role_word(p) for p in parts):
+            return False
+    return True
+
+
 __all__ = [
     "CIVILITIES",
     "LOGIN_TEMPLATES",
     "PARTICLES",
+    "ROLE_WORDS",
     "PersonName",
     "civility_of",
     "given_like",
     "initials_forms",
     "initials_of",
+    "is_functional_name",
     "is_initial",
+    "is_role_word",
     "login_forms",
     "login_of",
     "login_parts",

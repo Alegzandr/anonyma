@@ -39,6 +39,7 @@ from anonyma.fieldhints import field_hint, hint_of
 from anonyma.logs import get_logger
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
 from anonyma.registry import register_detector
+from anonyma.names import is_functional_name
 from anonyma.textutils import normalize
 
 log = get_logger("detectors.regex")
@@ -63,7 +64,8 @@ PERSON_LABEL_PARTS = (
 ORG_LABEL_PARTS = ("company", "societe", "organisation", "organization", "entreprise", "publisher")
 _NOT_PERSON_LABEL = ("tool", "outil", "application", "software", "logiciel", "producer", "date")
 _DISPLAY_NAME = regex.compile(
-    r"(?:\"(?P<quoted>[^\"<>]+)\"|(?P<name>[^<>,;\"]*?))[ \t]*<[ \t]*[^<>@\s]+@[^<>\s]+[ \t]*>"
+    r"(?:\"(?P<quoted>[^\"<>]+)\"|(?P<name>[^<>,;\"]*?))[ \t]*<[ \t]*(?P<local>[^<>@\s]+)@"
+    r"[^<>\s]+[ \t]*>"
 )
 _ANGLE = regex.compile(r"<[^<>\s]+>")
 #: A whole e-mail address (same shape as the ``email`` rule).
@@ -467,6 +469,8 @@ class RegexDetector(Detector):
         """Dates of birth, ordinary dates (``detect_dates``) and timestamps.
 
         A date or a time next to a signature cue (« Signé le », « horodatage »,
+            if entity_type == EntityType.PERSON and is_functional_name(stripped):
+                continue  # « Projets IRVE », « Hexagone Facturation 4.2 »
         « signed by »...) or to a person name identifies a signing event: it is
         masked even when ``detect_dates`` is off. A time alone is only kept then.
         """
@@ -489,6 +493,8 @@ class RegexDetector(Detector):
                 continue
             if signature or _signature_context(text, start, end, previous, persons):
                 out.append((entity_type, start, end, max(_score, 0.8), attrs))
+                if is_functional_name(stripped, m.group("local")):
+                    continue  # « Service Client <service-client@…> »: a mailbox, no one
             elif self.detect_dates and not time_only:
                 out.append(item)
         return out

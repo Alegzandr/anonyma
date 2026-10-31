@@ -19,7 +19,7 @@ from functools import lru_cache
 from anonyma.data import first_name, is_common_word, lexicon
 from anonyma.detectors._rules import plausible_email
 from anonyma.models import EntityType, Segment, SegmentKind
-from anonyma.names import civility_of
+from anonyma.names import civility_of, is_functional_name
 from anonyma.textutils import normalize
 
 _PDF_TOKEN = re.compile(
@@ -362,6 +362,8 @@ def plausible(
                 return False  # "Mme", "Madame, Monsieur": civilities alone
             if lowercase_common:
                 return False  # "Un martin-pêcheur": ordinary words, whatever the score
+            if is_functional_name(stripped):
+                return False  # "Service Client Entreprises": a team, not a person
             if not any(w[0].isupper() for w in content) and score < COMMON_WORD_SCORE:
                 return False  # "vu zephyrin" lower-case fragments need high confidence
             if _all_common(stripped) and not any(
