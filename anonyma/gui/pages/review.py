@@ -1157,6 +1157,12 @@ class ReviewPage(QWidget):
         if keys:
             self.controller.reject_mentions(keys)
             self._after_action(rows)
+            self.banner.show_message(
+                "Occurrence conservée. La même valeur restant masquée ailleurs, la vérification "
+                "signalera probablement un résidu et placera le fichier en quarantaine : pour "
+                "conserver la valeur partout, rejetez plutôt l'entité entière.",
+                "info",
+            )
 
     def retype_selected(self) -> None:
         rows = self._rows_or_warn()
