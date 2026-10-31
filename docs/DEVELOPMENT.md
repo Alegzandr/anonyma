@@ -23,11 +23,19 @@ machine, `.doc` and `.ppt` are unsupported and `.xls` is written as `.xlsx`.
 ```sh
 uv run ruff check . && uv run ruff format . && uv run mypy && uv run pytest
 uv run pytest -m "not slow"                          # quick loop
+ANONYMA_TEST_MODELS=<models-dir> uv run --extra llm pytest -m models   # real models
 uv run python packaging/build.py                     # full portable folder + smoke tests + zip
 uv run python packaging/build.py --sans-libreoffice  # light archive, no LibreOffice
 uv run python packaging/gen_licenses.py              # regenerate LICENSES.md
 uv run python -m tests.benchmark.measure             # benchmark: measured recall and precision
 ```
+
+Tests marked `models` (real GLiNER and Qwen3 models, several minutes) run only when
+`ANONYMA_TEST_MODELS` names a folder of installed models (one sub-folder per model, as in
+`models/`); the repository's own `models/` is never used by the tests, and `--extra llm`
+brings llama-cpp-python for the Qwen3 ones. Every other test runs with fakes and no model.
+A test stuck for 5 minutes has the stacks of its threads dumped (`faulthandler_timeout`),
+and every CI job has a `timeout-minutes`.
 
 The benchmark (`tests/benchmark/`) anonymises a synthetic corpus of 24 trap documents and
 re-reads the outputs by independent means; method and results in

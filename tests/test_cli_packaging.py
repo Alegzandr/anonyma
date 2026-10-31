@@ -70,21 +70,11 @@ def test_gen_licenses_lists_catalog_models(monkeypatch: pytest.MonkeyPatch) -> N
     assert "exemple/llm-x" in "\n".join(_load("gen_licenses").model_rows())
 
 
-def test_spec_declares_both_executables() -> None:
+def test_spec_bundles_the_lazily_imported_packages() -> None:
+    """Packages the frozen smoke test (``packaging/build.py``) does not exercise: a
+    missing one would only make its format « non supporté » in the portable build."""
     text = (ROOT / "packaging" / "anonyma.spec").read_text(encoding="utf-8")
-    for needle in (
-        'APP_NAME = "Anonyma"',
-        'CLI_NAME = "anonyma-cli"',
-        'collect_submodules("anonyma")',
-        '"anonyma.extractors", "anonyma.writers", "anonyma.detectors"',
-        "console=False",
-        "console=True",
-        "BUNDLE(",
-    ):
-        assert needle in text
-    assert "anonyma.app" in (ROOT / "packaging" / "launch_gui.py").read_text(encoding="utf-8")
-    assert "anonyma.cli" in (ROOT / "packaging" / "launch_cli.py").read_text(encoding="utf-8")
-    for module in ("rapidocr_onnxruntime", "pymupdf", "extract_msg", "pillow_heif", "py7zr"):
+    for module in ("pillow_heif", "py7zr"):
         assert f'"{module}"' in text
 
 

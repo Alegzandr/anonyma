@@ -24,15 +24,11 @@ def test_window_construction(window: MainWindow) -> None:
         assert window.stack.currentWidget() is window.pages[key]
 
 
-@pytest.mark.parametrize("mode", ["clair", "sombre", "systeme"])
-def test_themes_apply(window: MainWindow, mode: str) -> None:
-    tokens = theme.apply_theme(mode)
-    assert tokens.dark is theme.resolve_dark(mode)
-    if mode == "sombre":
-        assert tokens.dark
-    if mode == "clair":
-        assert not tokens.dark
-    theme.apply_theme("clair")
+def test_themes_apply(window: MainWindow) -> None:
+    for mode in ("sombre", "systeme", "clair"):
+        tokens = theme.apply_theme(mode)
+        assert tokens.dark is theme.resolve_dark(mode)
+        assert tokens.dark is {"sombre": True, "clair": False}.get(mode, tokens.dark)
 
 
 def test_entity_colours_are_distinct_and_legible() -> None:

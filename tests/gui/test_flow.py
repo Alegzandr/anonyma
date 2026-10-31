@@ -238,7 +238,7 @@ def test_learning_whitelist_and_always_mask_with_undo(
     assert {"value": "Brest", "type": "LIEU"} not in Config.load(path).always_mask
 
 
-@pytest.mark.parametrize("policy", ["aucune", "incertaines", "systematique"])
+@pytest.mark.parametrize("policy", ["aucune", "incertaines"])
 def test_review_policy(
     qtbot: Any,
     window: MainWindow,
@@ -263,8 +263,7 @@ def test_review_policy(
             window.processing.run_button.click()
         assert c.result is None
         assert window.current_page() == "review"
-        word = "systématique" if policy == "systematique" else "incertaine"
-        assert word in window.processing.banner.text()
+        assert "incertaine" in window.processing.banner.text()
 
 
 def test_systematic_review_even_without_uncertainty(
@@ -272,10 +271,13 @@ def test_systematic_review_even_without_uncertainty(
 ) -> None:
     prepare(qtbot, window, batch, tmp_path / "sortie")
     window.processing.set_review_policy("systematique")
+    assert Config.load(window.context.config_path).review_policy == "systematique"
     with qtbot.waitSignal(window.controller.review_required, timeout=TIMEOUT):
         window.processing.run_button.click()
     assert window.controller.pending_review_count() == 0
     assert window.controller.result is None
+    assert window.current_page() == "review"
+    assert "systématique" in window.processing.banner.text()
 
 
 def test_primary_button_applies_decisions_and_reanalysis_asks_first(

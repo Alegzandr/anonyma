@@ -147,6 +147,22 @@ def context(gui_config: Config, portable_home: Path) -> AppContext:
     )
 
 
+@pytest.fixture(autouse=True)
+def _delete_windows(qapp: Any) -> Iterator[None]:
+    """Delete the main windows a test leaves behind (once qtbot has closed them).
+
+    A closed window is only hidden: without this, every test adds its ~800 widgets to
+    the application, and each theme change (one per ``window`` fixture) restyles all
+    of them, so the GUI tests got slower and slower (88 s instead of 14 s)."""
+    yield
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    for widget in qapp.topLevelWidgets():
+        if isinstance(widget, MainWindow):
+            widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
 @pytest.fixture
 def window(qtbot: Any, context: AppContext, recorder: DialogRecorder) -> Iterator[MainWindow]:
     theme.apply_theme("clair")

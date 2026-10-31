@@ -1,9 +1,8 @@
-"""GLiNER ONNX detector. Model tests run when the model is installed in ``models/``
-(or ``ANONYMA_TEST_MODELS``) and are skipped otherwise."""
+"""GLiNER ONNX detector. Model tests run only when ``ANONYMA_TEST_MODELS`` points at
+the installed models (see ``tests/modelpaths.py``) and are skipped otherwise."""
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -29,13 +28,13 @@ from anonyma.models import (
     SegmentKind,
 )
 from anonyma.pipeline import Pipeline
-
-REPO_MODELS = Path(os.environ.get("ANONYMA_TEST_MODELS", Path(__file__).parents[1] / "models"))
+from tests.modelpaths import models_dir_or_skip
 
 
 @pytest.fixture
 def installed(monkeypatch: pytest.MonkeyPatch) -> Iterator[Config]:
-    monkeypatch.setattr(paths, "models_dir", lambda: REPO_MODELS)
+    models = models_dir_or_skip()
+    monkeypatch.setattr(paths, "models_dir", lambda: models)
     config = Config(profile=Profile.STANDARD, workers=1)
     spec = model_spec(config)
     if spec is None or model_dir(spec) is None:
@@ -110,6 +109,7 @@ def test_custom_labels_and_threads() -> None:
 
 
 @pytest.mark.models
+@pytest.mark.slow
 def test_gliner_detects_french_entities(installed: Config) -> None:
     text = (
         "Bonjour, je suis Bérangère Kervella, responsable des achats chez Exemplia Conseil "
@@ -127,6 +127,7 @@ def test_gliner_detects_french_entities(installed: Config) -> None:
 
 
 @pytest.mark.models
+@pytest.mark.slow
 def test_gliner_long_segments_are_chunked(installed: Config) -> None:
     filler = "Le comité a examiné les points inscrits à l'ordre du jour sans observation. " * 60
     text = filler + "Le rapport final a été rédigé par Gwenaëlle Le Bihan."
@@ -136,6 +137,7 @@ def test_gliner_long_segments_are_chunked(installed: Config) -> None:
 
 
 @pytest.mark.models
+@pytest.mark.slow
 def test_standard_profile_pipeline(installed: Config, tmp_path: Path) -> None:
     src = tmp_path / "in"
     src.mkdir()

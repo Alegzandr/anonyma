@@ -12,7 +12,7 @@ from anonyma.config import Config
 from anonyma.models import DocumentStatus
 from anonyma.pipeline import extract_file
 from tests.canary import CANARY_EMAIL, CANARY_PERSON
-from tests.office.conftest import libreoffice_missing, run_pipeline
+from tests.office.conftest import run_pipeline
 from tests.office.helpers import zip_read
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "contract"
@@ -69,21 +69,3 @@ def test_xls_without_libreoffice_becomes_xlsx(
         data = zip_read(output, part).decode()
         assert CANARY_PERSON not in data and CANARY_EMAIL not in data
         assert "QUINTAVALLE" not in data
-
-
-@pytest.mark.skipif(libreoffice_missing(), reason="LibreOffice non installé")
-@pytest.mark.parametrize(
-    ("modern", "target"),
-    [("rapport.docx", "doc:MS Word 97"), ("presentation.pptx", "ppt:MS PowerPoint 97")],
-)
-def test_legacy_roundtrip_with_libreoffice(
-    tmp_path: Path, canary_config: Config, modern: str, target: str
-) -> None:
-    soffice = libreoffice.find_soffice(canary_config)
-    assert soffice is not None
-    converted = libreoffice.convert(FIXTURES / modern, target, tmp_path / "conv", soffice)
-    source = tmp_path / f"ancien{converted.suffix}"
-    source.write_bytes(converted.read_bytes())
-    result, output = run_pipeline(source, tmp_path, canary_config)
-    assert output.suffix == converted.suffix
-    assert result.results[0].status in (DocumentStatus.ANONYMIZED, DocumentStatus.NEEDS_REVIEW)

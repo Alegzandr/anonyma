@@ -22,6 +22,9 @@ from anonyma.writers.pdf import (
     layout_text,
 )
 
+#: Layout is the subject here, not OCR: rendered pages are read by a blank engine.
+pytestmark = pytest.mark.usefixtures("blank_ocr")
+
 SIZE = 10.0
 LEADING = 11.5  # tight: glyph boxes (13.7 pt) overlap the neighbouring lines
 X0, Y0 = 20.0, 30.0

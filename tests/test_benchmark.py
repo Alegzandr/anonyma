@@ -2,13 +2,12 @@
 
 Slow: the whole corpus goes through the command line, then the outputs are re-read
 with independent means (see ``tests/benchmark/measure.py``). The STANDARD profile
-needs the GLiNER model in ``models/`` (or ``ANONYMA_TEST_MODELS``).
+needs the GLiNER model in ``ANONYMA_TEST_MODELS`` (see ``tests/modelpaths.py``).
 """
 
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,8 +21,7 @@ from anonyma.models import Profile
 from tests.benchmark import generate, measure
 from tests.benchmark.common import TRUTH
 from tests.fixtures.generators.mail_archive_image import FONT_CANDIDATES
-
-REPO_MODELS = Path(os.environ.get("ANONYMA_TEST_MODELS", Path(__file__).parents[1] / "models"))
+from tests.modelpaths import models_dir_or_skip
 
 #: Thresholds: >= 99 % of direct identifiers hidden in STANDARD (the target), LIGHT
 #: (no model) a little lower; precision and untouched control sentences kept sane.
@@ -38,22 +36,22 @@ def _ratio(pair: list[int]) -> float:
     return ok / total if total else 1.0
 
 
-def _link_models(home: Path) -> None:
+def _link_models(home: Path, models: Path) -> None:
     """``home/models`` pointing at the installed models (junction on Windows)."""
     target = home / "models"
     if sys.platform == "win32":
         import _winapi
 
-        _winapi.CreateJunction(str(REPO_MODELS.resolve()), str(target))
+        _winapi.CreateJunction(str(models.resolve()), str(target))
     else:
-        target.symlink_to(REPO_MODELS.resolve(), target_is_directory=True)
+        target.symlink_to(models.resolve(), target_is_directory=True)
 
 
-def _run(tmp_path: Path, profile: str, with_models: bool) -> dict[str, Any]:
+def _run(tmp_path: Path, profile: str, models: Path | None = None) -> dict[str, Any]:
     home = tmp_path / "accueil"
     home.mkdir()
-    if with_models:
-        _link_models(home)
+    if models is not None:
+        _link_models(home, models)
     argv = ["--profil", profile, "--travail", str(tmp_path / "travail"), "--sans-ecrire"]
     results = measure.main([*argv, "--accueil", str(home)])
     return results["profiles"][profile]  # type: ignore[no-any-return]
@@ -103,15 +101,16 @@ def test_generator_is_deterministic(tmp_path: Path) -> None:
 
 @pytest.mark.slow
 def test_light_profile(tmp_path: Path) -> None:
-    _check(_run(tmp_path, "leger", with_models=False), "leger")
+    _check(_run(tmp_path, "leger"), "leger")
 
 
 @pytest.mark.slow
 @pytest.mark.models
 def test_standard_profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    models = models_dir_or_skip()
     with monkeypatch.context() as patched:
-        patched.setattr(paths, "models_dir", lambda: REPO_MODELS)
+        patched.setattr(paths, "models_dir", lambda: models)
         spec = model_spec(Config(profile=Profile.STANDARD))
         if spec is None or model_dir(spec) is None:
             pytest.skip("modèle GLiNER non installé")
-    _check(_run(tmp_path, "standard", with_models=True), "standard")
+    _check(_run(tmp_path, "standard", models), "standard")

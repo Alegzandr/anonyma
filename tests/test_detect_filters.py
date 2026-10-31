@@ -6,6 +6,7 @@ import pytest
 
 from anonyma.config import Config
 from anonyma.detectors._filters import (
+    contentless,
     filename_as_text,
     is_pdf_operators,
     plausible,
@@ -14,7 +15,8 @@ from anonyma.detectors._filters import (
 )
 from anonyma.detectors.paranoid import ParanoidDetector
 from anonyma.detectors.regex_fr import RegexDetector
-from anonyma.models import Segment, SegmentContext, SegmentKind
+from anonyma.models import EntityType, Segment, SegmentContext, SegmentKind
+from tests.test_llm import SHORT_INPUTS
 
 
 def seg(text: str, kind: SegmentKind = SegmentKind.BODY, label: str = "") -> Segment:
@@ -92,6 +94,22 @@ def test_implausible_spans(entity_type: str, value: str, score: float) -> None:
 )
 def test_plausible_spans(entity_type: str, value: str, score: float) -> None:
     assert plausible(entity_type, value, score)
+
+
+def test_contentless_spans_are_never_plausible_whatever_the_type() -> None:
+    """Shared by GLiNER and the language model: a pleasantry, a label or a lone date is
+    never kept, even with a sure score, while the dates themselves still are."""
+    for value in SHORT_INPUTS:
+        for entity_type in EntityType:
+            if entity_type in (EntityType.DATE, EntityType.DATE_OF_BIRTH) and any(
+                c.isdigit() for c in value
+            ):
+                continue  # « 12/03/2024 » as a date is a date
+            assert not plausible(entity_type, value, 0.99), (value, entity_type)
+    assert plausible("DATE_NAISSANCE", "12/07/1984", 0.9)
+    assert not contentless("PERSONNE", "Avril")  # a month, and a first name
+    assert not contentless("TELEPHONE", "06 12 34 56 78")
+    assert plausible("IDENTIFIANT", "123-45-6789", 0.9)  # not a date
 
 
 def test_usernames_never_from_file_names() -> None:
