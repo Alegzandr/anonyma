@@ -2,7 +2,7 @@
  "name": "mesure",
  "profiles": {
   "leger": {
-   "seconds": 28.450239900004817,
+   "seconds": 28.30227549999836,
    "statuses": {
     "01_txt_lettre": [
      "anonymise"
@@ -50,7 +50,7 @@
      "anonymise"
     ],
     "16_pdf_releve": [
-     "anonymise"
+     "a_revoir"
     ],
     "17_pdf_numerise": [
      "anonymise"
@@ -103,6 +103,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -115,6 +116,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -127,6 +129,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -139,6 +142,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -151,6 +155,7 @@
         "corps, signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -163,6 +168,7 @@
         "en-tête (sur trois lignes)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -175,6 +181,7 @@
         "en-tête"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -187,6 +194,7 @@
         "en-tête, post-scriptum"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -199,6 +207,7 @@
         "en-tête"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -211,6 +220,7 @@
         "en-tête"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -223,6 +233,7 @@
         "objet"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -235,6 +246,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -247,6 +259,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -259,6 +272,7 @@
         "date"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "01_txt_lettre/lettre_reclamation.txt [octets latin-1] « Nantes »",
         "01_txt_lettre/lettre_reclamation.txt [octets utf-8] « Nantes »",
@@ -275,6 +289,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -287,6 +302,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "01_txt_lettre/lettre_reclamation.txt [octets utf-8] « directrice administrative et financière »",
         "01_txt_lettre/lettre_reclamation.txt « directrice administrative et financière »"
@@ -302,6 +318,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -314,6 +331,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -326,6 +344,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -338,6 +357,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -350,6 +370,7 @@
         "corps, URL"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -362,6 +383,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -374,6 +396,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -386,6 +409,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -398,6 +422,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -410,6 +435,7 @@
         "post-scriptum"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -448,6 +474,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -460,6 +487,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -472,6 +500,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -484,6 +513,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -496,6 +526,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -508,6 +539,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -520,6 +552,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -532,6 +565,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -544,6 +578,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -556,6 +591,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -568,6 +604,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -580,6 +617,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -592,6 +630,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -604,6 +643,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -616,6 +656,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -628,6 +669,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -640,6 +682,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -652,6 +695,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -664,6 +708,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -676,6 +721,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -688,6 +734,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -700,6 +747,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -712,6 +760,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -724,6 +773,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -736,6 +786,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -748,6 +799,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -760,6 +812,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -772,6 +825,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -784,6 +838,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -796,6 +851,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -808,6 +864,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -820,6 +877,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -832,6 +890,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -844,6 +903,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -856,6 +916,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -868,6 +929,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -880,6 +942,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -892,6 +955,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -904,6 +968,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -916,6 +981,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -928,6 +994,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -940,6 +1007,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -952,6 +1020,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -964,6 +1033,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -976,6 +1046,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -988,6 +1059,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1000,6 +1072,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1012,6 +1085,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1024,6 +1098,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1036,6 +1111,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1048,6 +1124,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1060,6 +1137,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1072,6 +1150,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1084,6 +1163,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1096,6 +1176,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1108,6 +1189,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1120,6 +1202,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1132,6 +1215,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1144,6 +1228,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1156,6 +1241,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1168,6 +1254,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1180,6 +1267,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1192,6 +1280,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1204,6 +1293,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1216,6 +1306,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1228,6 +1319,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1240,6 +1332,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1252,6 +1345,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1264,6 +1358,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1276,6 +1371,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1288,6 +1384,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1300,6 +1397,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1312,6 +1410,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1324,6 +1423,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1336,6 +1436,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1348,6 +1449,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1360,6 +1462,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1372,6 +1475,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1384,6 +1488,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1396,6 +1501,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1408,6 +1514,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1420,6 +1527,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1432,6 +1540,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1444,6 +1553,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1456,6 +1566,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1468,6 +1579,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1480,6 +1592,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1492,6 +1605,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1504,6 +1618,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1516,6 +1631,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1528,6 +1644,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1540,6 +1657,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1552,6 +1670,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1564,6 +1683,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1576,6 +1696,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1588,6 +1709,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -1624,6 +1746,7 @@
         "valeur, clé"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1636,6 +1759,7 @@
         "valeur login"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1648,6 +1772,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1660,6 +1785,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1672,6 +1798,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1684,6 +1811,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1696,6 +1824,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1708,6 +1837,7 @@
         "objet adresse"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1720,6 +1850,7 @@
         "objet adresse"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1732,6 +1863,7 @@
         "objet adresse"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1744,6 +1876,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1756,6 +1889,7 @@
         "valeur sous clé nominative"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1768,6 +1902,7 @@
         "valeur, note échappée \\u"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1780,6 +1915,7 @@
         "valeur login"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1792,6 +1928,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1804,6 +1941,7 @@
         "nombre JSON"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1816,6 +1954,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1828,6 +1967,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1840,6 +1980,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1852,6 +1993,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -1890,6 +2032,7 @@
         "élément assureur"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "04_xml_sinistre/declaration_sinistre.xml (décodé) « Assurances Bellerive »",
         "04_xml_sinistre/declaration_sinistre.xml [octets latin-1] « Assurances Bellerive »",
@@ -1906,6 +2049,7 @@
         "commentaire, attributs, instruction de traitement"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": true
       },
@@ -1918,6 +2062,7 @@
         "commentaire XML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1930,6 +2075,7 @@
         "attribut"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1942,6 +2088,7 @@
         "élément"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1954,6 +2101,7 @@
         "élément (saut de ligne)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1966,6 +2114,7 @@
         "élément"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1978,6 +2127,7 @@
         "élément"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -1990,6 +2140,7 @@
         "attribut, CDATA"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2002,6 +2153,7 @@
         "attribut"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2014,6 +2166,7 @@
         "élément"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "04_xml_sinistre/declaration_sinistre.xml (balises) « Brest »",
         "04_xml_sinistre/declaration_sinistre.xml (décodé) « Brest »",
@@ -2056,6 +2209,7 @@
         "title, meta, alt, title, gras coupé, nom de fichier image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2068,6 +2222,7 @@
         "attribut data, mailto encodé %40"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2080,6 +2235,7 @@
         "href"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2092,6 +2248,7 @@
         "texte, attribut title"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "05_html_equipe/equipe.html (balises) « responsable communication »",
         "05_html_equipe/equipe.html (décodé) « responsable communication »",
@@ -2110,6 +2267,7 @@
         "balise address avec <br>"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2122,6 +2280,7 @@
         "balise address"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2134,6 +2293,7 @@
         "JSON-LD, texte, title"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2146,6 +2306,7 @@
         "commentaire HTML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2158,6 +2319,7 @@
         "texte"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2170,6 +2332,7 @@
         "href et texte"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2182,6 +2345,7 @@
         "JSON-LD, href tel:, texte"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2194,6 +2358,7 @@
         "texte"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "05_html_equipe/equipe.html (balises) « chef de projet »",
         "05_html_equipe/equipe.html (décodé) « chef de projet »",
@@ -2236,6 +2401,7 @@
         "signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2248,6 +2414,7 @@
         "From, Return-Path, signature texte et HTML, alt/title, URL, docx joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": true
       },
@@ -2260,6 +2427,7 @@
         "From, Return-Path"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2272,6 +2440,7 @@
         "en-tête Received"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2284,6 +2453,7 @@
         "en-tête Received (nom d'hôte)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2296,6 +2466,7 @@
         "signature, href"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2308,6 +2479,7 @@
         "signature"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "06_eml_fil/fil_discussion.eml (base64) « responsable RH »",
         "06_eml_fil/fil_discussion.eml (base64)!word/document.xml (balises) « responsable RH »",
@@ -2333,6 +2505,7 @@
         "signature texte/HTML, image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2345,6 +2518,7 @@
         "signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2357,6 +2531,7 @@
         "To, citation niveau 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2369,6 +2544,7 @@
         "To, Received, citation"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2381,6 +2557,7 @@
         "Cc, objet, citations niveaux 1-3, pièces jointes, noms de fichiers"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2393,6 +2570,7 @@
         "signature citée niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2405,6 +2583,7 @@
         "Cc, citations"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2417,6 +2596,7 @@
         "corps, citation niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2429,6 +2609,7 @@
         "corps, docx joint, message joint niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2441,6 +2622,7 @@
         "citation niveau 2, docx joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2453,6 +2635,7 @@
         "citation niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2465,6 +2648,7 @@
         "citation niveau 3, pdf joint, objet du message joint niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2477,6 +2661,7 @@
         "docx joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2489,6 +2674,7 @@
         "docx joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2501,6 +2687,7 @@
         "citation niveau 3 (transfert), pdf joint, message joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": true
       },
@@ -2513,6 +2700,7 @@
         "citation transfert, message joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2525,24 +2713,70 @@
         "message joint"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-025",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Wed, 04 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-026",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Wed, 4 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Received"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-027",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "dim. 1 mars 2026 à 18:40",
+       "where": [
+        "en-tête cité dans le corps"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-028",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Sun, 01 Mar 2026 18:40:00 +0100",
+       "where": [
+        "Date du message joint"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 66,
-      "vrais": 58,
-      "faux": 8,
-      "faux_dates": 1,
+      "spans": 67,
+      "vrais": 66,
+      "faux": 1,
+      "faux_dates": 0,
       "faux_exemples": [
-       "2026 09",
-       "wed 04",
-       "2026 09",
-       "0100",
-       "1 mars 2026 a 18 40",
-       "batiment b",
-       "2026 18 40",
-       "0100"
+       "batiment b"
       ]
      },
      "keep_total": 2,
@@ -2570,6 +2804,7 @@
         "From (RFC 2047 Q), Subject (RFC 2047 B), corps HTML coupé, zip joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2582,6 +2817,7 @@
         "From"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2594,6 +2830,7 @@
         "corps HTML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2606,6 +2843,7 @@
         "corps HTML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2618,6 +2856,7 @@
         "URL du pixel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2630,6 +2869,7 @@
         "To (NOM Prénom), salutation"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2642,6 +2882,7 @@
         "To"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2654,19 +2895,30 @@
         "zip joint"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-009",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Thu, 05 Mar 2026 11:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
       "spans": 11,
-      "vrais": 9,
-      "faux": 2,
+      "vrais": 11,
+      "faux": 0,
       "faux_dates": 0,
-      "faux_exemples": [
-       "2026 11",
-       "0100"
-      ]
+      "faux_exemples": []
      },
      "keep_total": 1,
      "keep_ok": 1,
@@ -2693,6 +2945,7 @@
         "From, ligne From mbox, corps (« From the desk of », ligne échappée >From)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2705,6 +2958,7 @@
         "From, séparateur mbox"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2717,6 +2971,7 @@
         "corps QP"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2729,6 +2984,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "08_mbox_boite/boite.mbox [octets latin-1] « avocate »",
         "08_mbox_boite/boite.mbox [octets utf-8] « avocate »",
@@ -2745,6 +3001,7 @@
         "To, From, signature initiale"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2757,6 +3014,7 @@
         "To, From, séparateur mbox"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2769,6 +3027,7 @@
         "To, From"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": true
       },
@@ -2781,6 +3040,7 @@
         "From, séparateur mbox"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2793,6 +3053,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2805,6 +3066,7 @@
         "CSV joint (base64), objet, corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2817,6 +3079,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2829,6 +3092,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2841,6 +3105,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2853,6 +3118,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2865,6 +3131,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2877,25 +3144,70 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-017",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon, 09 Mar 2026 08:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-018",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon Mar  9 08:00:00 2026",
+       "where": [
+        "séparateurs mbox"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-019",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Tue, 10 Mar 2026 08:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-020",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Tue, 10 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 26,
-      "vrais": 17,
-      "faux": 9,
+      "spans": 31,
+      "vrais": 30,
+      "faux": 1,
       "faux_dates": 0,
       "faux_exemples": [
-       "mon 09",
-       "2026 08",
-       "0100",
-       "tue 10",
-       "2026 08",
-       "0100",
-       "12 mars 2026 a 14 h 30",
-       "2026 09",
-       "0100"
+       "12 mars 2026 a 14 h 30"
       ]
      },
      "keep_total": 1,
@@ -2925,6 +3237,7 @@
         "sujet, destinataire, corps texte/HTML/RTF, pièce jointe et son nom"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2937,6 +3250,7 @@
         "destinataire, en-têtes"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2949,6 +3263,7 @@
         "corps texte/HTML/RTF"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2961,6 +3276,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2973,6 +3289,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2985,6 +3302,7 @@
         "pièce jointe"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -2997,6 +3315,7 @@
         "expéditeur, en-têtes"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3009,6 +3328,7 @@
         "expéditeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3021,20 +3341,30 @@
         "en-tête Received"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-010",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon, 9 Mar 2026 10:00:00 +0100",
+       "where": [
+        "Received (en-têtes de transport)"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
       "spans": 20,
-      "vrais": 17,
-      "faux": 3,
+      "vrais": 20,
+      "faux": 0,
       "faux_dates": 0,
-      "faux_exemples": [
-       "mon 9",
-       "2026 10",
-       "0100"
-      ]
+      "faux_exemples": []
      },
      "keep_total": 1,
      "keep_ok": 1,
@@ -3061,6 +3391,7 @@
         "pied de page, métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3073,6 +3404,7 @@
         "pied de page, métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3085,6 +3417,7 @@
         "pied de page, métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3097,6 +3430,7 @@
         "pied de page, métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3109,6 +3443,7 @@
         "corps (gras/italique coupé), tableau, descr image, mots-clés, titre, image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3121,6 +3456,7 @@
         "corps, tableau, image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3133,6 +3469,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "10_docx_audit/rapport_audit.docx!word/document.xml (balises) « auditeur »",
         "10_docx_audit/rapport_audit.docx!word/document.xml (décodé) « auditeur »",
@@ -3151,6 +3488,7 @@
         "tableau"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3163,6 +3501,7 @@
         "tableau"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3175,6 +3514,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3187,6 +3527,7 @@
         "lien sur deux runs, info-bulle"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3199,6 +3540,7 @@
         "corps, cible du lien, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3211,6 +3553,7 @@
         "corps, commentaire (personne au nom de ville)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3223,6 +3566,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3235,6 +3579,7 @@
         "commentaire"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3247,6 +3592,7 @@
         "révision insérée, auteur du commentaire, dernier modificateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3259,6 +3605,7 @@
         "auteur des révisions, propriété personnalisée"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3271,6 +3618,7 @@
         "révision supprimée, en-tête, note de bas de page, auteur, responsable"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3283,6 +3631,7 @@
         "révision supprimée"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3295,6 +3644,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3307,6 +3657,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -3343,6 +3694,7 @@
         "métadonnées (société)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3355,6 +3707,7 @@
         "nom de feuille, nom défini, formule, cellules"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3367,6 +3720,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3379,6 +3733,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3391,6 +3746,7 @@
         "cellule (doubles espaces)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3403,6 +3759,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3415,6 +3772,7 @@
         "cellules, commentaire de cellule, note VML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3427,6 +3785,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3439,6 +3798,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3451,6 +3811,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3463,6 +3824,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3475,6 +3837,7 @@
         "commentaire de cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3487,6 +3850,7 @@
         "cellules, dernier modificateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3499,6 +3863,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3511,6 +3876,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3523,6 +3889,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3535,6 +3902,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3547,6 +3915,7 @@
         "chaîne en ligne, en-tête, auteur du commentaire, créateur, responsable"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3559,6 +3928,7 @@
         "cellule numérique"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3571,6 +3941,7 @@
         "pied de page, propriété personnalisée"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -3607,6 +3978,7 @@
         "métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3619,6 +3991,7 @@
         "titre coupé en deux runs, descr, disposition, créateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3631,6 +4004,7 @@
         "masque"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3643,6 +4017,7 @@
         "corps, notes, commentaire"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3655,6 +4030,7 @@
         "corps, propriété personnalisée"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3667,6 +4043,7 @@
         "notes de l'orateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3679,6 +4056,7 @@
         "notes de l'orateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3691,6 +4069,7 @@
         "commentaire"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3703,6 +4082,7 @@
         "corps (civilité + NOM), notes, auteur de commentaire, modificateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3715,6 +4095,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "12_pptx_projet/projet_hermine.pptx!ppt/slides/slide1.xml (balises) « présidente »",
         "12_pptx_projet/projet_hermine.pptx!ppt/slides/slide1.xml (décodé) « présidente »",
@@ -3732,6 +4113,7 @@
         "notes"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -3768,6 +4150,7 @@
         "titre, métadonnées"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml (balises) « Association des Riverains du Val-Fleuri »",
         "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml (décodé) « Association des Riverains du Val-Fleuri »",
@@ -3786,6 +4169,7 @@
         "corps (span), en-tête, créatrice initiale"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3798,6 +4182,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml (balises) « présidente »",
         "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml (décodé) « présidente »",
@@ -3815,6 +4200,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3827,6 +4213,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3839,6 +4226,7 @@
         "corps, annotation, modification suivie, créateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3851,6 +4239,7 @@
         "annotation, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3863,6 +4252,7 @@
         "modification suivie (suppression)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3875,6 +4265,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3887,6 +4278,7 @@
         "corps (saut de ligne)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3899,6 +4291,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -3940,6 +4333,7 @@
         "nom de feuille, cellule, formule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3952,6 +4346,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3964,6 +4359,7 @@
         "cellule, annotation, en-tête"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3976,6 +4372,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -3988,6 +4385,7 @@
         "cellule, auteur d'annotation, créatrice"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4000,6 +4398,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -4036,6 +4435,7 @@
         "\\info company"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4048,6 +4448,7 @@
         "titre, en-tête, corps (italique)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4060,6 +4461,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4072,6 +4474,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4084,6 +4487,7 @@
         "corps (\\line)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4096,6 +4500,7 @@
         "auteur, corps (gras coupé), signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4108,6 +4513,7 @@
         "signature (initiales)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4120,6 +4526,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4132,6 +4539,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4144,6 +4552,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "15_rtf_attestation/attestation.rtf « ingénieur méthodes »"
        ],
@@ -4158,6 +4567,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "15_rtf_attestation/attestation.rtf [octets latin-1] « Rouen »",
         "15_rtf_attestation/attestation.rtf [octets utf-8] « Rouen »",
@@ -4198,6 +4608,7 @@
         "corps (NOM Prénom), adresse, titre, sujet, signet, page 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4210,6 +4621,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4222,6 +4634,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4234,6 +4647,7 @@
         "zone de texte sur deux lignes"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4246,6 +4660,7 @@
         "page 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4258,6 +4673,7 @@
         "page 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4270,6 +4686,7 @@
         "page 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4282,6 +4699,7 @@
         "deux polices sur une ligne, annotation, auteur, XMP"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4294,6 +4712,7 @@
         "corps, lien, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -4330,6 +4749,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4342,6 +4762,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4354,6 +4775,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4366,6 +4788,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4378,6 +4801,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4390,6 +4814,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4402,6 +4827,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -4438,6 +4864,7 @@
         "image, métadonnées PNG"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4450,6 +4877,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4462,6 +4890,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4474,6 +4903,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4486,6 +4916,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4498,6 +4929,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4510,6 +4942,7 @@
         "métadonnées PNG (tEXt, iTXt)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -4546,6 +4979,7 @@
         "image, EXIF (Artist, XPAuthor, CameraOwnerName, description)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4558,6 +4992,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4570,6 +5005,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4582,6 +5018,7 @@
         "EXIF GPS"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -4618,6 +5055,7 @@
         "nom de dossier, nom de fichier, CV, courriel, docx et txt imbriqués"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4630,6 +5068,7 @@
         "CV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4642,6 +5081,7 @@
         "CV, courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4654,6 +5094,7 @@
         "CV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4666,6 +5107,7 @@
         "CV, docx imbriqué"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4678,6 +5120,7 @@
         "nom de fichier du courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4690,6 +5133,7 @@
         "docx dans zip dans courriel dans zip"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4702,6 +5146,7 @@
         "txt dans zip dans courriel dans zip"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4714,6 +5159,7 @@
         "commentaire d'archive, courriel, auteur du docx, CSV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4726,6 +5172,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4738,19 +5185,30 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-012",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Fri, 06 Mar 2026 10:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
       "spans": 20,
-      "vrais": 18,
-      "faux": 2,
+      "vrais": 20,
+      "faux": 0,
       "faux_dates": 0,
-      "faux_exemples": [
-       "2026 10",
-       "0100"
-      ]
+      "faux_exemples": []
      },
      "keep_total": 2,
      "keep_ok": 2,
@@ -4777,6 +5235,7 @@
         "courriel dans zip dans 7z, nom de fichier 7z, CSV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4789,6 +5248,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4801,6 +5261,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4813,6 +5274,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4825,6 +5287,7 @@
         "courriel, CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4837,6 +5300,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4849,6 +5313,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4861,6 +5326,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -4881,11 +5347,11 @@
      "format": "txt",
      "outputs": [
       [
-       "Salariés/[PERSONNE_050]/[PERSONNE_050]_entretien.csv",
+       "Salariés/[PERSONNE_049]/[PERSONNE_049]_entretien.csv",
        false
       ],
       [
-       "Salariés/[PERSONNE_050]/CV [PERSONNE_050].txt",
+       "Salariés/[PERSONNE_049]/CV [PERSONNE_049].txt",
        false
       ]
      ],
@@ -4901,6 +5367,7 @@
         "noms de dossier et de fichiers, minuscules et majuscules sans accent"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4913,6 +5380,7 @@
         "CV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4925,6 +5393,7 @@
         "CV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -4937,6 +5406,7 @@
         "CSV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -4973,6 +5443,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "23_txt_temoins/notes_internes.txt [octets latin-1] « Lyon »",
         "23_txt_temoins/notes_internes.txt [octets utf-8] « Lyon »",
@@ -4989,6 +5460,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5001,6 +5473,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "23_txt_temoins/notes_internes.txt [octets latin-1] « Paris »",
         "23_txt_temoins/notes_internes.txt [octets utf-8] « Paris »",
@@ -5017,6 +5490,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "23_txt_temoins/notes_internes.txt [octets utf-8] « Isère »",
         "23_txt_temoins/notes_internes.txt « Isère »"
@@ -5061,6 +5535,7 @@
         "titre"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "24_txt_anglais/incident_report.txt [octets latin-1] « inc20260315 »",
         "24_txt_anglais/incident_report.txt [octets utf-8] « inc20260315 »",
@@ -5077,6 +5552,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5089,6 +5565,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "24_txt_anglais/incident_report.txt [octets latin-1] « site manager »",
         "24_txt_anglais/incident_report.txt [octets utf-8] « site manager »",
@@ -5105,6 +5582,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5117,6 +5595,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5129,6 +5608,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5141,6 +5621,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5153,6 +5634,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5165,6 +5647,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5177,6 +5660,7 @@
         "adresse"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "24_txt_anglais/incident_report.txt [octets latin-1] « Bristol »",
         "24_txt_anglais/incident_report.txt [octets utf-8] « Bristol »",
@@ -5193,6 +5677,7 @@
         "corps (apostrophe)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5205,6 +5690,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5217,6 +5703,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5229,6 +5716,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5241,6 +5729,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5253,6 +5742,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5265,6 +5755,7 @@
         "corps (majuscules avec tréma)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5277,6 +5768,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "24_txt_anglais/incident_report.txt [octets latin-1] « Berlin »",
         "24_txt_anglais/incident_report.txt [octets utf-8] « Berlin »",
@@ -5293,6 +5785,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5305,6 +5798,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5317,6 +5811,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5329,6 +5824,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5341,6 +5837,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -5361,7 +5858,7 @@
      "format": "pdf",
      "outputs": [
       [
-       "Contrat_[PERSONNE_065]_signe.pdf",
+       "Contrat_[PERSONNE_064]_signe.pdf",
        false
       ]
      ],
@@ -5377,6 +5874,7 @@
         "corps, champ de formulaire, tampon image (casse mixte), signature numérique, métadonnées, XMP, nom de fichier"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5389,6 +5887,7 @@
         "corps, certificat de signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5401,6 +5900,7 @@
         "tampon image (vertical), date de signature, XMP"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5413,6 +5913,7 @@
         "image, QR code, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -5425,6 +5926,7 @@
         "texte invisible, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -5526,6 +6028,10 @@
      "URL": [
       4,
       4
+     ],
+     "DATE_ENVOI": [
+      11,
+      11
      ],
      "GPS": [
       1,
@@ -5839,6 +6345,10 @@
       "ADRESSE": [
        3,
        3
+      ],
+      "DATE_ENVOI": [
+       5,
+       5
       ]
      },
      "mbox": {
@@ -5869,6 +6379,10 @@
       "IDENTIFIANT": [
        1,
        1
+      ],
+      "DATE_ENVOI": [
+       4,
+       4
       ]
      },
      "msg": {
@@ -5897,6 +6411,10 @@
        1
       ],
       "IP": [
+       1,
+       1
+      ],
+      "DATE_ENVOI": [
        1,
        1
       ]
@@ -6227,6 +6745,10 @@
       "IBAN": [
        1,
        1
+      ],
+      "DATE_ENVOI": [
+       1,
+       1
       ]
      },
      "7z": {
@@ -6270,15 +6792,15 @@
       10
      ],
      "eml": [
-      67,
-      77
+      77,
+      78
      ],
      "mbox": [
-      17,
-      26
+      30,
+      31
      ],
      "msg": [
-      17,
+      20,
       20
      ],
      "docx": [
@@ -6318,7 +6840,7 @@
       0
      ],
      "zip": [
-      18,
+      20,
       20
      ],
      "7z": [
@@ -6327,12 +6849,12 @@
      ]
     },
     "precision": [
-     295,
-     325
+     323,
+     331
     ],
     "precision_without_dates": [
-     295,
-     322
+     323,
+     329
     ],
     "keep": [
      42,
@@ -6340,11 +6862,12 @@
     ]
    },
    "report_counts": {
-    "anonymise": 26
+    "a_revoir": 1,
+    "anonymise": 25
    }
   },
   "standard": {
-   "seconds": 27.66815850000421,
+   "seconds": 46.050871499988716,
    "statuses": {
     "01_txt_lettre": [
      "anonymise"
@@ -6359,10 +6882,10 @@
      "anonymise"
     ],
     "05_html_equipe": [
-     "anonymise"
+     "a_revoir"
     ],
     "06_eml_fil": [
-     "anonymise"
+     "a_revoir"
     ],
     "07_eml_encode": [
      "anonymise"
@@ -6380,7 +6903,7 @@
      "anonymise"
     ],
     "12_pptx_projet": [
-     "anonymise"
+     "a_revoir"
     ],
     "13_odt_compte_rendu": [
      "anonymise"
@@ -6392,7 +6915,7 @@
      "anonymise"
     ],
     "16_pdf_releve": [
-     "anonymise"
+     "a_revoir"
     ],
     "17_pdf_numerise": [
      "anonymise"
@@ -6401,20 +6924,20 @@
      "anonymise"
     ],
     "19_jpg_badge": [
-     "anonymise"
+     "a_revoir"
     ],
     "20_zip_dossier": [
      "anonymise"
     ],
     "21_7z_sauvegarde": [
-     "anonymise"
+     "a_revoir"
     ],
     "22_dossiers_nommes": [
      "anonymise",
      "anonymise"
     ],
     "23_txt_temoins": [
-     "anonymise"
+     "a_revoir"
     ],
     "24_txt_anglais": [
      "anonymise"
@@ -6445,6 +6968,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6457,6 +6981,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6469,6 +6994,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6481,6 +7007,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6493,6 +7020,7 @@
         "corps, signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6505,6 +7033,7 @@
         "en-tête (sur trois lignes)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6517,6 +7046,7 @@
         "en-tête"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6529,6 +7059,7 @@
         "en-tête, post-scriptum"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6541,6 +7072,7 @@
         "en-tête"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6553,6 +7085,7 @@
         "en-tête"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6565,6 +7098,7 @@
         "objet"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6577,6 +7111,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6589,6 +7124,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6600,12 +7136,9 @@
        "where": [
         "date"
        ],
-       "leaked": true,
-       "hits": [
-        "01_txt_lettre/lettre_reclamation.txt [octets latin-1] « Nantes »",
-        "01_txt_lettre/lettre_reclamation.txt [octets utf-8] « Nantes »",
-        "01_txt_lettre/lettre_reclamation.txt « Nantes »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -6617,6 +7150,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6628,11 +7162,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "01_txt_lettre/lettre_reclamation.txt [octets utf-8] « directrice administrative et financière »",
-        "01_txt_lettre/lettre_reclamation.txt « directrice administrative et financière »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -6644,6 +7176,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6656,6 +7189,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6668,6 +7202,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6680,6 +7215,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6692,6 +7228,7 @@
         "corps, URL"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6704,6 +7241,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6716,6 +7254,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6728,6 +7267,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6740,6 +7280,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6752,13 +7293,14 @@
         "post-scriptum"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 26,
-      "vrais": 25,
+      "spans": 27,
+      "vrais": 26,
       "faux": 1,
       "faux_dates": 1,
       "faux_exemples": [
@@ -6790,6 +7332,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6802,6 +7345,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6814,6 +7358,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6826,6 +7371,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6838,6 +7384,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6850,6 +7397,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6862,6 +7410,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6874,6 +7423,7 @@
         "ligne 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6886,6 +7436,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6898,6 +7449,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6910,6 +7462,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6922,6 +7475,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6934,6 +7488,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6946,6 +7501,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6958,6 +7514,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6970,6 +7527,7 @@
         "ligne 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6982,6 +7540,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -6994,6 +7553,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7006,6 +7566,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7018,6 +7579,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7030,6 +7592,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7042,6 +7605,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7054,6 +7618,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7066,6 +7631,7 @@
         "ligne 3"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7078,6 +7644,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7090,6 +7657,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7102,6 +7670,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7114,6 +7683,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7126,6 +7696,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7138,6 +7709,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7150,6 +7722,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7162,6 +7735,7 @@
         "ligne 4"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7174,6 +7748,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7186,6 +7761,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7198,6 +7774,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7210,6 +7787,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7222,6 +7800,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7234,6 +7813,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7246,6 +7826,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7258,6 +7839,7 @@
         "ligne 5"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7270,6 +7852,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7282,6 +7865,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7294,6 +7878,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7306,6 +7891,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7318,6 +7904,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7330,6 +7917,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7342,6 +7930,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7354,6 +7943,7 @@
         "ligne 6"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7366,6 +7956,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7378,6 +7969,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7390,6 +7982,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7402,6 +7995,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7414,6 +8008,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7426,6 +8021,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7438,6 +8034,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7450,6 +8047,7 @@
         "ligne 7"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7462,6 +8060,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7474,6 +8073,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7486,6 +8086,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7498,6 +8099,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7510,6 +8112,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7522,6 +8125,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7534,6 +8138,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7546,6 +8151,7 @@
         "ligne 8"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7558,6 +8164,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7570,6 +8177,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7582,6 +8190,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7594,6 +8203,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7606,6 +8216,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7618,6 +8229,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7630,6 +8242,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7642,6 +8255,7 @@
         "ligne 9"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7654,6 +8268,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7666,6 +8281,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7678,6 +8294,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7690,6 +8307,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7702,6 +8320,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7714,6 +8333,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7726,6 +8346,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7738,6 +8359,7 @@
         "ligne 10"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7750,6 +8372,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7762,6 +8385,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7774,6 +8398,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7786,6 +8411,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7798,6 +8424,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7810,6 +8437,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7822,6 +8450,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7834,6 +8463,7 @@
         "ligne 11"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7846,6 +8476,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7858,6 +8489,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7870,6 +8502,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7882,6 +8515,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7894,6 +8528,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7906,6 +8541,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7918,6 +8554,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7930,6 +8567,7 @@
         "ligne 12"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -7966,6 +8604,7 @@
         "valeur, clé"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7978,6 +8617,7 @@
         "valeur login"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -7990,6 +8630,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8002,6 +8643,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8014,6 +8656,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8026,6 +8669,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8038,6 +8682,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8050,6 +8695,7 @@
         "objet adresse"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8062,6 +8708,7 @@
         "objet adresse"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8074,6 +8721,7 @@
         "objet adresse"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8086,6 +8734,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8098,6 +8747,7 @@
         "valeur sous clé nominative"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8110,6 +8760,7 @@
         "valeur, note échappée \\u"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8122,6 +8773,7 @@
         "valeur login"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8134,6 +8786,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8146,6 +8799,7 @@
         "nombre JSON"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8158,6 +8812,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8170,6 +8825,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8182,6 +8838,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8194,6 +8851,7 @@
         "valeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -8231,12 +8889,9 @@
        "where": [
         "élément assureur"
        ],
-       "leaked": true,
-       "hits": [
-        "04_xml_sinistre/declaration_sinistre.xml (décodé) « Assurances Bellerive »",
-        "04_xml_sinistre/declaration_sinistre.xml [octets latin-1] « Assurances Bellerive »",
-        "04_xml_sinistre/declaration_sinistre.xml [octets utf-8] « Assurances Bellerive »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -8248,6 +8903,7 @@
         "commentaire, attributs, instruction de traitement"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": true
       },
@@ -8260,6 +8916,7 @@
         "commentaire XML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8272,6 +8929,7 @@
         "attribut"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8284,6 +8942,7 @@
         "élément"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8296,6 +8955,7 @@
         "élément (saut de ligne)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8308,6 +8968,7 @@
         "élément"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8320,6 +8981,7 @@
         "élément"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8332,6 +8994,7 @@
         "attribut, CDATA"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8344,6 +9007,7 @@
         "attribut"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8355,27 +9019,26 @@
        "where": [
         "élément"
        ],
-       "leaked": true,
-       "hits": [
-        "04_xml_sinistre/declaration_sinistre.xml (balises) « Brest »",
-        "04_xml_sinistre/declaration_sinistre.xml (décodé) « Brest »",
-        "04_xml_sinistre/declaration_sinistre.xml [octets latin-1] « Brest »",
-        "04_xml_sinistre/declaration_sinistre.xml [octets utf-8] « Brest »",
-        "04_xml_sinistre/declaration_sinistre.xml « Brest »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 1,
-      "vrais": 1,
-      "faux": 0,
+      "spans": 3,
+      "vrais": 2,
+      "faux": 1,
       "faux_dates": 0,
-      "faux_exemples": []
+      "faux_exemples": [
+       "le boucher du marche couvert"
+      ]
      },
      "keep_total": 1,
-     "keep_ok": 1,
-     "keep_lost": []
+     "keep_ok": 0,
+     "keep_lost": [
+      "Le boucher du marché couvert propose désormais des produits bio."
+     ]
     },
     {
      "slug": "05_html_equipe",
@@ -8398,6 +9061,7 @@
         "title, meta, alt, title, gras coupé, nom de fichier image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8410,6 +9074,7 @@
         "attribut data, mailto encodé %40"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8422,6 +9087,7 @@
         "href"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8433,14 +9099,9 @@
        "where": [
         "texte, attribut title"
        ],
-       "leaked": true,
-       "hits": [
-        "05_html_equipe/equipe.html (balises) « responsable communication »",
-        "05_html_equipe/equipe.html (décodé) « responsable communication »",
-        "05_html_equipe/equipe.html [octets latin-1] « responsable communication »",
-        "05_html_equipe/equipe.html [octets utf-8] « responsable communication »",
-        "05_html_equipe/equipe.html « responsable communication »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -8452,6 +9113,7 @@
         "balise address avec <br>"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8464,6 +9126,7 @@
         "balise address"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8476,6 +9139,7 @@
         "JSON-LD, texte, title"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8488,6 +9152,7 @@
         "commentaire HTML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8500,6 +9165,7 @@
         "texte"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8512,6 +9178,7 @@
         "href et texte"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8524,6 +9191,7 @@
         "JSON-LD, href tel:, texte"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8535,14 +9203,9 @@
        "where": [
         "texte"
        ],
-       "leaked": true,
-       "hits": [
-        "05_html_equipe/equipe.html (balises) « chef de projet »",
-        "05_html_equipe/equipe.html (décodé) « chef de projet »",
-        "05_html_equipe/equipe.html [octets latin-1] « chef de projet »",
-        "05_html_equipe/equipe.html [octets utf-8] « chef de projet »",
-        "05_html_equipe/equipe.html « chef de projet »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       }
      ],
@@ -8578,6 +9241,7 @@
         "signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8590,6 +9254,7 @@
         "From, Return-Path, signature texte et HTML, alt/title, URL, docx joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": true
       },
@@ -8602,6 +9267,7 @@
         "From, Return-Path"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8614,6 +9280,7 @@
         "en-tête Received"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8626,6 +9293,7 @@
         "en-tête Received (nom d'hôte)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8638,6 +9306,7 @@
         "signature, href"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8649,21 +9318,9 @@
        "where": [
         "signature"
        ],
-       "leaked": true,
-       "hits": [
-        "06_eml_fil/fil_discussion.eml (base64) « responsable RH »",
-        "06_eml_fil/fil_discussion.eml (base64)!word/document.xml (balises) « responsable RH »",
-        "06_eml_fil/fil_discussion.eml (base64)!word/document.xml (décodé) « responsable RH »",
-        "06_eml_fil/fil_discussion.eml (base64)!word/document.xml [octets latin-1] « responsable RH »",
-        "06_eml_fil/fil_discussion.eml (base64)!word/document.xml [octets utf-8] « responsable RH »",
-        "06_eml_fil/fil_discussion.eml (base64)!word/document.xml « responsable RH »",
-        "06_eml_fil/fil_discussion.eml [octets latin-1] « responsable RH »",
-        "06_eml_fil/fil_discussion.eml [octets utf-8] « responsable RH »",
-        "06_eml_fil/fil_discussion.eml#partie2 « responsable RH »",
-        "06_eml_fil/fil_discussion.eml#partie4 (balises) « responsable RH »",
-        "06_eml_fil/fil_discussion.eml#partie4 (décodé) « responsable RH »",
-        "06_eml_fil/fil_discussion.eml#partie4 « responsable RH »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -8675,6 +9332,7 @@
         "signature texte/HTML, image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8687,6 +9345,7 @@
         "signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8699,6 +9358,7 @@
         "To, citation niveau 1"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8711,6 +9371,7 @@
         "To, Received, citation"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8723,6 +9384,7 @@
         "Cc, objet, citations niveaux 1-3, pièces jointes, noms de fichiers"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8735,6 +9397,7 @@
         "signature citée niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8747,6 +9410,7 @@
         "Cc, citations"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8759,6 +9423,7 @@
         "corps, citation niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8771,6 +9436,7 @@
         "corps, docx joint, message joint niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8783,6 +9449,7 @@
         "citation niveau 2, docx joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8795,6 +9462,7 @@
         "citation niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8807,6 +9475,7 @@
         "citation niveau 3, pdf joint, objet du message joint niveau 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8819,6 +9488,7 @@
         "docx joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8831,6 +9501,7 @@
         "docx joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8843,6 +9514,7 @@
         "citation niveau 3 (transfert), pdf joint, message joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": true
       },
@@ -8855,6 +9527,7 @@
         "citation transfert, message joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8867,29 +9540,78 @@
         "message joint"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-025",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Wed, 04 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-026",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Wed, 4 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Received"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-027",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "dim. 1 mars 2026 à 18:40",
+       "where": [
+        "en-tête cité dans le corps"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-028",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Sun, 01 Mar 2026 18:40:00 +0100",
+       "where": [
+        "Date du message joint"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 66,
-      "vrais": 58,
-      "faux": 8,
-      "faux_dates": 1,
+      "spans": 64,
+      "vrais": 62,
+      "faux": 2,
+      "faux_dates": 0,
       "faux_exemples": [
-       "2026 09",
-       "wed 04",
-       "2026 09",
-       "0100",
-       "1 mars 2026 a 18 40",
        "batiment b",
-       "2026 18 40",
-       "0100"
+       "marchand de journaux"
       ]
      },
      "keep_total": 2,
-     "keep_ok": 2,
-     "keep_lost": []
+     "keep_ok": 1,
+     "keep_lost": [
+      "Le marchand de journaux ferme le dimanche après-midi."
+     ]
     },
     {
      "slug": "07_eml_encode",
@@ -8912,6 +9634,7 @@
         "From (RFC 2047 Q), Subject (RFC 2047 B), corps HTML coupé, zip joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8924,6 +9647,7 @@
         "From"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8936,6 +9660,7 @@
         "corps HTML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8948,6 +9673,7 @@
         "corps HTML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8960,6 +9686,7 @@
         "URL du pixel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8972,6 +9699,7 @@
         "To (NOM Prénom), salutation"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8984,6 +9712,7 @@
         "To"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -8996,19 +9725,30 @@
         "zip joint"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-009",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Thu, 05 Mar 2026 11:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 11,
-      "vrais": 9,
-      "faux": 2,
+      "spans": 13,
+      "vrais": 13,
+      "faux": 0,
       "faux_dates": 0,
-      "faux_exemples": [
-       "2026 11",
-       "0100"
-      ]
+      "faux_exemples": []
      },
      "keep_total": 1,
      "keep_ok": 1,
@@ -9035,6 +9775,7 @@
         "From, ligne From mbox, corps (« From the desk of », ligne échappée >From)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9047,6 +9788,7 @@
         "From, séparateur mbox"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9059,6 +9801,7 @@
         "corps QP"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9070,12 +9813,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "08_mbox_boite/boite.mbox [octets latin-1] « avocate »",
-        "08_mbox_boite/boite.mbox [octets utf-8] « avocate »",
-        "08_mbox_boite/boite.mbox#message1#partie0 « avocate »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -9087,6 +9827,7 @@
         "To, From, signature initiale"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9099,6 +9840,7 @@
         "To, From, séparateur mbox"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9111,8 +9853,9 @@
         "To, From"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
-       "first_name_residue": true
+       "first_name_residue": false
       },
       {
        "id": "08-008",
@@ -9123,6 +9866,7 @@
         "From, séparateur mbox"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9135,6 +9879,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9147,6 +9892,7 @@
         "CSV joint (base64), objet, corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9159,6 +9905,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9171,6 +9918,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9183,6 +9931,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9195,6 +9944,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9207,6 +9957,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9219,25 +9970,70 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-017",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon, 09 Mar 2026 08:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-018",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon Mar  9 08:00:00 2026",
+       "where": [
+        "séparateurs mbox"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-019",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Tue, 10 Mar 2026 08:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-020",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Tue, 10 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 26,
-      "vrais": 17,
-      "faux": 9,
+      "spans": 30,
+      "vrais": 29,
+      "faux": 1,
       "faux_dates": 0,
       "faux_exemples": [
-       "mon 09",
-       "2026 08",
-       "0100",
-       "tue 10",
-       "2026 08",
-       "0100",
-       "12 mars 2026 a 14 h 30",
-       "2026 09",
-       "0100"
+       "12 mars 2026 a 14 h 30"
       ]
      },
      "keep_total": 1,
@@ -9267,6 +10063,7 @@
         "sujet, destinataire, corps texte/HTML/RTF, pièce jointe et son nom"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9279,6 +10076,7 @@
         "destinataire, en-têtes"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9291,6 +10089,7 @@
         "corps texte/HTML/RTF"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9303,6 +10102,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9315,6 +10115,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9327,6 +10128,7 @@
         "pièce jointe"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9339,6 +10141,7 @@
         "expéditeur, en-têtes"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9351,6 +10154,7 @@
         "expéditeur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9363,20 +10167,30 @@
         "en-tête Received"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-010",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon, 9 Mar 2026 10:00:00 +0100",
+       "where": [
+        "Received (en-têtes de transport)"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
       "spans": 20,
-      "vrais": 17,
-      "faux": 3,
+      "vrais": 20,
+      "faux": 0,
       "faux_dates": 0,
-      "faux_exemples": [
-       "mon 9",
-       "2026 10",
-       "0100"
-      ]
+      "faux_exemples": []
      },
      "keep_total": 1,
      "keep_ok": 1,
@@ -9403,6 +10217,7 @@
         "pied de page, métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9415,6 +10230,7 @@
         "pied de page, métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9427,6 +10243,7 @@
         "pied de page, métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9439,6 +10256,7 @@
         "pied de page, métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9451,6 +10269,7 @@
         "corps (gras/italique coupé), tableau, descr image, mots-clés, titre, image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9463,6 +10282,7 @@
         "corps, tableau, image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9474,14 +10294,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "10_docx_audit/rapport_audit.docx!word/document.xml (balises) « auditeur »",
-        "10_docx_audit/rapport_audit.docx!word/document.xml (décodé) « auditeur »",
-        "10_docx_audit/rapport_audit.docx!word/document.xml [octets latin-1] « auditeur »",
-        "10_docx_audit/rapport_audit.docx!word/document.xml [octets utf-8] « auditeur »",
-        "10_docx_audit/rapport_audit.docx!word/document.xml « auditeur »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -9493,6 +10308,7 @@
         "tableau"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9505,6 +10321,7 @@
         "tableau"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9517,6 +10334,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9529,6 +10347,7 @@
         "lien sur deux runs, info-bulle"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9541,6 +10360,7 @@
         "corps, cible du lien, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9553,6 +10373,7 @@
         "corps, commentaire (personne au nom de ville)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9565,6 +10386,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9577,6 +10399,7 @@
         "commentaire"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9589,6 +10412,7 @@
         "révision insérée, auteur du commentaire, dernier modificateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9601,6 +10425,7 @@
         "auteur des révisions, propriété personnalisée"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9613,6 +10438,7 @@
         "révision supprimée, en-tête, note de bas de page, auteur, responsable"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9625,6 +10451,7 @@
         "révision supprimée"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9637,6 +10464,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9649,13 +10477,14 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 15,
-      "vrais": 15,
+      "spans": 14,
+      "vrais": 14,
       "faux": 0,
       "faux_dates": 0,
       "faux_exemples": []
@@ -9685,6 +10514,7 @@
         "métadonnées (société)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9697,6 +10527,7 @@
         "nom de feuille, nom défini, formule, cellules"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9709,6 +10540,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9721,6 +10553,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9733,6 +10566,7 @@
         "cellule (doubles espaces)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9745,6 +10579,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9757,6 +10592,7 @@
         "cellules, commentaire de cellule, note VML"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9769,6 +10605,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9781,6 +10618,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9793,6 +10631,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9805,6 +10644,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9817,6 +10657,7 @@
         "commentaire de cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9829,6 +10670,7 @@
         "cellules, dernier modificateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9841,6 +10683,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9853,6 +10696,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9865,6 +10709,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9877,6 +10722,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9889,6 +10735,7 @@
         "chaîne en ligne, en-tête, auteur du commentaire, créateur, responsable"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9901,6 +10748,7 @@
         "cellule numérique"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9913,6 +10761,7 @@
         "pied de page, propriété personnalisée"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -9933,7 +10782,7 @@
      "format": "pptx",
      "outputs": [
       [
-       "projet_hermine.pptx",
+       "[ORGANISATION_013].pptx",
        false
       ]
      ],
@@ -9949,6 +10798,7 @@
         "métadonnées"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9961,6 +10811,7 @@
         "titre coupé en deux runs, descr, disposition, créateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9973,6 +10824,7 @@
         "masque"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9985,6 +10837,7 @@
         "corps, notes, commentaire"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -9997,6 +10850,7 @@
         "corps, propriété personnalisée"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10009,6 +10863,7 @@
         "notes de l'orateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10021,6 +10876,7 @@
         "notes de l'orateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10033,6 +10889,7 @@
         "commentaire"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10045,6 +10902,7 @@
         "corps (civilité + NOM), notes, auteur de commentaire, modificateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10056,13 +10914,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "12_pptx_projet/projet_hermine.pptx!ppt/slides/slide1.xml (balises) « présidente »",
-        "12_pptx_projet/projet_hermine.pptx!ppt/slides/slide1.xml (décodé) « présidente »",
-        "12_pptx_projet/projet_hermine.pptx!ppt/slides/slide1.xml [octets utf-8] « présidente »",
-        "12_pptx_projet/projet_hermine.pptx!ppt/slides/slide1.xml « présidente »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -10074,16 +10928,19 @@
         "notes"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 10,
+      "spans": 11,
       "vrais": 10,
-      "faux": 0,
+      "faux": 1,
       "faux_dates": 0,
-      "faux_exemples": []
+      "faux_exemples": [
+       "projet hermine"
+      ]
      },
      "keep_total": 1,
      "keep_ok": 1,
@@ -10109,14 +10966,9 @@
        "where": [
         "titre, métadonnées"
        ],
-       "leaked": true,
-       "hits": [
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml (balises) « Association des Riverains du Val-Fleuri »",
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml (décodé) « Association des Riverains du Val-Fleuri »",
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml [octets latin-1] « Association des Riverains du Val-Fleuri »",
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml [octets utf-8] « Association des Riverains du Val-Fleuri »",
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml « Association des Riverains du Val-Fleuri »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -10128,6 +10980,7 @@
         "corps (span), en-tête, créatrice initiale"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10139,13 +10992,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml (balises) « présidente »",
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml (décodé) « présidente »",
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml [octets utf-8] « présidente »",
-        "13_odt_compte_rendu/compte_rendu_ag.odt!content.xml « présidente »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -10157,6 +11006,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10169,6 +11019,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10181,6 +11032,7 @@
         "corps, annotation, modification suivie, créateur"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10193,6 +11045,7 @@
         "annotation, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10205,6 +11058,7 @@
         "modification suivie (suppression)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10217,6 +11071,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10229,6 +11084,7 @@
         "corps (saut de ligne)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10241,17 +11097,19 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 11,
-      "vrais": 9,
-      "faux": 2,
+      "spans": 13,
+      "vrais": 10,
+      "faux": 3,
       "faux_dates": 0,
       "faux_exemples": [
        "12 mars 2026 a 14 h 30",
+       "salle bleue",
        "16 h"
       ]
      },
@@ -10282,6 +11140,7 @@
         "nom de feuille, cellule, formule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10294,6 +11153,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10306,6 +11166,7 @@
         "cellule, annotation, en-tête"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10318,6 +11179,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10330,6 +11192,7 @@
         "cellule, auteur d'annotation, créatrice"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10342,6 +11205,7 @@
         "cellule"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -10378,6 +11242,7 @@
         "\\info company"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10390,6 +11255,7 @@
         "titre, en-tête, corps (italique)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10402,6 +11268,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10414,6 +11281,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10426,6 +11294,7 @@
         "corps (\\line)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10438,6 +11307,7 @@
         "auteur, corps (gras coupé), signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10450,6 +11320,7 @@
         "signature (initiales)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10462,6 +11333,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10474,6 +11346,7 @@
         "pied de page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10485,10 +11358,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "15_rtf_attestation/attestation.rtf « ingénieur méthodes »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -10499,12 +11371,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "15_rtf_attestation/attestation.rtf [octets latin-1] « Rouen »",
-        "15_rtf_attestation/attestation.rtf [octets utf-8] « Rouen »",
-        "15_rtf_attestation/attestation.rtf « Rouen »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       }
      ],
@@ -10540,6 +11409,7 @@
         "corps (NOM Prénom), adresse, titre, sujet, signet, page 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10552,6 +11422,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10564,6 +11435,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10576,6 +11448,7 @@
         "zone de texte sur deux lignes"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10588,6 +11461,7 @@
         "page 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10600,6 +11474,7 @@
         "page 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10612,6 +11487,7 @@
         "page 2"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10624,6 +11500,7 @@
         "deux polices sur une ligne, annotation, auteur, XMP"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10636,6 +11513,7 @@
         "corps, lien, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -10672,6 +11550,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10684,6 +11563,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10696,6 +11576,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10708,6 +11589,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10720,6 +11602,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10732,6 +11615,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10744,6 +11628,7 @@
         "image de la page"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -10780,6 +11665,7 @@
         "image, métadonnées PNG"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10792,6 +11678,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10804,6 +11691,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10816,6 +11704,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10828,6 +11717,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10840,6 +11730,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10852,6 +11743,7 @@
         "métadonnées PNG (tEXt, iTXt)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -10888,6 +11780,7 @@
         "image, EXIF (Artist, XPAuthor, CameraOwnerName, description)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10900,6 +11793,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10912,6 +11806,7 @@
         "image"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10924,6 +11819,7 @@
         "EXIF GPS"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -10960,6 +11856,7 @@
         "nom de dossier, nom de fichier, CV, courriel, docx et txt imbriqués"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10972,6 +11869,7 @@
         "CV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10984,6 +11882,7 @@
         "CV, courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -10996,6 +11895,7 @@
         "CV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11008,6 +11908,7 @@
         "CV, docx imbriqué"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11020,6 +11921,7 @@
         "nom de fichier du courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11032,6 +11934,7 @@
         "docx dans zip dans courriel dans zip"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11044,6 +11947,7 @@
         "txt dans zip dans courriel dans zip"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11056,6 +11960,7 @@
         "commentaire d'archive, courriel, auteur du docx, CSV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11068,6 +11973,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11080,19 +11986,30 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-012",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Fri, 06 Mar 2026 10:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
       "spans": 20,
-      "vrais": 18,
-      "faux": 2,
+      "vrais": 20,
+      "faux": 0,
       "faux_dates": 0,
-      "faux_exemples": [
-       "2026 10",
-       "0100"
-      ]
+      "faux_exemples": []
      },
      "keep_total": 2,
      "keep_ok": 2,
@@ -11119,6 +12036,7 @@
         "courriel dans zip dans 7z, nom de fichier 7z, CSV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11131,6 +12049,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11143,6 +12062,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11155,6 +12075,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11167,6 +12088,7 @@
         "courriel, CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11179,6 +12101,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11191,6 +12114,7 @@
         "CSV joint"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11203,6 +12127,7 @@
         "courriel"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -11223,11 +12148,11 @@
      "format": "txt",
      "outputs": [
       [
-       "Salariés/[PERSONNE_050]/[PERSONNE_050]_entretien.csv",
+       "Salariés/[PERSONNE_057]/[PERSONNE_057]_entretien.csv",
        false
       ],
       [
-       "Salariés/[PERSONNE_050]/CV [PERSONNE_050].txt",
+       "Salariés/[PERSONNE_057]/CV [PERSONNE_057].txt",
        false
       ]
      ],
@@ -11243,6 +12168,7 @@
         "noms de dossier et de fichiers, minuscules et majuscules sans accent"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11255,6 +12181,7 @@
         "CV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11267,6 +12194,7 @@
         "CV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11279,6 +12207,7 @@
         "CSV"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -11314,12 +12243,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "23_txt_temoins/notes_internes.txt [octets latin-1] « Lyon »",
-        "23_txt_temoins/notes_internes.txt [octets utf-8] « Lyon »",
-        "23_txt_temoins/notes_internes.txt « Lyon »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -11331,6 +12257,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11342,12 +12269,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "23_txt_temoins/notes_internes.txt [octets latin-1] « Paris »",
-        "23_txt_temoins/notes_internes.txt [octets utf-8] « Paris »",
-        "23_txt_temoins/notes_internes.txt « Paris »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -11359,6 +12283,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "23_txt_temoins/notes_internes.txt [octets utf-8] « Isère »",
         "23_txt_temoins/notes_internes.txt « Isère »"
@@ -11367,12 +12292,13 @@
       }
      ],
      "precision": {
-      "spans": 3,
-      "vrais": 1,
-      "faux": 2,
+      "spans": 6,
+      "vrais": 3,
+      "faux": 3,
       "faux_dates": 0,
       "faux_exemples": [
        "12 mars 2026 a 14 h 30",
+       "salle bleue",
        "fontaine"
       ]
      },
@@ -11403,6 +12329,7 @@
         "titre"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "24_txt_anglais/incident_report.txt [octets latin-1] « inc20260315 »",
         "24_txt_anglais/incident_report.txt [octets utf-8] « inc20260315 »",
@@ -11419,6 +12346,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11430,12 +12358,9 @@
        "where": [
         "corps"
        ],
-       "leaked": true,
-       "hits": [
-        "24_txt_anglais/incident_report.txt [octets latin-1] « site manager »",
-        "24_txt_anglais/incident_report.txt [octets utf-8] « site manager »",
-        "24_txt_anglais/incident_report.txt « site manager »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -11447,6 +12372,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11459,6 +12385,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11471,6 +12398,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11483,6 +12411,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11495,6 +12424,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11507,6 +12437,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11518,12 +12449,9 @@
        "where": [
         "adresse"
        ],
-       "leaked": true,
-       "hits": [
-        "24_txt_anglais/incident_report.txt [octets latin-1] « Bristol »",
-        "24_txt_anglais/incident_report.txt [octets utf-8] « Bristol »",
-        "24_txt_anglais/incident_report.txt « Bristol »"
-       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
        "first_name_residue": false
       },
       {
@@ -11535,6 +12463,7 @@
         "corps (apostrophe)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11547,6 +12476,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11559,6 +12489,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11571,6 +12502,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11583,6 +12515,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11595,6 +12528,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11607,6 +12541,7 @@
         "corps (majuscules avec tréma)"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11619,6 +12554,7 @@
         "corps"
        ],
        "leaked": true,
+       "precision_only": false,
        "hits": [
         "24_txt_anglais/incident_report.txt [octets latin-1] « Berlin »",
         "24_txt_anglais/incident_report.txt [octets utf-8] « Berlin »",
@@ -11635,6 +12571,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11647,6 +12584,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11659,6 +12597,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11671,6 +12610,7 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11683,13 +12623,14 @@
         "corps"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
      ],
      "precision": {
-      "spans": 21,
-      "vrais": 21,
+      "spans": 19,
+      "vrais": 19,
       "faux": 0,
       "faux_dates": 0,
       "faux_exemples": []
@@ -11703,7 +12644,7 @@
      "format": "pdf",
      "outputs": [
       [
-       "Contrat_[PERSONNE_065]_signe.pdf",
+       "Contrat_[PERSONNE_074]_signe.pdf",
        false
       ]
      ],
@@ -11719,6 +12660,7 @@
         "corps, champ de formulaire, tampon image (casse mixte), signature numérique, métadonnées, XMP, nom de fichier"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11731,6 +12673,7 @@
         "corps, certificat de signature"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11743,6 +12686,7 @@
         "tampon image (vertical), date de signature, XMP"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11755,6 +12699,7 @@
         "image, QR code, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       },
@@ -11767,6 +12712,7 @@
         "texte invisible, mots-clés"
        ],
        "leaked": false,
+       "precision_only": false,
        "hits": [],
        "first_name_residue": false
       }
@@ -11789,12 +12735,12 @@
      324
     ],
     "indirect": [
-     39,
+     57,
      60
     ],
     "by_type": {
      "ORGANISATION": [
-      6,
+      8,
       8
      ],
      "SIREN": [
@@ -11834,7 +12780,7 @@
       34
      ],
      "LIEU": [
-      16,
+      22,
       24
      ],
      "NIR": [
@@ -11842,7 +12788,7 @@
       7
      ],
      "FONCTION": [
-      1,
+      11,
       11
      ],
      "IBAN": [
@@ -11868,6 +12814,10 @@
      "URL": [
       4,
       4
+     ],
+     "DATE_ENVOI": [
+      11,
+      11
      ],
      "GPS": [
       1,
@@ -11925,7 +12875,7 @@
        3
       ],
       "LIEU": [
-       2,
+       6,
        8
       ],
       "NIR": [
@@ -11933,7 +12883,7 @@
        1
       ],
       "FONCTION": [
-       0,
+       2,
        2
       ],
       "IBAN": [
@@ -12051,7 +13001,7 @@
      },
      "xml": {
       "ORGANISATION": [
-       0,
+       1,
        1
       ],
       "PERSONNE": [
@@ -12087,7 +13037,7 @@
        1
       ],
       "LIEU": [
-       0,
+       1,
        1
       ]
      },
@@ -12105,7 +13055,7 @@
        2
       ],
       "FONCTION": [
-       0,
+       2,
        2
       ],
       "ADRESSE": [
@@ -12155,7 +13105,7 @@
        1
       ],
       "FONCTION": [
-       0,
+       1,
        1
       ],
       "TELEPHONE": [
@@ -12181,6 +13131,10 @@
       "ADRESSE": [
        3,
        3
+      ],
+      "DATE_ENVOI": [
+       5,
+       5
       ]
      },
      "mbox": {
@@ -12197,7 +13151,7 @@
        1
       ],
       "FONCTION": [
-       0,
+       1,
        1
       ],
       "TELEPHONE": [
@@ -12211,6 +13165,10 @@
       "IDENTIFIANT": [
        1,
        1
+      ],
+      "DATE_ENVOI": [
+       4,
+       4
       ]
      },
      "msg": {
@@ -12241,6 +13199,10 @@
       "IP": [
        1,
        1
+      ],
+      "DATE_ENVOI": [
+       1,
+       1
       ]
      },
      "docx": {
@@ -12269,7 +13231,7 @@
        1
       ],
       "FONCTION": [
-       0,
+       1,
        1
       ],
       "NIR": [
@@ -12353,7 +13315,7 @@
        1
       ],
       "FONCTION": [
-       0,
+       1,
        1
       ],
       "DATE_NAISSANCE": [
@@ -12363,7 +13325,7 @@
      },
      "odt": {
       "ORGANISATION": [
-       0,
+       1,
        1
       ],
       "PERSONNE": [
@@ -12371,7 +13333,7 @@
        2
       ],
       "FONCTION": [
-       0,
+       1,
        1
       ],
       "EMAIL": [
@@ -12439,11 +13401,11 @@
        1
       ],
       "FONCTION": [
-       0,
+       1,
        1
       ],
       "LIEU": [
-       0,
+       1,
        1
       ]
      },
@@ -12569,6 +13531,10 @@
       "IBAN": [
        1,
        1
+      ],
+      "DATE_ENVOI": [
+       1,
+       1
       ]
      },
      "7z": {
@@ -12592,8 +13558,8 @@
     },
     "precision_by_format": {
      "txt": [
-      51,
-      54
+      52,
+      56
      ],
      "csv": [
       32,
@@ -12604,28 +13570,28 @@
       22
      ],
      "xml": [
-      1,
-      1
+      2,
+      3
      ],
      "html": [
       10,
       10
      ],
      "eml": [
-      67,
+      75,
       77
      ],
      "mbox": [
-      17,
-      26
+      29,
+      30
      ],
      "msg": [
-      17,
+      20,
       20
      ],
      "docx": [
-      15,
-      15
+      14,
+      14
      ],
      "xlsx": [
       6,
@@ -12633,11 +13599,11 @@
      ],
      "pptx": [
       10,
-      10
+      11
      ],
      "odt": [
-      9,
-      11
+      10,
+      13
      ],
      "ods": [
       6,
@@ -12660,7 +13626,7 @@
       0
      ],
      "zip": [
-      18,
+      20,
       20
      ],
      "7z": [
@@ -12669,20 +13635,21 @@
      ]
     },
     "precision": [
-     295,
-     325
+     322,
+     335
     ],
     "precision_without_dates": [
-     295,
-     322
+     322,
+     333
     ],
     "keep": [
-     42,
+     40,
      45
     ]
    },
    "report_counts": {
-    "anonymise": 26
+    "a_revoir": 7,
+    "anonymise": 19
    }
   }
  }
