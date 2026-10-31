@@ -529,3 +529,11 @@ def test_value_next_to_a_field_name_cell(detector: RegexDetector) -> None:
     ]
     assert ("B1", "Zéphyrin Quintavalle") in persons
     assert all(seg != "B2" for seg, _ in persons)
+
+
+def test_header_row_cells_are_not_values(detector: RegexDetector) -> None:
+    def cell(ref: str, text: str) -> Segment:
+        return Segment(ref, text, (), SegmentContext(SegmentKind.CELL, ref))
+
+    header = [cell("A1", "nom"), cell("B1", "prenom"), cell("C1", "note"), cell("D1", "cp")]
+    assert not detector.detect(header, "d")

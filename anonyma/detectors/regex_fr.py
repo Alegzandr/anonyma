@@ -137,7 +137,10 @@ def _column_number(letters: str) -> int:
 
 def _row_label_hint(segment: Segment, row_labels: dict[tuple[str, int, int], str]) -> str | None:
     """Hint given by the cell just left of ``segment`` when it holds a field name
-    (vertical layout « Nom | Jean Dupont »), and record ``segment`` if it is one."""
+    (vertical layout « Nom | Jean Dupont »), and record ``segment`` if it is one.
+
+    A row holding several field names is a header row (« nom | prénom | cp »): its
+    cells are labels, not values."""
     if segment.context.kind is not SegmentKind.CELL:
         return None
     m = _CELL_REF.match(segment.context.label)
@@ -148,7 +151,10 @@ def _row_label_hint(segment: Segment, row_labels: dict[tuple[str, int, int], str
     if own is not None:
         row_labels[(sheet, row, col)] = own
         return None
-    return row_labels.get((sheet, row, col - 1))
+    hint = row_labels.get((sheet, row, col - 1))
+    if hint is None or sum(1 for k in row_labels if k[:2] == (sheet, row)) > 1:
+        return None
+    return hint
 
 
 def _label_has(label: str, parts: Sequence[str]) -> bool:
