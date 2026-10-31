@@ -1,8 +1,11 @@
 """Process-wide network guard.
 
-Once :func:`install` is called, any outbound socket connection raises
-:class:`NetworkBlockedError` unless it happens inside ``with allow_network():``.
-Only the model manager opens that window, after an explicit user action.
+Once :func:`install` is called, any outbound socket connection, datagram
+(``sendto``/``sendmsg``) or name resolution (``getaddrinfo``, ``gethostbyname*``,
+``gethostbyaddr``, ``getnameinfo``) raises :class:`NetworkBlockedError` unless it
+happens inside ``with allow_network():`` **in the same thread**: a download opening
+the window never lets another thread (a worker, a plugin) reach the network. Only
+the model manager opens that window, after an explicit user action.
 """
 
 from __future__ import annotations
@@ -15,11 +18,18 @@ from contextlib import contextmanager
 from typing import Any
 
 _lock = threading.Lock()
-_allowed = 0
+#: ``depth``: nesting of ``allow_network()`` in the current thread.
+_local = threading.local()
 _installed = False
 _original_connect = socket.socket.connect
 _original_connect_ex = socket.socket.connect_ex
+_original_sendto = socket.socket.sendto
+_original_sendmsg = getattr(socket.socket, "sendmsg", None)  # not on Windows
 _original_getaddrinfo = socket.getaddrinfo
+_original_gethostbyname = socket.gethostbyname
+_original_gethostbyname_ex = socket.gethostbyname_ex
+_original_gethostbyaddr = socket.gethostbyaddr
+_original_getnameinfo = socket.getnameinfo
 
 
 class NetworkBlockedError(ConnectionRefusedError):
@@ -35,9 +45,19 @@ def _is_local(address: Any) -> bool:
     return False
 
 
+def is_allowed() -> bool:
+    """True inside ``allow_network()`` in the calling thread."""
+    return int(getattr(_local, "depth", 0)) > 0
+
+
 def _check(address: Any) -> None:
-    if _allowed <= 0 and not _is_local(address):
+    if not is_allowed() and not _is_local(address):
         raise NetworkBlockedError("Accès réseau bloqué par Anonyma")
+
+
+def _check_name(host: Any) -> None:
+    if not is_allowed() and not _is_local((host,)):
+        raise NetworkBlockedError("Résolution DNS bloquée par Anonyma")
 
 
 def _guarded_connect(self: socket.socket, address: Any) -> None:
@@ -50,10 +70,51 @@ def _guarded_connect_ex(self: socket.socket, address: Any) -> int:
     return _original_connect_ex(self, address)
 
 
+def _guarded_sendto(self: socket.socket, data: Any, *args: Any) -> int:
+    _check(args[-1] if args else None)  # sendto(data, address) / (data, flags, address)
+    return _original_sendto(self, data, *args)
+
+
+def _guarded_sendmsg(self: socket.socket, buffers: Any, *args: Any) -> int:
+    if len(args) >= 3:  # (buffers, ancdata, flags, address)
+        _check(args[2])
+    elif not is_allowed() and self.type == socket.SOCK_DGRAM:
+        _check(_peer(self))
+    assert _original_sendmsg is not None
+    result: int = _original_sendmsg(self, buffers, *args)
+    return result
+
+
+def _peer(sock: socket.socket) -> Any:
+    try:
+        return sock.getpeername()
+    except OSError:
+        return None
+
+
 def _guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
-    if _allowed <= 0 and not _is_local((host,)):
-        raise NetworkBlockedError("Résolution DNS bloquée par Anonyma")
+    _check_name(host)
     return _original_getaddrinfo(host, *args, **kwargs)
+
+
+def _guarded_gethostbyname(host: Any) -> Any:
+    _check_name(host)
+    return _original_gethostbyname(host)
+
+
+def _guarded_gethostbyname_ex(host: Any) -> Any:
+    _check_name(host)
+    return _original_gethostbyname_ex(host)
+
+
+def _guarded_gethostbyaddr(host: Any) -> Any:
+    _check_name(host)
+    return _original_gethostbyaddr(host)
+
+
+def _guarded_getnameinfo(sockaddr: Any, flags: int) -> Any:
+    _check(sockaddr)
+    return _original_getnameinfo(sockaddr, flags)
 
 
 def install() -> None:
@@ -63,7 +124,14 @@ def install() -> None:
             return
         socket.socket.connect = _guarded_connect  # type: ignore[method-assign,assignment]
         socket.socket.connect_ex = _guarded_connect_ex  # type: ignore[method-assign,assignment]
+        socket.socket.sendto = _guarded_sendto  # type: ignore[method-assign,assignment]
+        if _original_sendmsg is not None:
+            setattr(socket.socket, "sendmsg", _guarded_sendmsg)  # noqa: B010 (absent on Windows)
         socket.getaddrinfo = _guarded_getaddrinfo
+        socket.gethostbyname = _guarded_gethostbyname
+        socket.gethostbyname_ex = _guarded_gethostbyname_ex
+        socket.gethostbyaddr = _guarded_gethostbyaddr
+        socket.getnameinfo = _guarded_getnameinfo
         _installed = True
 
 
@@ -73,17 +141,15 @@ def is_installed() -> bool:
 
 @contextmanager
 def allow_network() -> Iterator[None]:
-    """Temporarily allow outbound connections (model downloads only)."""
-    global _allowed
-    with _lock:
-        _allowed += 1
+    """Temporarily allow outbound connections in the calling thread (model
+    downloads only)."""
+    _local.depth = int(getattr(_local, "depth", 0)) + 1
     previous = os.environ.get("HF_HUB_OFFLINE")
     os.environ["HF_HUB_OFFLINE"] = "0"
     try:
         yield
     finally:
-        with _lock:
-            _allowed -= 1
+        _local.depth -= 1
         if previous is None:
             os.environ.pop("HF_HUB_OFFLINE", None)
         else:
