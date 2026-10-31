@@ -168,22 +168,26 @@ def _seed_profile(profile: Path) -> None:
         settings.write_text(_PROFILE_SETTINGS, encoding="utf-8")
 
 
+#: Windows: no console window for the child processes.
+_CREATION_FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
 def _kill_tree(process: subprocess.Popen[bytes]) -> None:
-    try:
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
         if sys.platform == "win32":
             subprocess.run(
                 ["taskkill", "/F", "/T", "/PID", str(process.pid)],
                 capture_output=True,
                 timeout=30,
                 check=False,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                creationflags=_CREATION_FLAGS,
             )
         else:
             os.killpg(process.pid, signal.SIGKILL)
-    except (OSError, subprocess.SubprocessError):
-        pass
     with contextlib.suppress(OSError):
         process.kill()
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        process.wait(timeout=30)
 
 
 def convert(
@@ -227,24 +231,26 @@ def convert(
     ]
     env = dict(os.environ)
     env["HOME"] = str(profile)  # some builds still look at $HOME
-    kwargs: dict[str, object] = {}
-    if sys.platform == "win32":
-        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    else:
-        kwargs["start_new_session"] = True
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        env=env,
-        **kwargs,  # type: ignore[call-overload]
-    )
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            env=env,
+            creationflags=_CREATION_FLAGS,
+            start_new_session=sys.platform != "win32",  # own group: killpg on timeout
+        )
+    except OSError as exc:
+        raise ConversionError("LibreOffice n'a pas pu être lancé") from exc
     try:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         _kill_tree(process)
         raise ConversionError("délai de conversion LibreOffice dépassé") from exc
+    except BaseException:  # interrupted (Ctrl+C, cancellation): no orphan soffice
+        _kill_tree(process)
+        raise
     extension = target.split(":", 1)[0]
     result = out_dir / f"{staged.stem}.{extension}"
     if process.returncode != 0 or not result.is_file() or result.stat().st_size == 0:

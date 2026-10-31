@@ -131,6 +131,18 @@ def test_libreoffice_profile_is_short_and_inside_batch(portable_home: Path) -> N
     assert libreoffice._profile_dir(outside) == outside.parent / "libreoffice-profile"
 
 
+def test_libreoffice_failures_are_conversion_errors(portable_home: Path) -> None:
+    from anonyma import libreoffice
+
+    source = portable_home / "a.doc"
+    source.write_bytes(b"x")
+    work = paths.tmp_dir() / "20260101-000000-abcdef" / "w"
+    with pytest.raises(libreoffice.ConversionError):  # cannot be launched
+        libreoffice.convert(source, "docx", work, portable_home / "absent" / "soffice")
+    with pytest.raises(libreoffice.ConversionError):  # exits with an error, no output
+        libreoffice.convert(source, "docx", work, Path(sys.executable), timeout=60)
+
+
 def test_libreoffice_bundle_pins() -> None:
     lo = _load("libreoffice_bundle")
     for (system, _machine), installer in lo.INSTALLERS.items():
