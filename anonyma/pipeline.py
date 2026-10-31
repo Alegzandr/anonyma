@@ -247,10 +247,12 @@ _ocr_cache: dict[str, OcrEngine | None] = {}
 
 
 def _worker_init() -> None:
-    from anonyma import netguard
+    from anonyma import logs, netguard
 
     paths.configure_environment()
     netguard.install()
+    # Like the main process: records go to data/logs, never to the user's terminal.
+    logs.setup_logging(worker=True)
 
 
 def detectors_for(config: Config) -> list[Detector]:

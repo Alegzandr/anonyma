@@ -797,3 +797,19 @@ def test_entity_across_folders_keeps_the_tree_depth(
         p.relative_to(tmp_path / "out").as_posix() for p in (tmp_path / "out").rglob("*.txt")
     )
     assert written == names
+
+
+def test_worker_logs_go_to_the_log_file_not_stderr(
+    tmp_path: Path, portable_home: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "abime.docx").write_bytes(b"PK\x03\x04 pas un document")
+    (src / "a.txt").write_text("Rien.\n", encoding="utf-8")
+    config = Config(profile=Profile.LIGHT, workers=2)
+    result = Pipeline(config).run([src], tmp_path / "out")
+    assert {r.status for r in result.results} == {DocumentStatus.FAILED, DocumentStatus.ANONYMIZED}
+    captured = capfd.readouterr()
+    assert "extraction failed" not in captured.err + captured.out
+    log = (portable_home / "data" / "logs" / "anonyma.log").read_text(encoding="utf-8")
+    assert "extraction failed" in log
