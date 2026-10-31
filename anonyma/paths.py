@@ -7,7 +7,13 @@ import os
 import shutil
 import sys
 import tempfile
+import warnings
 from pathlib import Path
+
+#: Largest image decoded (pixels): an A1 sheet scanned at 400 dpi. Beyond, decoding
+#: fails (``DecompressionBombError``/``Warning`` both raise) instead of exhausting
+#: the memory of a worker.
+MAX_IMAGE_PIXELS = 100_000_000
 
 
 def app_root() -> Path:
@@ -76,6 +82,15 @@ def configure_environment() -> None:
     os.environ["XDG_CACHE_HOME"] = str(data_dir() / "cache")
     os.environ.setdefault("ANONYMA_MODELS", models)
     sys.dont_write_bytecode = True
+    limit_images()
+
+
+def limit_images() -> None:
+    """Cap the size of the images Pillow decodes (every process)."""
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    warnings.simplefilter("error", Image.DecompressionBombWarning)
 
 
 def clean_tmp() -> None:

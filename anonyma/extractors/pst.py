@@ -11,6 +11,7 @@ plain body. Orphan/deleted items recoverable from free space are not exported.
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 from datetime import datetime
 from email.utils import format_datetime
 from pathlib import Path
@@ -27,7 +28,7 @@ from anonyma.extractors._mime import (
 )
 from anonyma.extractors.html import decode_html
 from anonyma.extractors.msg import rtf_to_text
-from anonyma.models import Document, ExtractionContext, Extractor, Severity
+from anonyma.models import ArchiveBombError, Document, ExtractionContext, Extractor, Severity
 from anonyma.registry import register_extractor
 
 PST_MAGIC = b"!BDN"
@@ -121,8 +122,14 @@ def _address(name: str | None, email: str | None) -> str | None:
     return email or name
 
 
-def message_to_eml(message: Any, document: Document, depth: int = 0) -> bytes:
-    """Convert a pypff message (or any message-like item) into eml bytes."""
+def message_to_eml(
+    message: Any,
+    document: Document,
+    depth: int = 0,
+    charge: Callable[[int], None] | None = None,
+) -> bytes:
+    """Convert a pypff message (or any message-like item) into eml bytes.
+    ``charge`` receives each attachment's size before it is read (budget)."""
     props = properties(message)
     headers: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -193,7 +200,7 @@ def message_to_eml(message: Any, document: Document, depth: int = 0) -> bytes:
 
     attachments: list[BuiltAttachment] = []
     for i in range(_call(message, "get_number_of_attachments") or 0):
-        built = _attachment(_call(message, "get_attachment", i), i + 1, document, depth)
+        built = _attachment(_call(message, "get_attachment", i), i + 1, document, depth, charge)
         if built is not None:
             attachments.append(built)
     return build_eml(headers, plain, html_body, attachments)
@@ -205,7 +212,13 @@ def _text_body(value: Any) -> str | None:
     return _text(value)
 
 
-def _attachment(att: Any, index: int, document: Document, depth: int) -> BuiltAttachment | None:
+def _attachment(
+    att: Any,
+    index: int,
+    document: Document,
+    depth: int,
+    charge: Callable[[int], None] | None = None,
+) -> BuiltAttachment | None:
     if att is None:
         return None
     props = properties(att)
@@ -221,7 +234,9 @@ def _attachment(att: Any, index: int, document: Document, depth: int) -> BuiltAt
         embedded = _call(att, "get_sub_item", 0)
         if embedded is not None and depth < 32:
             try:
-                data = message_to_eml(embedded, document, depth + 1)
+                data = message_to_eml(embedded, document, depth + 1, charge)
+            except ArchiveBombError:
+                raise
             except Exception:
                 data = None
             if data is not None:
@@ -232,6 +247,8 @@ def _attachment(att: Any, index: int, document: Document, depth: int) -> BuiltAt
         )
         return None
     size = _call(att, "get_size") or 0
+    if charge is not None and isinstance(size, int):
+        charge(size)
     data = _call(att, "read_buffer", size) if size else b""
     if not isinstance(data, bytes):
         document.add_issue(
@@ -273,6 +290,12 @@ class PstExtractor(Extractor):
     def _folder(
         self, folder: Any, path: str, document: Document, ctx: ExtractionContext, counter: list[int]
     ) -> None:
+        charged = [0]
+
+        def charge(size: int) -> None:  # attachments, before they are read
+            ctx.budget.consume(size, depth=ctx.depth + 1, files=0)
+            charged[0] += size
+
         for i in range(_call(folder, "get_number_of_sub_messages") or 0):
             ctx.check_cancelled()
             message = _call(folder, "get_sub_message", i)
@@ -283,9 +306,10 @@ class PstExtractor(Extractor):
                     "Un élément de la boîte aux lettres est illisible.",
                 )
                 continue
-            data = message_to_eml(message, document)
+            charged[0] = 0
+            data = message_to_eml(message, document, charge=charge)
             counter[0] += 1
-            ctx.budget.consume(len(data), depth=ctx.depth + 1)
+            ctx.budget.consume(max(0, len(data) - charged[0]), depth=ctx.depth + 1)
             ctx.extract_child(data, f"{path}message-{counter[0]:04d}.eml", document)
         for i in range(_call(folder, "get_number_of_sub_folders") or 0):
             sub = _call(folder, "get_sub_folder", i)

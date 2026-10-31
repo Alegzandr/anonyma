@@ -11,7 +11,7 @@ copied (they are purged); CLSIDs are kept.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -38,8 +38,12 @@ def _clsid_bytes(text: str) -> bytes:
         return b""
 
 
-def read_cfb(source: Path) -> tuple[bytes, list[CfbEntry]]:
-    """Root CLSID and every storage/stream (parents before children)."""
+def read_cfb(
+    source: Path, charge: Callable[[int], None] | None = None
+) -> tuple[bytes, list[CfbEntry]]:
+    """Root CLSID and every storage/stream (parents before children). ``charge``
+    receives each stream's declared size before it is read (expansion budget:
+    sector chains may be shared, so streams can add up to more than the file)."""
     with olefile.OleFileIO(str(source)) as ole:
         root_clsid = _clsid_bytes(ole.root.clsid)
         entries: list[CfbEntry] = []
@@ -50,6 +54,8 @@ def read_cfb(source: Path) -> tuple[bytes, list[CfbEntry]]:
             if kind == olefile.STGTY_STORAGE:
                 entries.append(CfbEntry(path, True, clsid))
             elif kind == olefile.STGTY_STREAM:
+                if charge is not None:
+                    charge(ole.get_size(list(path)))
                 with ole.openstream(list(path)) as stream:
                     entries.append(CfbEntry(path, False, clsid, stream.read()))
     return root_clsid, entries

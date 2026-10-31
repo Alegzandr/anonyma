@@ -531,17 +531,26 @@ class ExpansionBudget:
     used_bytes: int = 0
     used_files: int = 0
 
-    def consume(self, nbytes: int, *, compressed: int | None = None, depth: int = 0) -> None:
+    def consume(
+        self, nbytes: int, *, compressed: int | None = None, depth: int = 0, files: int = 1
+    ) -> None:
+        """Charge ``nbytes`` (and ``files`` items) before materialising them."""
         if depth > self.max_depth:
             raise ArchiveBombError("profondeur d'imbrication excessive")
         if compressed is not None and compressed > 0 and nbytes / compressed > self.max_ratio:
             raise ArchiveBombError("taux de compression suspect")
         self.used_bytes += max(nbytes, 0)
-        self.used_files += 1
+        self.used_files += files
         if self.used_bytes > self.max_total_bytes:
             raise ArchiveBombError("volume décompressé excessif")
         if self.used_files > self.max_files:
             raise ArchiveBombError("nombre de fichiers excessif")
+
+    def top_up(self, declared: int, actual: int, *, depth: int = 0) -> None:
+        """After materialising an item charged with its ``declared`` size: charge
+        what its ``actual`` size exceeds."""
+        if actual > declared:
+            self.consume(actual - declared, depth=depth, files=0)
 
 
 class ExtractionContext(ABC):
