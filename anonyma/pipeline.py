@@ -638,16 +638,26 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
 
     verification = _verify_output(written, result.output_name, job)
     result.verification = verification
-    result.residue_count = len(verification.residues)
+    result.residue_count = len(verification.certain_residues)
+    result.possible_residue_count = len(verification.possible_residues)
     result.issues.extend(verification.issues)
     tree_ids = {d.id for d in job.document.walk()}
     result.review_count = len(
         {e.cluster_id for e in job.entities if e.document_id in tree_ids} & job.review_clusters
     )
     if verification.clean:
+        if result.possible_residue_count:
+            result.issues.append(
+                Issue(
+                    Severity.WARNING,
+                    "verify.possible_residue",
+                    f"{result.possible_residue_count} résidu(s) possible(s) signalé(s) par "
+                    "un détecteur statistique : à vérifier.",
+                )
+            )
+        needs_review = result.review_count or result.possible_residue_count
         _set_status(
-            result,
-            DocumentStatus.NEEDS_REVIEW if result.review_count else DocumentStatus.ANONYMIZED,
+            result, DocumentStatus.NEEDS_REVIEW if needs_review else DocumentStatus.ANONYMIZED
         )
         return result
 
@@ -662,7 +672,7 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
             Issue(
                 Severity.ERROR,
                 "verify.residue",
-                f"{len(verification.residues)} résidu(s) détecté(s) : fichier placé en "
+                f"{len(verification.certain_residues)} résidu(s) détecté(s) : fichier placé en "
                 "quarantaine.",
             )
         )

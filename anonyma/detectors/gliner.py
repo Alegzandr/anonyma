@@ -63,6 +63,7 @@ def model_dir(spec: ModelSpec) -> Path | None:
 class GlinerDetector(Detector):
     name = "gliner"
     min_profile = Profile.STANDARD
+    deterministic = False
 
     @classmethod
     def is_available(cls, config: Config) -> bool:

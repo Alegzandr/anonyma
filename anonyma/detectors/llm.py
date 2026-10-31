@@ -80,6 +80,7 @@ def select_model(config: Config) -> tuple[ModelSpec, Path] | None:
 class LlmDetector(Detector):
     name = "llm"
     min_profile = Profile.FULL
+    deterministic = False
     verify = False
 
     @classmethod

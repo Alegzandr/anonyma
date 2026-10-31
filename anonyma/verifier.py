@@ -112,6 +112,7 @@ class Verifier:
                 prepared = normalize_with_map(segment.text)
                 spans = [(m.start, m.end) for m in subs.find(segment.text, prepared=prepared)]
                 spans += [(m.start(), m.end()) for m in _BLACKOUT.finditer(segment.text)]
+                spans += [(m.start(), m.end()) for m in _TAG_LIKE.finditer(segment.text)]
                 spans += [
                     (m.start, m.end) for m in kept_matcher.find(segment.text, prepared=prepared)
                 ]
@@ -150,6 +151,8 @@ class Verifier:
                             reason=DETECTOR_HIT,
                             detector=entity.detector,
                             value=value,
+                            certain=detector.deterministic
+                            and entity.score >= CERTAIN_DETECTOR_SCORE,
                         )
                     )
         return result
@@ -179,6 +182,12 @@ class Verifier:
 
 #: Per-process cache: every document of a batch shares the same table and substitutes.
 _CACHE: dict[object, object] = {}
+
+#: Deterministic detector hits below this score are only possible residues.
+CERTAIN_DETECTOR_SCORE = 0.8
+#: Tags as altered by formats or OCR: brackets dropped or replaced (sheet names,
+#: defined names), digits misread as letters (``PERSONNE_O01``).
+_TAG_LIKE = re.compile(r"[\[(<{]?\b[A-Z][A-Z_]{1,40}_[0-9OoIl]{3,}\b[\])>}]?")
 _CACHE_SIZE = 4
 
 

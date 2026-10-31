@@ -219,7 +219,7 @@ FILENAME_SEGMENT_ID = "__filename__"
 #: Neutral values writers put in place of purged authors/initials (comments,
 #: revisions...). Verification tolerates them in outputs.
 ANONYMOUS_AUTHOR = "Anonyme"
-WRITER_PLACEHOLDERS: frozenset[str] = frozenset({ANONYMOUS_AUTHOR, "A"})
+WRITER_PLACEHOLDERS: frozenset[str] = frozenset({ANONYMOUS_AUTHOR, "A", "Unknown"})
 #: Format id of a folder output re-read by the pipeline for verification.
 FOLDER_FORMAT = "dossier"
 
@@ -402,6 +402,9 @@ class Residue:
     reason: str  # "original_value" (matched the batch table) or "detector"
     detector: str
     value: str = field(repr=False)
+    #: True: original value found again, or a deterministic detector hit (file goes
+    #: to quarantine). False: statistical detector hit only (file sent to review).
+    certain: bool = True
 
 
 @dataclass(slots=True)
@@ -413,8 +416,17 @@ class VerificationResult:
     issues: list[Issue] = field(default_factory=list)
 
     @property
+    def certain_residues(self) -> list[Residue]:
+        return [r for r in self.residues if r.certain]
+
+    @property
+    def possible_residues(self) -> list[Residue]:
+        return [r for r in self.residues if not r.certain]
+
+    @property
     def clean(self) -> bool:
-        return self.verified and not self.residues
+        """Verified and no certain residue (possible ones only require review)."""
+        return self.verified and not self.certain_residues
 
 
 @dataclass(slots=True)
@@ -427,7 +439,8 @@ class DocumentResult:
     status: DocumentStatus
     output_path: Path | None = None
     entity_counts: dict[str, int] = field(default_factory=dict)
-    residue_count: int = 0
+    residue_count: int = 0  # certain residues
+    possible_residue_count: int = 0
     review_count: int = 0
     issues: list[Issue] = field(default_factory=list)
     children: list[DocumentResult] = field(default_factory=list)
@@ -632,6 +645,9 @@ class Detector(ABC):
     name: ClassVar[str]
     #: Lowest profile in which this detector runs.
     min_profile: ClassVar[Profile] = Profile.LIGHT
+    #: False for statistical detectors (ML models): their hits on outputs are
+    #: reported as possible residues (review) rather than certain ones (quarantine).
+    deterministic: ClassVar[bool] = True
 
     def __init__(self, config: Config) -> None:
         self.config = config

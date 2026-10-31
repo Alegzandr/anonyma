@@ -72,6 +72,7 @@ class BatchReport:
                             "type": res.entity_type,
                             "origine": res.reason,
                             "detecteur": res.detector,
+                            "certitude": "certain" if res.certain else "possible",
                         }
                     )
         return report

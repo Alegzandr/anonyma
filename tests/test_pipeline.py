@@ -314,3 +314,33 @@ def test_whitelisted_value_is_kept_intact(tmp_path: Path) -> None:
     assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]
     assert top.output_path is not None
     assert top.output_path.read_text(encoding="utf-8") == f"[PERSONNE_001] : {CANARY_EMAIL}\n"
+
+
+class _OutputOnlyStatistical(Detector):
+    """Statistical detector that only fires on produced text (contains a tag)."""
+
+    name = "statistique"
+    deterministic = False
+
+    def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
+        out = []
+        for s in segments:
+            i = s.text.find("Relu")
+            if i >= 0 and "[PERSONNE_" in s.text:
+                out.append(Entity("PERSONNE", "Relu", document_id, s.id, i, i + 4, 0.9, self.name))
+        return out
+
+
+def test_possible_residue_means_review_not_quarantine(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry.load_plugins()
+    monkeypatch.setitem(registry._detectors, "statistique", _OutputOnlyStatistical)
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "a.txt").write_text(f"Relu par {CANARY_PERSON}.\n", encoding="utf-8")
+    top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.NEEDS_REVIEW
+    assert top.possible_residue_count == 1 and top.residue_count == 0
+    assert top.output_path is not None and QUARANTINE_DIR not in top.output_path.parts
+    assert "verify.possible_residue" in [i.code for i in top.issues]
