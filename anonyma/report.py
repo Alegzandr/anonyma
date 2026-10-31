@@ -20,7 +20,7 @@ from typing import Any
 from anonyma.brand import app_svg_data_uri
 from anonyma.frenchtext import NBSP, plural, typo
 from anonyma.models import DocumentResult, DocumentStatus, Regime, Severity, UserError
-from anonyma.pipeline import BatchResult, is_quarantined
+from anonyma.pipeline import RESIDUE_ISSUE, BatchResult, is_quarantined
 
 STATUS_LABELS = {
     DocumentStatus.ANONYMIZED: "Anonymisé",
@@ -211,7 +211,11 @@ class BatchReport:
             for r, path in walk_paths(top):
                 status = r.status.value
                 report.item_status_counts[status] = report.item_status_counts.get(status, 0) + 1
-                errors = [i for i in r.issues if i.severity is Severity.ERROR]
+                # A residue is reported (and counted) as such, not as a failure: the
+                # file was anonymized and verified, then quarantined.
+                errors = [
+                    i for i in r.issues if i.severity is Severity.ERROR and i.code != RESIDUE_ISSUE
+                ]
                 if errors or r.status in (DocumentStatus.FAILED, DocumentStatus.UNSUPPORTED):
                     report.failures.append(
                         {

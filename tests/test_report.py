@@ -65,10 +65,9 @@ def test_from_result_counts(tmp_path: Path) -> None:
     report = BatchReport.from_result(_result(tmp_path))
     assert report.entity_counts == {"PERSONNE": 2, "EMAIL": 1}
     assert report.status_counts == {DocumentStatus.RESIDUE: 1, DocumentStatus.ANONYMIZED: 1}
-    assert [f["fichier"] for f in report.failures] == [
-        "dossier/<script>alert(1)</script>.txt",
-        "dossier/b.md › pj.txt",  # an embedded item is located in its container
-    ]
+    # A quarantined residue is not a failure (D365 run: « echecs: 205 » while every
+    # file was in quarantine); an embedded item is located in its container.
+    assert [f["fichier"] for f in report.failures] == ["dossier/b.md › pj.txt"]
     assert report.residues[0]["type"] == "PERSONNE"
     assert report.review == [
         {"fichier": "dossier/b.md", "type": "NIR", "remplacement": "[NIR_001]"}
@@ -255,7 +254,7 @@ def test_json_report_uses_codes_and_shares_the_exit_code(tmp_path: Path) -> None
     assert data["verdict"] == "quarantaine" and data["code_sortie"] == 1
     assert [f["statut"] for f in data["fichiers"]] == ["residu", "anonymise"]
     assert [f["statut_libelle"] for f in data["fichiers"]] == ["Résidus", "Anonymisé"]
-    assert data["echecs"][1] == {
+    assert data["echecs"][0] == {
         "fichier": "dossier/b.md › pj.txt",
         "statut": "echec",
         "statut_libelle": "Échec",

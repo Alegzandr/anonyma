@@ -131,6 +131,17 @@ def missing_detectors(config: Config, profile: Profile) -> list[str]:
     )
 
 
+def active_detectors(config: Config, profile: Profile) -> list[str]:
+    """Detectors a batch run with ``profile`` actually uses (sorted names), as
+    :func:`build_detectors` would instantiate them."""
+    load_plugins()
+    return sorted(
+        name
+        for name, cls in _detectors.items()
+        if cls.min_profile.rank <= profile.rank and cls.is_available(config)
+    )
+
+
 def usable_profile(config: Config, profile: Profile) -> Profile:
     """The most thorough profile up to ``profile`` that installed models can serve.
 

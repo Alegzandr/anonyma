@@ -664,15 +664,116 @@ def open_store(path: Path, *, create: bool) -> EncryptedMappingStore:
         fail(str(exc))
 
 
+#: French names of the pipeline stages (progress bar and heartbeat).
+STAGE_LABELS = {"analyse": "Analyse", "ecriture": "Écriture et vérification"}
+#: Seconds between two heartbeat lines when stderr is not a terminal.
+HEARTBEAT_SECONDS = 10.0
+
+
+def _elapsed(seconds: float) -> str:
+    """« 45 s », « 3 min 05 s », « 1 h 02 min »."""
+    total = int(seconds)
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    if hours:
+        return f"{hours} h {minutes:02d} min"
+    if minutes:
+        return f"{minutes} min {secs:02d} s"
+    return f"{secs} s"
+
+
+class Heartbeat:
+    """Plain progress lines for a stderr that is no terminal (a log, an agent): one
+    line at each stage change, at the end of a stage and at most every
+    ``interval`` seconds in between (also while one long file shows no progress).
+    Counts only: never a value or a file name."""
+
+    def __init__(
+        self,
+        write: Callable[[str], None],
+        interval: float = HEARTBEAT_SECONDS,
+        clock: Callable[[], float] | None = None,
+    ) -> None:
+        import threading
+        import time
+
+        self._write = write
+        self._interval = interval
+        self._clock = clock or time.monotonic
+        self._lock = threading.Lock()
+        self._started = self._clock()
+        self._last = self._started
+        self._state: tuple[str, int, int] | None = None
+
+    def update(self, event: ProgressEvent) -> None:
+        with self._lock:
+            previous = self._state
+            self._state = (event.stage, event.done, event.total)
+            now = self._clock()
+            changed = previous is None or previous[0] != event.stage
+            finished = 0 < event.total <= event.done and previous != self._state
+            if changed or finished or now - self._last >= self._interval:
+                self._emit(now)
+
+    def tick(self) -> None:
+        """Called periodically: repeat the current state once ``interval`` elapsed."""
+        with self._lock:
+            now = self._clock()
+            if self._state is not None and now - self._last >= self._interval:
+                self._emit(now)
+
+    def _emit(self, now: float) -> None:
+        assert self._state is not None
+        stage, done, total = self._state
+        label = STAGE_LABELS.get(stage, stage)
+        files = "fichier" if total < 2 else "fichiers"
+        ending = ", terminé" if total and done >= total else "…"
+        self._write(f"{label} : {done}/{total} {files}{ending} ({_elapsed(now - self._started)})")
+        self._last = now
+
+
+@contextmanager
+def _heartbeat() -> Iterator[Callable[[ProgressEvent], None]]:
+    import threading
+
+    def write(line: str) -> None:
+        try:
+            sys.stderr.write(line + "\n")
+            sys.stderr.flush()
+        except (OSError, ValueError):
+            pass  # stderr closed: progress is best effort
+
+    beat = Heartbeat(write)
+    stop = threading.Event()
+
+    def loop() -> None:
+        while not stop.wait(1.0):
+            beat.tick()
+
+    thread = threading.Thread(target=loop, name="anonyma-heartbeat", daemon=True)
+    thread.start()
+    try:
+        yield beat.update
+    finally:
+        stop.set()
+        thread.join(timeout=2.0)
+
+
 @contextmanager
 def progress_display(enabled: bool) -> Iterator[Callable[[ProgressEvent], None] | None]:
-    """A Rich progress bar on stderr fed by pipeline ``ProgressEvent``s."""
+    """Progress on stderr fed by pipeline ``ProgressEvent``s: a Rich bar on a
+    terminal, :class:`Heartbeat` lines otherwise (Rich would only print the final
+    state of a redirected bar)."""
     if not enabled:
         yield None
         return
+    if not err.is_terminal:
+        with _heartbeat() as update:
+            yield update
+        return
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
-    labels = {"analyse": "Analyse", "ecriture": "Écriture et vérification"}
+    labels = STAGE_LABELS
     with Progress(
         TextColumn("{task.description}"),
         BarColumn(),
@@ -695,11 +796,24 @@ def progress_display(enabled: bool) -> Iterator[Callable[[ProgressEvent], None] 
 
 #: French names of detectors that may be missing (model not installed...).
 _DETECTOR_LABELS = {"gliner": "GLiNER", "llm": "modèle de langue"}
-#: Detectors whose engine (a library) may be left out of a build.
+#: Detectors whose engine (a library) may be left out of a build, and how to get it.
 _ENGINE_MISSING = {
-    "gliner": "moteur GLiNER non disponible dans cette version",
-    "llm": "moteur du modèle de langue non disponible dans cette version",
+    "gliner": "moteur GLiNER (onnxruntime) absent",
+    "llm": "moteur du modèle de langue (llama-cpp-python) absent",
 }
+_ENGINE_SOURCE_HINT = {"llm": "uv sync --extra llm"}
+
+
+def _engine_missing(name: str) -> str:
+    """Why a detector cannot run here and what would fix it: the portable build does
+    not ship llama-cpp-python (it is an optional extra of the sources)."""
+    reason = _ENGINE_MISSING[name]
+    if getattr(sys, "frozen", False):
+        return f"{reason} de la version portable, qui ne permet pas ce détecteur"
+    hint = _ENGINE_SOURCE_HINT.get(name)
+    return f"{reason} : l'installer avec « {hint} »" if hint else reason
+
+
 #: Detector each profile adds, so that it is worth choosing.
 _PROFILE_DETECTOR = {Profile.STANDARD: "gliner", Profile.FULL: "llm"}
 
@@ -735,9 +849,14 @@ def _missing_detector_names(config: Config) -> list[str]:
 def _missing_reason(name: str) -> str:
     """« GLiNER (modèle non installé) », « modèle de langue (moteur ... version) »."""
     label = _DETECTOR_LABELS.get(name, name)
+    return f"{label} ({_unavailable_reason(name)})"
+
+
+def _unavailable_reason(name: str) -> str:
+    """« modèle non installé », or the missing engine and how to get it."""
     if not engine_available(name) and name in _ENGINE_MISSING:
-        return f"{label} ({_ENGINE_MISSING[name]})"
-    return f"{label} (modèle non installé)"
+        return _engine_missing(name)
+    return "modèle non installé"
 
 
 def _short_label(label: str) -> str:
@@ -814,18 +933,25 @@ def _done_word(config: Config) -> str:
 
 
 def _parameters(config: Config) -> dict[str, Any]:
-    """The batch settings of :func:`_settings` as machine values (JSON)."""
+    """The batch settings of :func:`_settings` as machine values (JSON): the chosen
+    profile, the one the installed models and engines actually serve, the detectors
+    that ran and those the profile enables but could not run (with the reason)."""
     from anonyma import registry
 
+    chosen = config.effective_profile()
+    missing = registry.missing_detectors(config, chosen)
     return {
-        "profil": config.effective_profile().value,
+        "profil": chosen.value,
+        "profil_effectif": registry.usable_profile(config, chosen).value,
+        "detecteurs": registry.active_detectors(config, chosen),
         "mode": config.mode.value,
         "regime": config.regime.value,
         "paranoiaque": config.paranoid,
         "ocr": config.ocr_enabled,
         "noms_neutres": config.neutral_filenames,
         "organisations": config.organization_policy,
-        "detecteurs_indisponibles": registry.missing_detectors(config, config.effective_profile()),
+        "detecteurs_indisponibles": missing,
+        "detecteurs_indisponibles_raisons": {name: _unavailable_reason(name) for name in missing},
     }
 
 
@@ -1135,7 +1261,14 @@ RUN_HELP = (
     "Anonymiser des fichiers et dossiers vers un dossier de sortie (alias : anonymiser).\n\n"
     "Codes de sortie : 0 tout est anonymisé et vérifié, ou à revoir ; 1 au moins un "
     "fichier en quarantaine, en échec ou non pris en charge, ou traitement interrompu ; "
-    "2 erreur d'utilisation. Avec --json, la sortie standard ne contient que le bilan JSON."
+    "2 erreur d'utilisation. Avec --json, la sortie standard ne contient que le bilan JSON.\n\n"
+    "Arborescence produite : un dossier donné garde son nom sous le dossier de sortie "
+    "(« run C:/export -o C:/sortie » écrit C:/export/eml/x.eml dans "
+    "C:/sortie/export/eml/x.eml), un fichier donné seul est écrit directement dedans "
+    "(C:/sortie/lettre.docx) ; un fichier en quarantaine suit la même arborescence sous "
+    "C:/sortie_quarantaine. Les noms de fichiers et de "
+    "dossiers sont eux-mêmes anonymisés (--noms-neutres : noms neutres). Le bilan --json "
+    "donne pour chaque fichier « chemin » et « chemin_relatif »."
 )
 
 
@@ -1324,6 +1457,7 @@ def run_summary(
                 **record,
                 "quarantaine": is_quarantined(r, result.output_dir),
                 "chemin": str(r.output_path) if r.output_path is not None else None,
+                "chemin_relatif": _relative_output(r.output_path, result.output_dir, quarantine),
                 "problemes": problems,
             }
         )
@@ -1355,10 +1489,25 @@ def run_summary(
     }
 
 
+def _relative_output(path: Path | None, output: Path, quarantine: Path) -> str | None:
+    """``export/eml/x.eml``: where a file was written, relative to the output folder
+    (or to the quarantine folder for a quarantined one), with ``/`` separators."""
+    if path is None:
+        return None
+    for base in (quarantine, output):
+        try:
+            return path.resolve().relative_to(base.resolve()).as_posix()
+        except ValueError:
+            continue
+    return None
+
+
 _VERDICT_STYLES = {"ok": "bold green", "warn": "bold yellow", "ko": "bold red"}
 
 
 def _print_run_summary(console: Console, report: BatchReport, summary: dict[str, Any]) -> None:
+    from anonyma.pipeline import RESIDUE_ISSUE
+
     text, level = report.verdict()
     console.print(text, style=_VERDICT_STYLES[level], markup=False, soft_wrap=True)
     if report.entity_counts:
@@ -1369,6 +1518,14 @@ def _print_run_summary(console: Console, report: BatchReport, summary: dict[str,
             f"[red]•[/] {_markup_escape(failure['fichier'])} : {_markup_escape(problems)}",
             soft_wrap=True,
         )
+    for document in summary["documents"]:  # quarantined: residues, not failures
+        for problem in document["problemes"]:
+            if problem["code"] == RESIDUE_ISSUE:
+                console.print(
+                    f"[red]•[/] {_markup_escape(document['fichier'])} : "
+                    f"{_markup_escape(problem['message'])}",
+                    soft_wrap=True,
+                )
     possible = sum(1 for r in report.residues if r.get("certitude") != "certain")
     if possible:
         found = plural(possible, "résidu possible", "résidus possibles")
@@ -1780,21 +1937,67 @@ def _status_label(status: Any, partial: int) -> str:
     return "non installé"
 
 
+ModelsJsonOpt = Annotated[
+    bool,
+    typer.Option(
+        "--json",
+        help="Écrire la liste en JSON sur la sortie standard (identifiant, type, état, "
+        "taille, licence, révision, dossier, moteur disponible).",
+    ),
+]
+
+
+def models_json(manager: Any, statuses: Sequence[Any], recommended: str | None) -> list[Any]:
+    """Machine-readable ``modeles liste``: one object per catalogue model."""
+    from anonyma.model_catalog import ModelKind
+
+    engines = {ModelKind.LLM: "llm", ModelKind.GLINER: "gliner"}
+    rows = []
+    for status in statuses:
+        spec = status.spec
+        engine = engines.get(spec.kind)
+        usable = engine is None or engine_available(engine)
+        rows.append(
+            {
+                "id": spec.id,
+                "type": spec.kind.value,
+                "titre": spec.title,
+                "installe": status.installed,
+                "verifie": status.installed and status.verified,
+                "partiel_octets": 0 if status.installed else manager.partial_bytes(spec.id),
+                "taille_octets": sum(f.size for f in spec.files),
+                "licence": spec.license,
+                "revision": spec.revision,
+                "depot": spec.repo_id,
+                "chemin": str(status.path) if status.installed and status.path else None,
+                "conseille": spec.id == recommended,
+                "moteur_disponible": usable,
+                "moteur_absent": None if usable or engine is None else _engine_missing(engine),
+            }
+        )
+    return rows
+
+
 @models_app.command("liste")
-def models_list() -> None:
+def models_list(as_json: ModelsJsonOpt = False) -> None:
     """Lister les modèles du catalogue et leur état."""
     from anonyma import hardware
 
     manager = _manager()
     statuses = manager.statuses()
+    recommended = hardware.recommend_llm(hardware.detect_hardware())
+    if not engine_available("llm"):
+        recommended = None
+    if as_json:
+        typer.echo(
+            json.dumps(models_json(manager, statuses, recommended), indent=2, ensure_ascii=False)
+        )
+        raise typer.Exit()
     if not statuses:
         out.print("Le catalogue de modèles est vide.")
         raise typer.Exit()
     from anonyma.model_catalog import ModelKind
 
-    recommended = hardware.recommend_llm(hardware.detect_hardware())
-    if not engine_available("llm"):
-        recommended = None
     engines = {ModelKind.LLM: "llm", ModelKind.GLINER: "gliner"}
     # Identifiers and revisions are typed or copied: never cut. On a narrow terminal
     # the licence and the revision (to download by hand for an offline import) are
@@ -1820,7 +2023,7 @@ def models_list() -> None:
         state = _status_label(status, manager.partial_bytes(spec.id))
         engine = engines.get(spec.kind)
         if status.installed and engine and not engine_available(engine):
-            state += f" [yellow]({_ENGINE_MISSING[engine]})[/]"
+            state += f" [yellow]({_markup_escape(_engine_missing(engine))})[/]"
         size_text = hardware.format_bytes(size) if size else "?"
         if wide:
             table.add_row(
@@ -1971,12 +2174,12 @@ def hardware_info(config_file: ConfigOpt = None) -> None:
     rows["Profil recommandé"] = PROFILE_LABELS[advised]
     notes = list(info.notes)
     if not engine_available("llm"):
-        rows["Modèle de langage recommandé"] = f"aucun ({_ENGINE_MISSING['llm']})"
+        rows["Modèle de langage recommandé"] = f"aucun ({_engine_missing('llm')})"
     if advised is not recommended:
         detector = _PROFILE_DETECTOR[recommended]
         notes.append(
             f"Le profil {PROFILE_LABELS[recommended]} conviendrait à cette machine, mais "
-            f"{_ENGINE_MISSING[detector]}."
+            f"{_engine_missing(detector)}."
         )
     renamed = {
         "Profil recommandé": "Profil conseillé",

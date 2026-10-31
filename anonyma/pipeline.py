@@ -97,6 +97,8 @@ CRASH_MESSAGE = (
 OMITTED_CODE = "child.omitted"
 INCOMPLETE_CONTAINER_CODE = "container.incomplete"
 EMPTY_CONTAINER_CODE = "container.empty"
+#: Issue of a verified output in which residues were found (quarantined).
+RESIDUE_ISSUE = "verify.residue"
 EMPTY_CONTAINER = (
     "Aucun élément de ce fichier n'a pu être anonymisé (illisible, chiffré ou non pris en "
     "charge) : fichier non produit."
@@ -1200,7 +1202,7 @@ def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[Docu
             result.issues.append(
                 Issue(
                     Severity.ERROR,
-                    "verify.residue",
+                    RESIDUE_ISSUE,
                     f"{result.residue_count} résidu(s) détecté(s) : fichier placé en quarantaine.",
                 )
             )
