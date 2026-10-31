@@ -23,6 +23,7 @@ jobs:
   lint:
     name: Lint (ruff, mypy)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
@@ -40,6 +41,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # About 6 min, LibreOffice install included: a stuck test must not hold a runner for
+    # GitHub's 6 h default (pytest also dumps the stacks of a test stuck for 5 min).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: System libraries for PySide6 (Linux)
@@ -85,6 +89,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # About 7 min with the LibreOffice cache; a cold cache downloads LibreOffice again.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: System libraries for PySide6 (Linux)
@@ -123,6 +129,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:

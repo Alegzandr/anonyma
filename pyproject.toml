@@ -115,9 +115,12 @@ follow_imports = "skip"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+# A test stuck for 5 minutes gets the stacks of all its threads dumped (built into
+# pytest): a hung worker pool, Qt wait or model call shows where it hangs.
+faulthandler_timeout = 300
 markers = [
     "slow: tests lents (modèles, OCR)",
-    "models: nécessite des modèles téléchargés",
+    "models: modèles réels, seulement si ANONYMA_TEST_MODELS est défini",
 ]
 
 [tool.uv.sources]
