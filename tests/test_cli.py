@@ -219,6 +219,20 @@ def test_analyser_json(tmp_path: Path, corpus: Path, business_list: Path) -> Non
     assert not any((tmp_path / "home" / "data" / "tmp").iterdir())
 
 
+def test_missing_models_are_announced(
+    monkeypatch: pytest.MonkeyPatch, corpus: Path, business_list: Path
+) -> None:
+    from anonyma import registry
+
+    gliner = registry.detector_classes()["gliner"]
+    monkeypatch.setattr(gliner, "is_available", classmethod(lambda cls, config: False))
+    result = invoke("analyser", corpus, "-p", "standard", "--liste-metier", business_list, "-q")
+    assert result.exit_code == 0
+    assert "non disponible : GLiNER" in " ".join(result.output.split())
+    settings = cli._settings(Config(profile=Profile.STANDARD))
+    assert settings["Profil"].endswith("non disponible : GLiNER")
+
+
 def test_analyser_table(corpus: Path, business_list: Path) -> None:
     result = invoke("analyser", corpus, "-p", "leger", "--liste-metier", business_list, "-q")
     assert result.exit_code == 0

@@ -129,11 +129,14 @@ class Config:
     # -- derived helpers ---------------------------------------------------
 
     def effective_profile(self) -> Profile:
+        """The chosen profile, or for "auto" the hardware recommendation capped to
+        the installed models (no FULL profile without a local LLM)."""
         if self.profile is not None:
             return self.profile
-        from anonyma import hardware
+        from anonyma import hardware, registry
 
-        return hardware.recommend_profile(hardware.detect_hardware())
+        recommended = hardware.recommend_profile(hardware.detect_hardware())
+        return registry.usable_profile(self, recommended)
 
     def whitelist_keys(self) -> set[str]:
         return {normalize(v) for v in self.whitelist if v.strip()}
