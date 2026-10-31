@@ -45,6 +45,7 @@ from anonyma.models import (
     EntityType,
     ReviewStatus,
     Segment,
+    SegmentKind,
 )
 from anonyma.names import (
     PARTICLES,
@@ -662,6 +663,144 @@ def _link_emails(clusters: Mapping[str, EntityCluster]) -> None:
         owners = forms.get(local, set())
         if len(owners) == 1:
             cluster.attributes["person"] = next(iter(owners))
+
+
+# ---------------------------------------------------------------------------
+# Attribution by place
+# ---------------------------------------------------------------------------
+
+#: An address right after a display name: « Thi Lan Lambert <thi-lan@…> ».
+_DISPLAY_GAP = re.compile(r"""^["'\s]*<\s*$""")
+
+
+def record_of(segment: Segment) -> str:
+    """The record a segment belongs to: its row in a table, its first-level object
+    or element in JSON/XML (``$.*[3].*``, ``/r/e[3]``), else its whole document."""
+    locator = segment.locator
+    if (
+        segment.context.kind is SegmentKind.CELL
+        and len(locator) == 2
+        and all(isinstance(x, int) for x in locator)
+    ):
+        return f"ligne {locator[0]}"
+    label = segment.context.label
+    if "[" in label and "]" in label:
+        return label[: label.index("]") + 1]
+    return ""
+
+
+def link_by_place(
+    documents: Sequence[Document],
+    entities: Sequence[Entity],
+    clusters: dict[str, EntityCluster],
+) -> None:
+    """Attribute partial mentions the batch-wide index left alone because several
+    people share them (two « Laëtitia »): a given name or a surname alone goes to the
+    only person bearing it in the same record (JSON/XML object, table row), else in
+    the same file; an e-mail address written right after a display name belongs to
+    that person. One person then gets one substitute in all its forms (realistic
+    mode: « Ivana Fleury » signs « Ivana », not « Alya »)."""
+    full: dict[str, PersonName] = {}
+    for cluster in clusters.values():
+        if cluster.entity_type == EntityType.PERSON:
+            person = parse_person(cluster.canonical)
+            if person is not None and person.is_full and reliable_person(person):
+                full[cluster.id] = person
+    if not full:
+        return
+    segments = {
+        (doc.id, seg.id): seg for root in documents for doc in root.walk() for seg in doc.segments
+    }
+    _link_displayed_emails(entities, clusters, full, segments)
+    owner_of = {
+        c.id: c.attributes["person"]
+        for c in clusters.values()
+        if c.entity_type == EntityType.EMAIL and c.attributes.get("person") in full
+    }
+    root_of = {doc.id: root.id for root in documents for doc in root.walk()}
+
+    def place(e: Entity) -> tuple[str, str, str]:
+        segment = segments.get((e.document_id, e.segment_id))
+        record = record_of(segment) if segment is not None else ""
+        return root_of.get(e.document_id, e.document_id), e.document_id, record
+
+    in_root: dict[str, set[str]] = {}
+    in_record: dict[tuple[str, str], set[str]] = {}
+    for e in entities:
+        person_id = e.cluster_id if e.cluster_id in full else owner_of.get(e.cluster_id or "")
+        if person_id is None:
+            continue
+        root, doc, record = place(e)
+        in_root.setdefault(root, set()).add(person_id)
+        in_record.setdefault((doc, record), set()).add(person_id)
+
+    def bearers(word_key: str) -> set[str]:
+        return {
+            cid
+            for cid, p in full.items()
+            if word_key in (p.given_key, p.surname_key) or word_key in p.given_key.split("-")
+        }
+
+    moved: set[str] = set()
+    for e in entities:
+        partial = clusters.get(e.cluster_id or "")
+        if partial is None or partial.entity_type != EntityType.PERSON or partial.id in full:
+            continue
+        person = parse_person(e.value)
+        if person is None or person.is_full or (person.given and person.surname):
+            continue  # initials + surname are linked by the index
+        key = person.given_key or person.surname_key
+        candidates = bearers(key) if key else set()
+        if not candidates:
+            continue
+        root, doc, record = place(e)
+        target = None
+        for present in (in_record.get((doc, record), set()), in_root.get(root, set())):
+            local = candidates & present
+            if len(local) == 1:
+                target = next(iter(local))
+                break
+            if len(local) > 1:
+                break  # ambiguous here: left to the detectors and the review
+        if target is None:
+            continue
+        moved.add(partial.id)
+        e.cluster_id = target
+        _attach(clusters[target], e, {e.detector})
+    used = {e.cluster_id for e in entities}
+    for cid in moved - used:
+        clusters.pop(cid, None)
+
+
+def _link_displayed_emails(
+    entities: Sequence[Entity],
+    clusters: Mapping[str, EntityCluster],
+    full: Mapping[str, PersonName],
+    segments: Mapping[tuple[str, str], Segment],
+) -> None:
+    """``Nom <adresse>``: the address belongs to the person named before it, when
+    every such pair of the batch agrees."""
+    by_segment: dict[tuple[str, str], list[Entity]] = {}
+    for e in entities:
+        by_segment.setdefault((e.document_id, e.segment_id), []).append(e)
+    owners: dict[str, set[str]] = {}
+    for key, found in by_segment.items():
+        segment = segments.get(key)
+        if segment is None:
+            continue
+        persons = [e for e in found if e.cluster_id in full]
+        for mail in found:
+            cluster = clusters.get(mail.cluster_id or "")
+            if cluster is None or cluster.entity_type != EntityType.EMAIL:
+                continue
+            for person in persons:
+                gap = segment.text[person.end : mail.start]
+                if person.end <= mail.start and _DISPLAY_GAP.match(gap):
+                    owners.setdefault(cluster.id, set()).add(person.cluster_id or "")
+    for cid, people in owners.items():
+        cluster = clusters[cid]
+        if len(people) == 1 and "person" not in cluster.attributes:
+            cluster.attributes["person"] = next(iter(people))
 
 
 # ---------------------------------------------------------------------------

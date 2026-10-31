@@ -229,6 +229,30 @@ def login_like(template: str, original: str, fake: FakePerson) -> str:
     return match_case(original, form)
 
 
+def _plain(text: str) -> list[str]:
+    from anonyma.textutils import strip_accents
+
+    return [w for w in re.split(r"[^a-z0-9]+", strip_accents(text).casefold()) if w]
+
+
+def local_like(original: str, person: PersonName, fake: FakePerson) -> str:
+    """A local part of ``fake`` shaped like ``original``, an address of ``person`` that
+    follows no login template: its given names alone (``thi-lan``), its surname
+    alone, else ``given.surname``."""
+    words = _plain(original)
+    separator = next((c for c in original if c in ".-_"), "")
+    given = [w for g in person.given if not is_initial(g) for w in _plain(g)]
+    surname = [w for s in person.surname for w in _plain(s)]
+    if words and all(w in given for w in words):
+        parts = [w for g in fake.given for w in _plain(g)]
+    elif words and all(w in surname for w in words):
+        parts = _plain(fake.surname)
+    else:
+        return login_like("g.s", original, fake)
+    form = separator.join(parts) or login_like("g.s", original, fake)
+    return match_case(original, form)
+
+
 def fake_initials(fake: FakePerson) -> str:
     return "".join(initials_of(g) for g in fake.given)
 
@@ -691,6 +715,7 @@ __all__ = [
     "fake_url",
     "fake_username",
     "fake_vat_fr",
+    "local_like",
     "login_like",
     "match_case",
     "mirror_case",

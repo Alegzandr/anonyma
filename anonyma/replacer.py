@@ -582,6 +582,12 @@ def _same_for_all(cluster: EntityCluster, base: str) -> dict[str, str]:
     return out
 
 
+def _natural(word: str) -> str:
+    """``CLÉMENT`` -> ``Clément``, ``LAGARDE-MOREAU`` -> ``Lagarde-Moreau``; a word
+    already in mixed or lower case (``de``, ``McLeod``) is kept."""
+    return word.title() if word.isupper() and len(word) > 1 else word
+
+
 def _person(
     st: _Realistic, cluster: EntityCluster, rng: random.Random, known: str | None
 ) -> dict[str, str]:
@@ -593,10 +599,11 @@ def _person(
         parsed = parse_person(known)
         if parsed is None:
             return _same_for_all(cluster, known)
-        given = tuple(g for g in parsed.given if not is_initial(g)) or ("Camille",)
-        fake = fk.FakePerson(
-            given, " ".join(parsed.surname) if parsed.surname else "Martin", gender or "m"
-        )
+        # The stored form carries the case of the mention it was made for
+        # (« CLÉMENT Hubert »): every mention gets its own case back (H3).
+        given = tuple(_natural(g) for g in parsed.given if not is_initial(g)) or ("Camille",)
+        surname = " ".join(_natural(w) for w in parsed.surname) if parsed.surname else "Martin"
+        fake = fk.FakePerson(given, surname, gender or "m")
     else:
         fake = fk.fake_person(canonical, gender, rng)
         names = [normalize(fake.surname), *(normalize(g) for g in fake.given)]
@@ -632,6 +639,10 @@ def _email(
             template = match_login_template(local, person) if person else None
             if template is not None:
                 fake_local = fk.login_like(template, local, st.persons[owner])
+            elif person is not None and not generic_local(local):
+                # Its owner is known (« Thi Lan Lambert <thi-lan@…> ») but the local
+                # part follows no template: still a form of the same substitute.
+                fake_local = fk.local_like(local, person, st.persons[owner])
         if fake_local is None and generic_local(local):
             # A function mailbox (offres@, contact@) names no one: it stays one, so
             # that its display name (« Promo Cartouches ») reads as before.

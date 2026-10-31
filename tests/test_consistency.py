@@ -8,6 +8,7 @@ import csv
 import dataclasses
 import email
 import json
+import re
 from datetime import datetime, timedelta
 from email.message import Message
 from email.policy import compat32
@@ -20,6 +21,7 @@ from anonyma import threadindex
 from anonyma.config import Config
 from anonyma.models import DocumentStatus, ReplacementMode
 from anonyma.pipeline import Pipeline
+from anonyma.textutils import strip_accents
 
 SENDER = "Jessica Morin"
 #: A digit in the domain: ``<address>`` once looked like a message id in mail headers.
@@ -194,3 +196,50 @@ def test_thread_index_with_neutral_dates(
     start = threadindex.start_time(str(parent["Thread-Index"]))
     assert start is not None and start.year == 1970
     assert parsedate_to_datetime(str(parent["Date"])).year == 1970
+
+
+def test_forms_of_one_person_share_one_substitute(tmp_path: Path, canary_config: Config) -> None:
+    """Two « Laëtitia » in the batch: each lone signature follows the person of its own
+    record; an address after a display name follows that name (D365 v2: « Ivana
+    Fleury » signed « Alya », « Lahna Chauvet » wrote from mya-sauvage@)."""
+    src = tmp_path / "export"
+    src.mkdir()
+    records = [
+        {
+            "sender_name": "Laëtitia Vidal",
+            "sender": "vidal.laetitia@arnaud-rey.exemple.test",
+            "description": "Merci de supprimer mon adresse.\nBien à vous,\nLaëtitia",
+        },
+        {
+            "sender_name": "Laëtitia Huet",
+            "sender": "l.huet@chateau-lescure.exemple.test",
+            "description": "Voici le RIB demandé.\nCordialement,\nLaëtitia",
+        },
+    ]
+    (src / "page.json").write_text(
+        json.dumps({"value": records}, ensure_ascii=False), encoding="utf-8"
+    )
+    (src / "m.eml").write_text(
+        "From: Thi Lan Lambert <thi-lan@vercors-logistique.exemple.test>\r\n"
+        "To: contact@hexagone.exemple.test\r\nSubject: Devis\r\n\r\n"
+        "Bonne journée,\r\nThi Lan Lambert\r\n",
+        encoding="utf-8",
+        newline="",
+    )
+    config = dataclasses.replace(canary_config, mode=ReplacementMode.REALISTIC)
+    result = Pipeline(config).run([src], tmp_path / "out")
+    outputs = {Path(r.output_name).name: r.output_path for r in result.results}
+    page = outputs["page.json"]
+    assert page is not None
+    out = json.loads(page.read_text(encoding="utf-8"))["value"]
+    for record in out:
+        given = record["sender_name"].split()[0]
+        signature = record["description"].rsplit("\n", 1)[-1]
+        assert signature == given, (record["sender_name"], signature)
+    assert out[0]["sender_name"] != out[1]["sender_name"]
+    mail = outputs["m.eml"]
+    assert mail is not None
+    [(name, address)] = getaddresses([str(_mail(mail)["From"])])
+    words = set(re.split(r"[.\-_]", address.split("@")[0]))
+    shown = {strip_accents(w).casefold() for w in re.split(r"[\s\-]+", name)}
+    assert words <= shown, (name, address)  # a form of the substitute shown as name

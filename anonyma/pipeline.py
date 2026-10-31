@@ -78,6 +78,7 @@ from anonyma.resolver import (
     PROPAGATION_DETECTOR,
     TYPE_PRIORITY,
     cluster_forms,
+    link_by_place,
     propagate,
     resolve,
 )
@@ -1574,6 +1575,7 @@ class Pipeline:
         extra = propagate(documents, clusters, entities, self.config)
         extra += propagate_names(documents, clusters, [*entities, *extra])
         entities, clusters = resolve([*entities, *extra], self.config, clusters)
+        link_by_place(documents, entities, clusters)
         entities = drop_inside_whitelist(documents, entities, self.config)
         entities, clusters = apply_policies(documents, entities, clusters, self.config)
         return BatchAnalysis(
