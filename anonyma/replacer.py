@@ -27,7 +27,6 @@ from dataclasses import dataclass, field
 from anonyma import checksums
 from anonyma import substitutes as fk
 from anonyma.config import Config
-from anonyma.data import is_common_word
 from anonyma.models import (
     Document,
     Entity,
@@ -183,12 +182,9 @@ class _Realistic:
                 ):
                     for token in tokens_of(variant):
                         key = normalize(token.strip(".'’"))
-                        if (
-                            len(key) >= 3
-                            and key not in PARTICLES
-                            and civility_of(token) is None
-                            and not is_common_word(key)
-                        ):
+                        # Name tokens are forbidden even when they are also common
+                        # words ("Martin", "Petit"): a substitute must never reuse them.
+                        if len(key) >= 3 and key not in PARTICLES and civility_of(token) is None:
                             self.forbidden_tokens.add(key)
         self.forbidden.discard("")
         self.shift = self._date_shift()

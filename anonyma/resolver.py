@@ -27,6 +27,7 @@ import ipaddress
 import secrets
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from anonyma import checksums
 from anonyma.config import Config
@@ -165,6 +166,7 @@ def phone_key(value: str) -> str:
     return d
 
 
+@lru_cache(maxsize=131072)
 def identity_key(entity_type: str, value: str) -> str:
     """Comparison key of a value for its type (see module docstring)."""
     if entity_type == EntityType.PERSON:

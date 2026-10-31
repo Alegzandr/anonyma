@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 
 from anonyma.data import first_name, gender_of, is_common_word
 from anonyma.textutils import normalize, strip_accents
@@ -111,6 +112,7 @@ def tokens_of(value: str) -> list[str]:
     return _TOKEN.findall(value)
 
 
+@lru_cache(maxsize=65536)
 def parse_person(value: str) -> PersonName | None:
     """Parse ``value`` as a person name; None if it holds no name token."""
     tokens = tokens_of(value)
@@ -222,6 +224,11 @@ def login_parts(person: PersonName) -> tuple[str, str, str] | None:
 
 
 def login_forms(person: PersonName) -> dict[str, str]:
+    return dict(_login_forms(person))
+
+
+@lru_cache(maxsize=65536)
+def _login_forms(person: PersonName) -> dict[str, str]:
     """Template name -> derived form (``jdupont``, ``jean.dupont``, ``dupont_jean``...)."""
     parts = login_parts(person)
     if parts is None:

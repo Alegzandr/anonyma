@@ -251,6 +251,52 @@ ACRONYMS = frozenset(
     ]
 )
 
+#: Frequent given names that are mostly places, holidays or brands when alone.
+NOT_LONE_GIVEN = frozenset(
+    normalize(w)
+    for w in [
+        "France",
+        "Florence",
+        "Nancy",
+        "Lorraine",
+        "Valence",
+        "Vienne",
+        "Lourdes",
+        "Victoria",
+        "Avril",
+        "Noël",
+        "Noel",
+        "Pâques",
+        "Toussaint",
+        "Europe",
+        "Amérique",
+        "Afrique",
+        "Asie",
+        "Bretagne",
+        "Normandie",
+        "Savoie",
+        "Provence",
+        "Champagne",
+        "Alsace",
+        "Lyon",
+        "Paris",
+        "Orléans",
+        "Albi",
+        "Laval",
+        "Vichy",
+        "Dax",
+        "Cannes",
+        "Nice",
+        "Sydney",
+        "Mercedes",
+        "Lancia",
+        "Porsche",
+        "Chanel",
+        "Dior",
+        "Hermès",
+    ]
+)
+
 CIVILITY = (
     r"(?:M\.|MM\.|Mr\.?|Mrs\.?|Ms\.?|Mme\.?|Mmes\.?|Mlle\.?|Melle|Dr\.?|Pr\.?|Me|Mgr|"
     r"(?i:monsieur|madame|mademoiselle|messieurs|mesdames|docteur|professeur|ma[iî]tre|"
@@ -350,6 +396,39 @@ class PersonRecognizer(CustomRecognizer):
     def _glued(text: str, left: _Token, right: _Token) -> bool:
         return bool(_GAP.match(text[left.end : right.start]))
 
+    def _upper_surname_start(self, text: str, tokens: list[_Token], k: int) -> int:
+        """Extend a capitals surname to the left (``LE GOFF``, ``DE LA TOUR``)."""
+        while k > 0 and self._glued(text, tokens[k - 1], tokens[k]):
+            prev = tokens[k - 1]
+            if prev.bare in ACRONYMS:
+                break
+            upper_word = prev.is_upper and (prev.key not in STOP_WORDS or prev.key in PARTICLES)
+            if upper_word or prev.text.upper() in ("D'", "D’", "L'", "L’"):
+                k -= 1
+            else:
+                break
+        return k
+
+    @staticmethod
+    def _lone_given(text: str, tok: _Token) -> bool:
+        """A frequent given name alone, mid-sentence, that is not a common word."""
+        if not tok.is_cap or tok.key in NOT_LONE_GIVEN:
+            return False
+        record = first_name(tok.bare)
+        if record is None or record.count < 2000:
+            return False
+        # Capitalized mid-sentence, a very frequent given name wins over the lexicon
+        # (Guy, Marc, Charlotte...); rarer ones must not be common words.
+        if record.count < 20000 and is_common_word(tok.bare):
+            return False
+        i = tok.start - 1
+        while i >= 0 and text[i] in " \t  ":
+            i -= 1
+        if i < 0 or text[i] in '.!?:;\n\r•-–—"«(':
+            return False  # sentence or list item start: too ambiguous
+        nxt = text[tok.end : tok.end + 1]
+        return not (nxt and (nxt.isalnum() or nxt in "-'’"))
+
     def _particles(self, text: str, tokens: list[_Token], j: int) -> int | None:
         """Index after the particle run starting at ``j`` if a name word follows."""
         k = j
@@ -442,17 +521,28 @@ class PersonRecognizer(CustomRecognizer):
                     if not (tokens[j + 1].is_cap and _given(tokens[j + 1], 200)):
                         break
                     j += 1
-                k = i
-                while k > 0 and self._glued(text, tokens[k - 1], tokens[k]):
-                    prev = tokens[k - 1]
-                    if prev.is_upper and prev.bare not in ACRONYMS and prev.key not in STOP_WORDS:
-                        k -= 1
-                    else:
-                        break
+                k = self._upper_surname_start(text, tokens, i)
                 out.append(_result(EntityType.PERSON, tokens[k].start, tokens[j].end, 0.85))
                 i = j + 1
                 continue
             if not _given(tok) or (tok.is_upper and len(tok.bare) < 3):
+                i += 1
+                continue
+            # SURNAME GIVEN, all in capitals ("FERNANDES HÉLÈNE")
+            if (
+                tok.is_upper
+                and i > 0
+                and self._glued(text, tokens[i - 1], tok)
+                and tokens[i - 1].is_upper
+                and tokens[i - 1].bare not in ACRONYMS
+                and tokens[i - 1].key not in STOP_WORDS
+                and not _given(tokens[i - 1], 1000)
+                and not (
+                    i + 1 < n and tokens[i + 1].is_upper and self._glued(text, tok, tokens[i + 1])
+                )
+            ):
+                k = self._upper_surname_start(text, tokens, i - 1)
+                out.append(_result(EntityType.PERSON, tokens[k].start, tok.end, 0.7))
                 i += 1
                 continue
             j = i
@@ -488,6 +578,9 @@ class PersonRecognizer(CustomRecognizer):
             if not surname:
                 if j > i:  # two given names: the last one may be a surname
                     out.append(_result(EntityType.PERSON, tok.start, tokens[j].end, 0.5))
+                elif self._lone_given(text, tok):
+                    end = tok.start + len(tok.bare)
+                    out.append(_result(EntityType.PERSON, tok.start, end, 0.65))
                 i = j + 1
                 continue
             end_tok = surname[-1]

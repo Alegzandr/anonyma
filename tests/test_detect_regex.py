@@ -372,3 +372,16 @@ def test_scores_within_bounds(detector: RegexDetector) -> None:
     for e in detect(detector, text):
         assert 0.0 < e.score <= 1.0
         assert e.value == text[e.start : e.end]
+
+
+def test_detection_never_uses_the_network() -> None:
+    import socket
+
+    from anonyma import netguard
+
+    netguard.install()
+    detector = RegexDetector(Config())
+    text = "Voir https://www.exemple.fr/a et écrire à jean.dupont@exemple.fr ou dupont-avocats.fr"
+    assert {e.entity_type for e in detect(detector, text)} >= {"URL", "EMAIL"}
+    with pytest.raises(netguard.NetworkBlockedError):
+        socket.create_connection(("192.0.2.1", 80), timeout=0.1)

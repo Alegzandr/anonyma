@@ -20,7 +20,7 @@ words (``Petit``, ``Rose``) only count when capitalized.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 
 from anonyma import checksums
 from anonyma.config import Config
@@ -83,11 +83,11 @@ class Verifier:
         """
         result = VerificationResult(verified=True)
         allowed_keys = {normalize(a) for a in allowed} | self.config.whitelist_keys()
-        table = self._table(sensitive, allowed_keys)
-        subs: MultiMatcher[str] = MultiMatcher()
-        for sub in substitutes:
-            if sub.strip():
-                subs.add(sub, sub)
+        table = _cached(
+            ("table", tuple(sensitive), frozenset(allowed_keys)),
+            lambda: self._table(sensitive, allowed_keys),
+        )
+        subs = _cached(("subs", frozenset(substitutes)), lambda: _substitutes(substitutes))
 
         for doc in output.walk():
             if doc.status is not DocumentStatus.EXTRACTED or doc.has_errors:
@@ -168,6 +168,27 @@ class Verifier:
                 if normalize(form) not in allowed_keys and worth_checking(form):
                     table.add(form, (entity_type, TABLE_VARIANT_DETECTOR), require_capital=cap)
         return table
+
+
+#: Per-process cache: every document of a batch shares the same table and substitutes.
+_CACHE: dict[object, object] = {}
+_CACHE_SIZE = 4
+
+
+def _cached[T](key: object, build: Callable[[], T]) -> T:
+    if key not in _CACHE:
+        while len(_CACHE) >= _CACHE_SIZE:
+            _CACHE.pop(next(iter(_CACHE)))
+        _CACHE[key] = build()
+    return _CACHE[key]  # type: ignore[return-value]
+
+
+def _substitutes(substitutes: set[str]) -> MultiMatcher[str]:
+    subs: MultiMatcher[str] = MultiMatcher()
+    for sub in substitutes:
+        if sub.strip():
+            subs.add(sub, sub)
+    return subs
 
 
 def _needs_capital(entity_type: str, value: str) -> bool:

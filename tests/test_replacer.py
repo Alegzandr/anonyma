@@ -26,6 +26,7 @@ from anonyma.replacer import BLACKOUT_CHAR, Replacer, SubstitutionTable, build_p
 from anonyma.resolver import resolve
 from anonyma.store import InMemoryMappingStore
 from anonyma.substitutes import match_case, shift_date
+from anonyma.textutils import strip_accents
 
 
 def ent(value: str, entity_type: str = "PERSONNE", seg: str = "s") -> Entity:
@@ -40,6 +41,10 @@ def assign(
     kept, clusters = resolve(entities, cfg)
     store = InMemoryMappingStore() if cfg.regime is Regime.PSEUDONYMIZATION else None
     return Replacer(cfg, store).assign(clusters, kept), kept, clusters
+
+
+def ascii_of(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", strip_accents(name).casefold())
 
 
 def sub(table: SubstitutionTable, entities: list[Entity], value: str) -> str:
@@ -83,9 +88,9 @@ def test_realistic_person_variants_are_consistent() -> None:
     assert sub(table, kept, "DUPONT Jean") == f"{surname.upper()} {given}"
     assert sub(table, kept, "M. Dupont") == f"M. {surname}"
     assert sub(table, kept, "JEAN DUPONT") == f"{given.upper()} {surname.upper()}"
-    ascii_surname = re.sub(r"[^a-z]", "", checksums.compact(surname).lower())
+    ascii_surname = ascii_of(surname)
     assert sub(table, kept, "jdupont").endswith(ascii_surname)
-    assert sub(table, kept, "jdupont")[0] == checksums.compact(given)[0].lower()
+    assert sub(table, kept, "jdupont")[0] == ascii_of(given)[0]
     assert sub(table, kept, "Dupont_Jean").split("_")[0].lower() == ascii_surname
 
 
@@ -135,7 +140,7 @@ def test_email_built_from_substitute_person() -> None:
     )  # fmt: skip
     person = parse_person(sub(table, kept, "Jean Dupont"))
     assert person is not None
-    ascii_given = re.sub(r"[^a-z]", "", checksums.compact(person.given[0]).lower())
+    ascii_given = ascii_of(person.given[0])
     email = sub(table, kept, "jean.dupont@dupont-avocats.test")
     local, domain = email.split("@")
     assert local.startswith(ascii_given + ".") and domain.endswith(".example")
