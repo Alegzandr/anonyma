@@ -12,7 +12,7 @@ Re-implements the pre/post-processing of the ``gliner`` library for span models
 * decoding: sigmoid, threshold, greedy non-overlapping selection.
 
 Long texts are cut into overlapping word windows that fit the encoder budget;
-short texts (cells, headers, JSON values...) are packed several to a window,
+tiny texts (keys, cells, JSON values: a few words) are packed several to a window,
 separated by a ``.`` word, and a span crossing two of them is dropped: thousands
 of tiny segments no longer cost one padded window each. Windows are batched
 together (sorted by length to limit padding).
@@ -57,6 +57,9 @@ class _Window:
 
 #: Word put between two packed texts.
 PACK_SEPARATOR = "."
+#: Texts of at most this many words are packed (keys, cells, single values): a
+#: sentence keeps a window of its own, the model reads it out of any other context.
+PACK_MAX_WORDS = 4
 
 
 def split_words(text: str) -> list[tuple[int, int]]:
@@ -186,8 +189,8 @@ class GlinerOnnx:
     def _pack(
         self, pieces_by_text: list[list[list[int]]], budget: int, separator: int
     ) -> list[_Window]:
-        """Windows of every text: long texts cut by :meth:`_windows`, short ones (one
-        window each) packed in order, as many as the budget and ``max_words`` allow."""
+        """Windows of every text: texts cut by :meth:`_windows`, tiny ones packed in
+        order, as many as the budget and ``max_words`` allow."""
         windows: list[_Window] = []
         group: list[tuple[int, int]] = []
         used = words = 0
@@ -200,9 +203,8 @@ class GlinerOnnx:
             group.clear()
 
         for i, pieces in enumerate(pieces_by_text):
-            own = self._windows(i, pieces, budget)
-            if len(own) != 1:
-                windows.extend(own)  # long text (or no word at all)
+            if len(pieces) > PACK_MAX_WORDS or not pieces:
+                windows.extend(self._windows(i, pieces, budget))
                 continue
             tokens = sum(len(p) for p in pieces)
             extra_tokens = tokens + (separator if group else 0)
