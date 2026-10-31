@@ -351,6 +351,9 @@ class RegexDetector(Detector):
             score = max(score, rule.context_score if rule.context_score is not None else 0.95)
         elif rule.needs_context:
             return None
+        if rule.name == "identifiant_chemin_windows" and " " in text[start:end].strip():
+            # A profile folder with spaces is the display name of its owner.
+            return EntityType.PERSON, start, end, score, {"rule": rule.name}
         return rule.entity_type, start, end, score, {"rule": rule.name}
 
     def _labels(

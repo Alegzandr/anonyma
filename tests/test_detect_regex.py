@@ -506,7 +506,7 @@ def test_hyphenated_handle_is_one_identifier(detector: RegexDetector) -> None:
 
 def test_windows_profile_folder_with_spaces(detector: RegexDetector) -> None:
     path = r"C:\Users\Zéphyrin Quintavalle\Documents\cv.txt"
-    assert found(detector, path, "IDENTIFIANT") == ["Zéphyrin Quintavalle"]
+    assert found(detector, path, "PERSONNE") == ["Zéphyrin Quintavalle"]
 
 
 def test_value_next_to_a_field_name_cell(detector: RegexDetector) -> None:
