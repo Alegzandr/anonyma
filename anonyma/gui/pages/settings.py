@@ -34,7 +34,7 @@ from anonyma import paths
 from anonyma.config import Config, load_business_list
 from anonyma.gui import dialogs, theme
 from anonyma.gui.context import AppContext
-from anonyma.gui.controller import DEFAULT_STORE_NAME
+from anonyma.gui.controller import DEFAULT_STORE_NAME, REVIEW_POLICIES, review_policy
 from anonyma.gui.dialogs import normalize_type
 from anonyma.gui.labels import MODE_LABELS, PROFILE_LABELS, REGIME_LABELS
 from anonyma.gui.widgets import Banner, button, muted, page_header, primary_button
@@ -149,6 +149,11 @@ class SettingsPage(QWidget):
         for regime, label in REGIME_LABELS.items():
             self.regime.addItem(label, regime.value)
         f.addRow("Régime", self.regime)
+        self.review_policy = QComboBox()
+        self.review_policy.setObjectName("SettingsReviewPolicy")
+        for key, label in REVIEW_POLICIES.items():
+            self.review_policy.addItem(label, key)
+        f.addRow("Relecture avant écriture", self.review_policy)
         store_row = QHBoxLayout()
         self.store_path = QLineEdit()
         self.store_path.setPlaceholderText(str(paths.data_dir() / DEFAULT_STORE_NAME))
@@ -284,6 +289,7 @@ class SettingsPage(QWidget):
             self.profile,
             self.mode,
             self.regime,
+            self.review_policy,
             self.gliner_model,
             self.llm_model,
         ):
@@ -300,6 +306,7 @@ class SettingsPage(QWidget):
         for table in (self.always_mask, self.custom_labels):
             table.itemChanged.connect(self._mark_dirty)
         self.regime.currentIndexChanged.connect(self._update_store_visibility)
+        self.context.config_changed.connect(self._external_change)
         self.use_libreoffice.toggled.connect(lo_widget.setEnabled)
         self.load()
 
@@ -335,6 +342,7 @@ class SettingsPage(QWidget):
             self._fill_models(self.llm_model, ModelKind.LLM, config.llm_model)
             self._select(self.mode, config.mode.value)
             self._select(self.regime, config.regime.value)
+            self._select(self.review_policy, review_policy(config))
             self.store_path.setText(config.store_path)
             self.whitelist.setPlainText("\n".join(config.whitelist))
             self.always_mask.setRowCount(0)
@@ -372,6 +380,7 @@ class SettingsPage(QWidget):
         config.llm_model = str(self.llm_model.currentData() or "")
         config.mode = ReplacementMode(self.mode.currentData())
         config.regime = Regime(self.regime.currentData())
+        config.review_policy = str(self.review_policy.currentData())
         config.store_path = self.store_path.text().strip()
         config.whitelist = _lines(self.whitelist)
         terms: list[dict[str, str]] = []
@@ -413,6 +422,13 @@ class SettingsPage(QWidget):
         config.validate()
         return config
 
+    def _external_change(self) -> None:
+        """Another page changed the configuration (review policy, learned lists)."""
+        if not self._dirty and not self._saving:
+            self.load()
+
+    _saving = False
+
     def save(self) -> bool:
         try:
             config = self.collect()
@@ -420,13 +436,16 @@ class SettingsPage(QWidget):
             self.banner.show_message(str(exc), "error")
             return False
         previous = copy.deepcopy(self.context.config.business_lists)
+        self._saving = True
         try:
             self.context.update_config(config)
         except (OSError, ValueError) as exc:
+            self._saving = False
             log.warning("settings not saved: %s", type(exc).__name__)
             message = str(exc) if isinstance(exc, ValueError) else "Enregistrement impossible."
             self.banner.show_message(message, "error")
             return False
+        self._saving = False
         self._delete_unused_lists(previous, config.business_lists)
         self._set_dirty(False)
         self.banner.show_message("Réglages enregistrés.", "success")

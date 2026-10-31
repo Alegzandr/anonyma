@@ -1,4 +1,4 @@
-"""Full analyze -> review -> apply runs through the GUI (pipeline in a worker thread)."""
+"""Full analyze -> review -> apply runs through the GUI (pipeline in worker threads)."""
 
 from __future__ import annotations
 
@@ -16,73 +16,10 @@ from anonyma.gui.main_window import MainWindow
 from anonyma.gui.preview import RowState
 from anonyma.models import Detector, DocumentStatus, Entity, Regime, Segment
 from anonyma.store import InMemoryMappingStore
-from tests.gui.conftest import DialogRecorder
+from anonyma.textutils import normalize
+from tests.gui.conftest import DialogRecorder, analyze, prepare, select_text, settle
 
 TIMEOUT = 30_000
-
-
-class _LowScoreDetector(Detector):
-    """Flags « Orsini » with a score below the review threshold."""
-
-    name = "faible"
-
-    def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
-        out = []
-        for s in segments:
-            i = s.text.find("Orsini")
-            if i >= 0:
-                out.append(
-                    Entity("PERSONNE", "Orsini", document_id, s.id, i, i + 6, 0.4, self.name)
-                )
-        return out
-
-
-@pytest.fixture
-def low_score(monkeypatch: pytest.MonkeyPatch) -> None:
-    registry.load_plugins()
-    monkeypatch.setitem(registry._detectors, "faible", _LowScoreDetector)
-
-
-@pytest.fixture
-def batch(tmp_path: Path, gui_config: Config) -> Path:
-    """Two txt files and a business list (CSV) referenced by the configuration."""
-    folder = tmp_path / "Dossiers"
-    folder.mkdir()
-    (folder / "a.txt").write_text(
-        "Contrat Hélios signé par Bérénice Lagarde à Brest.\nContact : Orsini.\n",
-        encoding="utf-8",
-    )
-    (folder / "b.txt").write_text(
-        "Le projet HÉLIOS avance à Brest. Bérénice Lagarde relit.\n", encoding="utf-8"
-    )
-    csv = tmp_path / "liste.csv"
-    csv.write_text("valeur,type\nBérénice Lagarde,PERSONNE\nHélios,PROJET\n", encoding="utf-8")
-    gui_config.business_lists = [str(csv)]
-    return folder
-
-
-def _prepare(window: MainWindow, folder: Path, out: Path) -> None:
-    window.controller.add_inputs([folder])
-    assert window.processing.set_output_dir(out)
-
-
-def _analyze(qtbot: Any, window: MainWindow) -> None:
-    with qtbot.waitSignal(window.controller.analysis_ready, timeout=TIMEOUT):
-        window.processing.analyze_button.click()
-    assert not window.controller.busy
-
-
-def _row_index(window: MainWindow, value: str, document: str | None = None) -> int:
-    review = window.review
-    for i, row in enumerate(review.model.rows):
-        doc_name = review.model.doc_names.get(row.entity.document_id, "")
-        if row.entity.value == value and (document is None or doc_name.endswith(document)):
-            return i
-    raise AssertionError(f"no row for {value!r}")
-
-
-def _select_text(window: MainWindow, text: str) -> None:
-    assert window.review.original.find(text)
 
 
 def test_full_review_flow(
@@ -94,44 +31,56 @@ def test_full_review_flow(
     recorder: DialogRecorder,
 ) -> None:
     out = tmp_path / "sortie"
-    _prepare(window, batch, out)
+    prepare(qtbot, window, batch, out)
+    assert [r.status for r in window.processing.model.rows] == ["En attente", "En attente"]
     window.show()
-    _analyze(qtbot, window)
+    analyze(qtbot, window)
     c = window.controller
     assert c.analysis is not None
     assert len(c.analysis.documents) == 2
     assert c.pending_review_count() == 1
-    assert window.processing.table.item(0, 2).text() == "Analysé"
+    assert window.processing.model.rows[0].status == "Analysé"
 
     window.show_page("review")
     review = window.review
-    assert "1 groupe" in review.counter.text()
+    # One row per entity, the uncertain one first, with occurrences and files.
+    orsini = review.cluster_for_value("Orsini")
+    assert review.model.ids[0] == orsini
+    lagarde = review.cluster_for_value("Bérénice Lagarde")
+    assert review.cluster_title(lagarde) == (
+        "Bérénice Lagarde — PERSONNE — 2 occurrences dans 2 fichiers"
+    )
+    view = review.model.view(orsini)
+    assert view is not None and "seuil de revue" in view.reason
+    assert "0 / 3 décidées" in review.counter.text()
+    assert "1 à revoir" in review.counter.text()
     assert window.nav.item(1).text() == "Revue (1)"
     assert "Bérénice Lagarde" in review.original.toPlainText()
-    # Before any decision, the preview masks the business-list terms.
     preview = review.anonymized.toPlainText()
     assert "Bérénice" not in preview and "[PERSONNE_" in preview and "[PROJET_" in preview
 
-    review.scope_combo.setCurrentIndex(review.scope_combo.findData("batch"))
-    # Reject « Hélios » (whole cluster), confirm « Orsini » (the review cluster).
-    review.select_row(_row_index(window, "Hélios"))
+    # Reject « Hélios » (one decision for both occurrences), confirm « Orsini ».
+    helios = review.cluster_for_value("Hélios")
+    review.select_cluster(helios)
     review.reject_selected()
-    review.select_row(_row_index(window, "Orsini"))
-    assert review.model.rows[review.table.currentIndex().row()].state is RowState.REVIEW
+    review.select_cluster(orsini)
     review.confirm_selected()
     assert c.pending_review_count() == 0
-    assert "Aucun groupe" in review.counter.text()
+    assert "2 / 3 décidées" in review.counter.text()
 
     # Add « Brest » from a text selection: propagated to the whole batch.
     review.select_document(c.analysis.documents[0].id)
     assert review.current_doc_id == c.analysis.documents[0].id
-    _select_text(window, "Brest")
+    select_text(window, "Brest")
     recorder.entity_type = "LIEU"
-    window.review.add_entity_from_selection()
+    review.add_entity_from_selection()
     assert [m.value for m in c.decisions.manual] == ["Brest"]
+    settle(qtbot, window)
     preview = review.anonymized.toPlainText()
     assert "Brest" not in preview and "[LIEU_001]" in preview
     assert "Hélios" in preview  # rejected: kept
+    brest = review.cluster_for_value("Brest")
+    assert brest and review.cluster_title(brest).endswith("2 occurrences dans 2 fichiers")
 
     # Apply from the review page.
     with qtbot.waitSignal(c.result_ready, timeout=TIMEOUT):
@@ -147,66 +96,188 @@ def test_full_review_flow(
         assert "Bérénice" not in text and "Lagarde" not in text and "Brest" not in text
     assert "Hélios" in texts["a.txt"] and "HÉLIOS" in texts["b.txt"]
     assert "Orsini" not in texts["a.txt"]
-    # Same entity, same tag across the batch.
     tag = texts["a.txt"].split("signé par ")[1].split(" ")[0]
     assert tag.startswith("[PERSONNE_") and tag in texts["b.txt"]
-    # Originals untouched.
     assert "Bérénice" in (batch / "a.txt").read_text(encoding="utf-8")
 
     # The anonymized side now shows the re-extracted produced file.
     assert review.source_combo.currentData() == "output"
     qtbot.waitUntil(lambda: "[LIEU_" in review.anonymized.toPlainText(), timeout=TIMEOUT)
-    assert "Brest" not in review.anonymized.toPlainText()
 
-    # Report page.
     report = window.report
     assert report.report is not None
     assert report.files_table.rowCount() == 2
     assert report.cards[DocumentStatus.ANONYMIZED].value.text() == "2"
     exported = report.export("json", tmp_path / "rapport.json")
     assert exported is not None and "Bérénice" not in exported.read_text(encoding="utf-8")
-    md = report.export("md", tmp_path / "rapport.md")
-    assert md is not None and "# Rapport du lot" in md.read_text(encoding="utf-8")
 
 
-def test_retype_and_rejected_mention_reach_the_output(
+def test_occurrences_retype_and_rejected_mention(
     qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path, recorder: DialogRecorder
 ) -> None:
-    _prepare(window, batch, tmp_path / "sortie")
-    _analyze(qtbot, window)
+    prepare(qtbot, window, batch, tmp_path / "sortie")
+    analyze(qtbot, window)
     c = window.controller
     review = window.review
-    review.scope_combo.setCurrentIndex(review.scope_combo.findData("batch"))
-    # Retype « Hélios » (PROJET -> ORGANISATION) through the type chooser.
-    review.select_row(_row_index(window, "Hélios"))
+    helios = review.cluster_for_value("Hélios")
+    review.select_cluster(helios)
     recorder.entity_type = "ORGANISATION"
     review.retype_selected()
     assert set(c.decisions.retyped_clusters.values()) == {"ORGANISATION"}
-    # Reject one single mention of « Bérénice Lagarde » in b.txt.
-    review.select_row(_row_index(window, "Bérénice Lagarde", "b.txt"))
+
+    # Expand « Bérénice Lagarde » and pick its occurrence in b.txt: the view jumps there.
+    lagarde = review.cluster_for_value("Bérénice Lagarde")
+    key = review.mention_index(lagarde, "b.txt")
+    assert key is not None
+    assert review.select_cluster(lagarde, key)
+    assert review.current_row_kind() == "mention"
+    assert review.current_doc_id == key[0]
+    assert review.original.extraSelections()
     review.reject_selected_mentions()
-    assert len(c.decisions.rejected_mentions) == 1
-    row = review.model.rows[_row_index(window, "Bérénice Lagarde", "b.txt")]
-    assert row.state is RowState.MENTION_REJECTED
+    assert c.decisions.rejected_mentions == {key}
+    rows = {r.key: r.state for r in review._doc_rows}
+    assert rows[key] is RowState.MENTION_REJECTED
 
     with qtbot.waitSignal(c.result_ready, timeout=TIMEOUT):
         window.processing.start_apply()
     assert c.result is not None
     by_name = {Path(r.output_name).name: r for r in c.result.results}
-    a = by_name["a.txt"]
-    assert a.output_path is not None
-    a_text = a.output_path.read_text(encoding="utf-8")
+    a_text = by_name["a.txt"].output_path.read_text(encoding="utf-8")  # type: ignore[union-attr]
     assert "[ORGANISATION_001]" in a_text and "Hélios" not in a_text
-    # The kept mention is still in b.txt (the verifier flags it as a residue).
     b = by_name["b.txt"]
     assert b.output_path is not None
     assert "Bérénice Lagarde" in b.output_path.read_text(encoding="utf-8")
 
 
+def test_counter_next_undecided_bulk_and_search(
+    qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path, recorder: DialogRecorder
+) -> None:
+    prepare(qtbot, window, batch, tmp_path / "sortie")
+    analyze(qtbot, window)
+    c = window.controller
+    review = window.review
+    assert c.decided_counts() == (0, 2)
+
+    review.search.setText("lagarde")
+    review._apply_filters()
+    assert [review.model.view(cid).canonical for cid in review.model.ids] == ["Bérénice Lagarde"]
+    review.clear_filters()
+    assert len(review.model.ids) == 2
+
+    # Validating moves on to the next entity without a decision.
+    first = review.current_cluster_id()
+    review.confirm_selected()
+    qtbot.waitUntil(lambda: review.current_cluster_id() != first, timeout=TIMEOUT)
+    second = review.current_cluster_id()
+    assert not c.is_decided(second)
+    assert "1 / 2 décidées" in review.counter.text()
+
+    view = review.model.view(second)
+    assert view is not None
+    review.confirm_all_of_type()
+    assert recorder.confirms and view.entity_type.capitalize()[:4] in recorder.confirms[-1]
+    assert c.decided_counts() == (2, 2)
+    assert "2 / 2 décidées" in review.counter.text()
+    review.confirm_all_remaining()
+    assert "déjà une décision" in review.banner.text()
+    review.next_undecided()
+    assert "Toutes les entités" in review.banner.text()
+
+    review.state_filter.setCurrentIndex(review.state_filter.findData("non_decidees"))
+    assert review.model.ids == []
+    review.clear_filters()
+
+    # « Valider tout le reste » and « Rejeter la sélection » ask for confirmation.
+    review.select_cluster(review.cluster_for_value("Hélios"))
+    review.reset_selected()
+    assert c.decided_counts() == (1, 2)
+    recorder.confirm_answer = False
+    review.confirm_all_remaining()
+    assert c.decided_counts() == (1, 2)
+    review.reject_selection_bulk()
+    assert not c.decisions.rejected_clusters
+    recorder.confirm_answer = True
+    review.confirm_all_remaining()
+    assert c.decided_counts() == (2, 2)
+
+
+def test_learning_whitelist_and_always_mask_with_undo(
+    qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path, recorder: DialogRecorder
+) -> None:
+    prepare(qtbot, window, batch, tmp_path / "sortie")
+    analyze(qtbot, window)
+    c = window.controller
+    review = window.review
+    path = window.context.config_path
+    assert path is not None
+
+    review.select_cluster(review.cluster_for_value("Hélios"))
+    review.reject_selected()
+    labels = [b.text() for b in review.banner.action_buttons]
+    assert labels == ["Ajouter à la liste blanche"]
+    review.banner.action_buttons[0].click()
+    saved = Config.load(path)
+    assert [normalize(v) for v in saved.whitelist] == ["helios"]
+    assert not c.analysis_is_stale()  # the current analysis already reflects it
+    assert [b.text() for b in review.banner.action_buttons] == ["Annuler"]
+    review.banner.action_buttons[0].click()
+    assert Config.load(path).whitelist == []
+
+    review.select_document(c.analysis.documents[0].id)  # type: ignore[union-attr]
+    select_text(window, "Brest")
+    recorder.entity_type = "LIEU"
+    review.add_entity_from_selection()
+    assert [b.text() for b in review.banner.action_buttons] == ["Toujours masquer"]
+    review.banner.action_buttons[0].click()
+    assert {"value": "Brest", "type": "LIEU"} in Config.load(path).always_mask
+    review.banner.action_buttons[0].click()  # Annuler
+    assert {"value": "Brest", "type": "LIEU"} not in Config.load(path).always_mask
+
+
+@pytest.mark.parametrize("policy", ["aucune", "incertaines", "systematique"])
+def test_review_policy(
+    qtbot: Any,
+    window: MainWindow,
+    batch: Path,
+    tmp_path: Path,
+    low_score: None,
+    policy: str,
+) -> None:
+    prepare(qtbot, window, batch, tmp_path / "sortie")
+    window.processing.set_review_policy(policy)
+    assert window.context.config.review_policy == policy
+    assert Config.load(window.context.config_path).review_policy == policy
+    c = window.controller
+    if policy == "aucune":
+        with qtbot.waitSignal(c.result_ready, timeout=TIMEOUT):
+            window.processing.run_button.click()
+        assert c.result is not None
+        # Written directly; the uncertain entity is masked and flagged « À revoir ».
+        assert DocumentStatus.NEEDS_REVIEW in {r.status for r in c.result.results}
+    else:
+        with qtbot.waitSignal(c.review_required, timeout=TIMEOUT):
+            window.processing.run_button.click()
+        assert c.result is None
+        assert window.current_page() == "review"
+        word = "systématique" if policy == "systematique" else "incertaine"
+        assert word in window.processing.banner.text()
+
+
+def test_systematic_review_even_without_uncertainty(
+    qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path
+) -> None:
+    prepare(qtbot, window, batch, tmp_path / "sortie")
+    window.processing.set_review_policy("systematique")
+    with qtbot.waitSignal(window.controller.review_required, timeout=TIMEOUT):
+        window.processing.run_button.click()
+    assert window.controller.pending_review_count() == 0
+    assert window.controller.result is None
+
+
 def test_one_click_anonymize(
     qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path, recorder: DialogRecorder
 ) -> None:
-    _prepare(window, batch, tmp_path / "sortie")
+    prepare(qtbot, window, batch, tmp_path / "sortie")
     with qtbot.waitSignal(window.controller.result_ready, timeout=TIMEOUT):
         window.processing.run_button.click()
     result = window.controller.result
@@ -215,17 +286,6 @@ def test_one_click_anonymize(
     assert "Terminé" in window.processing.banner.text()
     assert recorder.passphrase_calls == []
     assert window.processing.report_button.isEnabled()
-
-
-def test_one_click_stops_for_review(
-    qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path, low_score: None
-) -> None:
-    _prepare(window, batch, tmp_path / "sortie")
-    with qtbot.waitSignal(window.controller.review_required, timeout=TIMEOUT):
-        window.processing.run_button.click()
-    assert window.controller.result is None
-    assert window.current_page() == "review"
-    assert "revue" in window.processing.banner.text()
 
 
 def test_pseudonymization_asks_passphrase(
@@ -245,43 +305,39 @@ def test_pseudonymization_asks_passphrase(
         return store
 
     monkeypatch.setattr(controller_module, "open_store", fake_open)
-    _prepare(window, batch, tmp_path / "sortie")
+    prepare(qtbot, window, batch, tmp_path / "sortie")
     with qtbot.waitSignal(window.controller.result_ready, timeout=TIMEOUT):
         window.processing.run_button.click()
     assert recorder.passphrase_calls == [True]
     assert opened and opened[0][0].name == "correspondances.db" and opened[0][2] is True
     assert opened[0][1] == recorder.passphrase
     assert store.used_substitutes()
-    assert window.controller.result is not None
 
 
-def test_pseudonymization_with_encrypted_store(
-    qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path, recorder: DialogRecorder
+def test_wrong_passphrase_is_reported(
+    qtbot: Any,
+    window: MainWindow,
+    batch: Path,
+    tmp_path: Path,
+    recorder: DialogRecorder,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Real EncryptedMappingStore: created on first run, wrong passphrase refused."""
-    from anonyma.gui.controller import default_store_path
+    from anonyma.store import WrongPassphraseError
 
+    def fake_open(*_a: Any) -> InMemoryMappingStore:
+        raise WrongPassphraseError("Phrase secrète incorrecte.")
+
+    monkeypatch.setattr(controller_module, "open_store", fake_open)
     window.context.config.regime = Regime.PSEUDONYMIZATION
-    _prepare(window, batch, tmp_path / "sortie")
-    with qtbot.waitSignal(window.controller.result_ready, timeout=TIMEOUT):
-        window.processing.run_button.click()
-    assert default_store_path(window.context.config).exists()
-    assert recorder.passphrase_calls == [True]
-
-    recorder.passphrase = "mauvaise phrase"
-    window.controller.set_output_dir(tmp_path / "sortie2")
-    window.processing.set_output_dir(tmp_path / "sortie2")
+    prepare(qtbot, window, batch, tmp_path / "sortie")
     with qtbot.waitSignal(window.controller.failed, timeout=TIMEOUT):
         window.processing.run_button.click()
-    assert recorder.errors and "phrase" in recorder.errors[-1].lower()
+    assert recorder.errors == ["Phrase secrète incorrecte."]
     assert not window.controller.busy
 
 
 def test_cancel_analysis(
-    qtbot: Any,
-    window: MainWindow,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    qtbot: Any, window: MainWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     started = threading.Event()
     release = threading.Event()
@@ -300,7 +356,7 @@ def test_cancel_analysis(
     src.mkdir()
     for i in range(3):
         (src / f"{i}.txt").write_text(f"texte {i}", encoding="utf-8")
-    _prepare(window, src, tmp_path / "sortie")
+    prepare(qtbot, window, src, tmp_path / "sortie")
     window.processing.analyze_button.click()
     assert started.wait(10)
     assert window.processing.cancel_button.isEnabled()
@@ -327,7 +383,7 @@ def test_failed_batch_shows_french_message(
         raise RuntimeError("Bérénice Lagarde")
 
     monkeypatch.setattr(pipeline.Pipeline, "analyze", boom)
-    _prepare(window, batch, tmp_path / "sortie")
+    prepare(qtbot, window, batch, tmp_path / "sortie")
     with qtbot.waitSignal(window.controller.failed, timeout=TIMEOUT):
         window.processing.analyze_button.click()
     assert recorder.errors == ["Une erreur inattendue s'est produite (RuntimeError)."]

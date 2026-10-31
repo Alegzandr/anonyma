@@ -79,6 +79,9 @@ class Config:
     ui: dict[str, Any] = field(default_factory=dict)
     #: Seconds allowed for one LibreOffice conversion (legacy doc/xls/ppt).
     libreoffice_timeout: float = 180.0
+    #: When the one-click flow stops for review: "aucune" (write directly),
+    #: "incertaines" (only when uncertain entities await review) or "systematique".
+    review_policy: str = "incertaines"
 
     # -- detection settings (appended by the detection workstream) ---------------
     #: Mask every complete date as DATE (dates of birth are always masked).

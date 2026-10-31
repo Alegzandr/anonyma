@@ -7,24 +7,23 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QProgressBar,
-    QTableWidget,
-    QTableWidgetItem,
+    QTableView,
     QVBoxLayout,
     QWidget,
 )
 
 from anonyma import registry
 from anonyma.gui import dialogs
-from anonyma.gui.controller import BatchController, Phase
+from anonyma.gui.controller import REVIEW_POLICIES, BatchController, Phase
+from anonyma.gui.itemmodels import QueueModel, QueueRow
 from anonyma.gui.labels import STATUS_LEVELS, status_label
 from anonyma.gui.widgets import (
-    BADGE_ROLE,
-    PROGRESS_ROLE,
     BadgeDelegate,
     Banner,
     DropArea,
@@ -37,8 +36,13 @@ from anonyma.gui.widgets import (
 from anonyma.models import DocumentResult, DocumentStatus, Regime
 from anonyma.pipeline import QUARANTINE_DIR, ProgressEvent
 
-COLUMNS = ("Fichier", "Format", "Statut", "Entités", "Progression")
 STAGE_LABELS = {"analyse": "Analyse des fichiers", "ecriture": "Écriture et vérification"}
+
+POLICY_HINTS = {
+    "aucune": "« Anonymiser » écrit directement les fichiers, sans s'arrêter à la revue.",
+    "incertaines": "« Anonymiser » s'arrête à la revue seulement si des entités sont incertaines.",
+    "systematique": "« Anonymiser » s'arrête toujours à la revue avant d'écrire les fichiers.",
+}
 
 
 def _count_tree(result: DocumentResult) -> int:
@@ -52,7 +56,6 @@ class ProcessingPage(QWidget):
     def __init__(self, controller: BatchController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.controller = controller
-        self._queued: list[tuple[Path, str, Path]] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -61,7 +64,7 @@ class ProcessingPage(QWidget):
             page_header(
                 "Traitement",
                 "Ajoutez des fichiers ou des dossiers, choisissez un dossier de sortie, puis "
-                "analysez et anonymisez. Les originaux ne sont jamais modifiés.",
+                "anonymisez. Les originaux ne sont jamais modifiés.",
             )
         )
 
@@ -80,10 +83,12 @@ class ProcessingPage(QWidget):
         self.banner = Banner()
         layout.addWidget(self.banner)
 
-        self.table = QTableWidget(0, len(COLUMNS))
+        self.model = QueueModel()
+        self.table = QTableView()
         self.table.setObjectName("QueueTable")
-        self.table.setHorizontalHeaderLabels(list(COLUMNS))
+        self.table.setModel(self.model)
         self.table.verticalHeader().hide()
+        self.table.verticalHeader().setDefaultSectionSize(28)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
@@ -124,6 +129,19 @@ class ProcessingPage(QWidget):
         self.output_error.hide()
         layout.addWidget(self.output_error)
 
+        policy_row = QHBoxLayout()
+        policy_row.addWidget(QLabel("Relecture"))
+        self.policy_combo = QComboBox()
+        self.policy_combo.setObjectName("ReviewPolicy")
+        for key, label in REVIEW_POLICIES.items():
+            self.policy_combo.addItem(label, key)
+        self.policy_combo.currentIndexChanged.connect(self._policy_changed)
+        policy_row.addWidget(self.policy_combo)
+        self.policy_hint = muted("")
+        self.policy_hint.setWordWrap(False)
+        policy_row.addWidget(self.policy_hint, 1)
+        layout.addLayout(policy_row)
+
         progress_row = QHBoxLayout()
         self.stage_label = muted("Prêt.")
         self.progress_bar = QProgressBar()
@@ -145,9 +163,6 @@ class ProcessingPage(QWidget):
         self.cancel_button = button("Annuler", "cancel")
         self.cancel_button.setProperty("danger", True)
         self.run_button = primary_button("Anonymiser", "play")
-        self.run_button.setToolTip(
-            "Analyser puis écrire directement les fichiers si aucune entité n'est à revoir."
-        )
         self.analyze_button.clicked.connect(self.start_analyze)
         self.review_button.clicked.connect(self.review_requested.emit)
         self.apply_button.clicked.connect(self.start_apply)
@@ -162,7 +177,8 @@ class ProcessingPage(QWidget):
         layout.addLayout(actions)
 
         c = self.controller
-        c.inputs_changed.connect(self._inputs_changed)
+        c.inputs_changed.connect(self.refresh)
+        c.queue_ready.connect(self.refresh)
         c.phase_changed.connect(lambda _p: self.refresh())
         c.progress.connect(self._on_progress)
         c.analysis_ready.connect(self._on_analysis)
@@ -171,7 +187,9 @@ class ProcessingPage(QWidget):
         c.failed.connect(self._on_failed)
         c.cancelled.connect(self._on_cancelled)
         c.review_required.connect(self._on_review_required)
-        c.decisions_changed.connect(self.refresh)
+        c.effective_ready.connect(self.refresh)
+        c.context.config_changed.connect(self._load_policy)
+        self._load_policy()
         self.refresh()
 
     # -- helpers ------------------------------------------------------------------
@@ -186,7 +204,37 @@ class ProcessingPage(QWidget):
         )
         if not extensions:
             return "Aucun format n'est disponible dans cette installation."
+        if len(extensions) > 18:
+            return (
+                f"{len(extensions)} extensions prises en charge : "
+                + ", ".join(extensions[:18])
+                + "…"
+            )
         return "Formats pris en charge : " + ", ".join(extensions)
+
+    def _load_policy(self) -> None:
+        policy = self.controller.review_policy()
+        self.policy_combo.blockSignals(True)
+        self.policy_combo.setCurrentIndex(max(self.policy_combo.findData(policy), 0))
+        self.policy_combo.blockSignals(False)
+        self.policy_hint.setText(POLICY_HINTS[policy])
+        self.run_button.setToolTip(POLICY_HINTS[policy])
+
+    def _policy_changed(self) -> None:
+        policy = str(self.policy_combo.currentData())
+        context = self.controller.context
+        if context.config.review_policy == policy:
+            return
+        config = context.config_copy()
+        config.review_policy = policy
+        try:
+            context.update_config(config)
+        except (OSError, ValueError):
+            self.banner.show_message("Impossible d'enregistrer ce réglage.", "error")
+        self._load_policy()
+
+    def set_review_policy(self, policy: str) -> None:
+        self.policy_combo.setCurrentIndex(self.policy_combo.findData(policy))
 
     def add_paths(self, items: list[Path]) -> None:
         if self.controller.busy:
@@ -211,8 +259,7 @@ class ProcessingPage(QWidget):
             self.add_paths([folder])
 
     def _pick_output(self) -> None:
-        start = self.controller.output_dir
-        folder = dialogs.open_folder(self, "Dossier de sortie", start)
+        folder = dialogs.open_folder(self, "Dossier de sortie", self.controller.output_dir)
         if folder is not None:
             self.output_edit.setText(str(folder))
             self._output_edited()
@@ -235,14 +282,11 @@ class ProcessingPage(QWidget):
         return not error
 
     def _remove_selected(self) -> None:
-        rows = {i.row() for i in self.table.selectionModel().selectedRows()}
-        roots: set[Path] = set()
-        for row in rows:
-            item = self.table.item(row, 0)
-            if item is not None:
-                root = item.data(Qt.ItemDataRole.UserRole + 1)
-                if root:
-                    roots.add(Path(root))
+        roots = {
+            Path(str(self.model.data(i, Qt.ItemDataRole.UserRole + 1)))
+            for i in self.table.selectionModel().selectedRows()
+            if self.model.data(i, Qt.ItemDataRole.UserRole + 1)
+        }
         if roots:
             if any(r.is_dir() for r in roots) and not dialogs.confirm(
                 self,
@@ -267,7 +311,7 @@ class ProcessingPage(QWidget):
         passphrase = dialogs.ask_passphrase(self, not path.exists(), path)
         return (passphrase is not None), passphrase
 
-    def _check_output(self) -> bool:
+    def _check_output(self, *, replacing: bool = False) -> bool:
         if not self._output_edited() or self.controller.output_dir is None:
             dialogs.warning(
                 self,
@@ -277,7 +321,7 @@ class ProcessingPage(QWidget):
             )
             return False
         out = self.controller.output_dir
-        if out.is_dir() and any(out.iterdir()):
+        if not replacing and out.is_dir() and any(out.iterdir()):
             return dialogs.confirm(
                 self,
                 "Le dossier de sortie n'est pas vide. Les fichiers existants ne seront pas "
@@ -310,18 +354,29 @@ class ProcessingPage(QWidget):
         pending = c.pending_review_count()
         if pending and not dialogs.confirm(
             self,
-            f"{pending} groupe(s) d'entités n'ont pas été revus. Les fichiers concernés seront "
-            "marqués « À revoir ». Appliquer quand même ?",
+            f"{pending} entité(s) incertaine(s) n'ont pas été revues. Les fichiers concernés "
+            "seront marqués « À revoir ». Appliquer quand même ?",
             ok_label="Appliquer",
         ):
             return
-        if not self._check_output():
+        replacing = False
+        if c.result is not None and c.result.output_dir == c.output_dir:
+            if not dialogs.confirm(
+                self,
+                "Les fichiers produits lors de l'application précédente vont être remplacés "
+                "par la nouvelle version.",
+                title="Réappliquer",
+                ok_label="Remplacer",
+            ):
+                return
+            replacing = True
+        if not self._check_output(replacing=replacing):
             return
         ok, passphrase = self._ask_passphrase()
         if not ok:
             return
         self.banner.clear()
-        c.apply(passphrase=passphrase)
+        c.apply(passphrase=passphrase, replace_previous=replacing)
 
     def start_one_click(self) -> None:
         c = self.controller
@@ -340,10 +395,6 @@ class ProcessingPage(QWidget):
 
     # -- controller events -------------------------------------------------------------
 
-    def _inputs_changed(self) -> None:
-        self._queued = self.controller.queued_files()
-        self.refresh()
-
     def _on_progress(self, event: ProgressEvent) -> None:
         label = STAGE_LABELS.get(event.stage, event.stage)
         text = f"{label} : {event.done} / {event.total}"
@@ -352,6 +403,11 @@ class ProcessingPage(QWidget):
         self.stage_label.setText(text)
         self.progress_bar.setRange(0, max(event.total, 1))
         self.progress_bar.setValue(event.done)
+        if event.index is not None:
+            if event.stage == "analyse":
+                self.model.update_row(event.index, status="Analysé", level="info", progress=50)
+            else:
+                self.model.update_row(event.index, status="Écrit", level="info", progress=100)
 
     def _on_analysis(self) -> None:
         self.refresh()
@@ -360,9 +416,12 @@ class ProcessingPage(QWidget):
             return
         pending = self.controller.pending_review_count()
         files = len(analysis.documents)
-        text = f"Analyse terminée : {files} fichier(s), {len(analysis.entities)} entité(s)."
+        text = (
+            f"Analyse terminée : {files} fichier(s), {len(analysis.clusters)} entité(s) "
+            f"distincte(s), {len(analysis.entities)} occurrence(s)."
+        )
         if pending:
-            text += f" {pending} groupe(s) à revoir."
+            text += f" {pending} incertaine(s) à revoir."
         self.stage_label.setText(text)
 
     def _on_result(self) -> None:
@@ -386,7 +445,7 @@ class ProcessingPage(QWidget):
         if quarantined:
             text += f" {quarantined} fichier(s) placé(s) en quarantaine ({QUARANTINE_DIR})."
         level = "success" if not bad and not review else "warning"
-        self.banner.show_message(text, level)
+        self.banner.show_message(text, level, [("Voir le rapport", self.report_requested.emit)])
         self.stage_label.setText("Traitement terminé.")
 
     def _on_failed(self, message: str) -> None:
@@ -401,91 +460,71 @@ class ProcessingPage(QWidget):
         )
 
     def _on_review_required(self, count: int) -> None:
-        self.banner.show_message(
-            f"{count} groupe(s) d'entités nécessitent votre revue avant l'écriture. Vérifiez-les "
-            "dans « Revue », puis cliquez sur « Appliquer ».",
-            "warning",
-        )
+        if self.controller.review_policy() == "systematique":
+            text = (
+                f"Relecture systématique : {count} entité(s) à contrôler dans « Revue », puis "
+                "cliquez sur « Appliquer »."
+            )
+        else:
+            text = (
+                f"{count} entité(s) incertaine(s) nécessitent votre revue avant l'écriture. "
+                "Vérifiez-les dans « Revue », puis cliquez sur « Appliquer »."
+            )
+        self.banner.show_message(text, "warning")
         self.review_requested.emit()
 
     # -- table ---------------------------------------------------------------------------
 
-    def _set_row(
-        self,
-        row: int,
-        name: str,
-        fmt: str,
-        status: str,
-        level: str,
-        entities: str,
-        progress: int,
-        root: Path | None,
-        document_id: str = "",
-    ) -> None:
-        cells = [name, fmt, status, entities, ""]
-        for col, text in enumerate(cells):
-            item = QTableWidgetItem(text)
-            if col == 0:
-                item.setToolTip(name)
-                item.setData(Qt.ItemDataRole.UserRole, document_id)
-                item.setData(Qt.ItemDataRole.UserRole + 1, str(root) if root else "")
-            if col == 2:
-                item.setData(BADGE_ROLE, level)
-            if col == 3:
-                item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            if col == 4:
-                item.setData(PROGRESS_ROLE, progress)
-            self.table.setItem(row, col, item)
-
-    def _root_for(self, source: Path) -> Path | None:
+    def _root_for(self, source: Path) -> str:
         resolved = source.resolve()
         for root in self.controller.inputs:
             if resolved == root or root in resolved.parents:
-                return root
-        return None
+                return str(root)
+        return ""
 
     def refresh(self) -> None:
         c = self.controller
         phase = c.phase
-        running_label = {Phase.ANALYZING: "Analyse…", Phase.APPLYING: "Écriture…"}.get(phase)
-        self.table.setUpdatesEnabled(False)
-        try:
-            if c.analysis is None:
-                self.table.setRowCount(len(self._queued))
-                for row, (path, name, root) in enumerate(self._queued):
-                    fmt = c.format_for(path)
-                    if running_label:
-                        status, level = running_label, "info"
-                    elif fmt is None:
-                        status, level = "Non pris en charge", "neutral"
-                    else:
-                        status, level = "En attente", "neutral"
-                    self._set_row(row, name, fmt or "—", status, level, "—", 0, root)
-            else:
-                docs = c.analysis.documents
-                effective = c.effective()
-                self.table.setRowCount(len(docs))
-                for row, doc in enumerate(docs):
-                    ids = {d.id for d in doc.walk()}
-                    count = (
-                        sum(len(effective.for_document(i)) for i in ids)
-                        if effective is not None
-                        else sum(1 for e in c.analysis.entities if e.document_id in ids)
-                    )
-                    result = c.result_for(doc.id)
-                    status_enum = result.status if result is not None else doc.status
-                    progress = 100 if result is not None else 50
-                    if result is not None:
-                        count = _count_tree(result)
-                    if status_enum is DocumentStatus.CANCELLED:
-                        progress = 0
-                    if phase is Phase.APPLYING:
-                        status, level = "Écriture…", "info"
-                    else:
-                        status = status_label(status_enum)
-                        level = STATUS_LEVELS.get(status_enum, "neutral")
-                    self._set_row(
-                        row,
+        running = {Phase.ANALYZING: "Analyse…", Phase.APPLYING: "Écriture…"}.get(phase)
+        rows: list[QueueRow] = []
+        if c.analysis is None:
+            for i, q in enumerate(c.queue):
+                if running and i in c.done_items:
+                    status, level, progress = "Analysé", "info", 50
+                elif running:
+                    status, level, progress = running, "info", 0
+                elif q.format is None:
+                    status, level, progress = "Non pris en charge", "neutral", 0
+                else:
+                    status, level, progress = "En attente", "neutral", 0
+                rows.append(
+                    QueueRow(q.name, q.format or "—", status, level, "—", progress, str(q.root))
+                )
+        else:
+            effective = c.effective()
+            for i, doc in enumerate(c.analysis.documents):
+                ids = [d.id for d in doc.walk()]
+                if effective is not None:
+                    count = sum(len(effective.for_document(d)) for d in ids)
+                else:
+                    count = sum(len(c.index.by_document.get(d, [])) for d in ids)
+                result = c.result_for(doc.id)
+                status_enum = result.status if result is not None else doc.status
+                progress = 100 if result is not None else 50
+                if result is not None:
+                    count = _count_tree(result)
+                if status_enum is DocumentStatus.CANCELLED:
+                    progress = 0
+                if phase is Phase.APPLYING:
+                    done = i in c.done_items
+                    status = "Écrit" if done else "Écriture…"
+                    level = "info"
+                    progress = 100 if done else 50
+                else:
+                    status = status_label(status_enum)
+                    level = STATUS_LEVELS.get(status_enum, "neutral")
+                rows.append(
+                    QueueRow(
                         doc.name,
                         doc.format,
                         status,
@@ -495,8 +534,8 @@ class ProcessingPage(QWidget):
                         self._root_for(doc.source),
                         doc.id,
                     )
-        finally:
-            self.table.setUpdatesEnabled(True)
+                )
+        self.model.set_rows(rows)
         if not c.busy and self.progress_bar.maximum() <= 1 and c.analysis is None:
             self.progress_bar.setValue(0)
         self._update_summary()
@@ -505,13 +544,17 @@ class ProcessingPage(QWidget):
     def _update_summary(self) -> None:
         c = self.controller
         if c.analysis is None:
-            n = len(self._queued)
+            if c.queue_loading:
+                self.summary.setText("Inventaire des fichiers en cours…")
+                return
+            n = len(c.queue)
             self.summary.setText(f"{n} fichier(s) dans la file." if n else "La file est vide.")
             return
         pending = c.pending_review_count()
+        decided, total = c.decided_counts()
         text = (
-            f"{len(c.analysis.documents)} fichier(s) · {len(c.analysis.entities)} entité(s) "
-            f"· {len(c.analysis.clusters)} groupe(s)"
+            f"{len(c.analysis.documents)} fichier(s) · {total} entité(s) · "
+            f"{len(c.analysis.entities)} occurrence(s) · {decided} / {total} décidées"
         )
         if pending:
             text += f" · {pending} à revoir"
@@ -528,7 +571,7 @@ class ProcessingPage(QWidget):
             self.output_edit,
             self.output_button,
             self.remove_button,
-            self.clear_button,
+            self.policy_combo,
         ):
             w.setEnabled(not busy)
         self.clear_button.setEnabled(not busy and has_inputs)
@@ -538,5 +581,3 @@ class ProcessingPage(QWidget):
         self.apply_button.setEnabled(not busy and c.analysis is not None)
         self.report_button.setEnabled(c.result is not None and not busy)
         self.cancel_button.setEnabled(busy)
-        if not busy:
-            self.cancel_button.setEnabled(False)
