@@ -31,6 +31,7 @@ from anonyma.logs import get_logger
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
     FOLDER_FORMAT,
+    WRITER_PLACEHOLDERS,
     ArchiveBombError,
     ChildOutput,
     Detector,
@@ -64,6 +65,8 @@ log = get_logger("pipeline")
 
 QUARANTINE_DIR = "_quarantaine"
 MANUAL_DETECTOR = "manuel"
+#: RAM budget per worker process in the STANDARD profile (GLiNER loaded per process).
+GLINER_WORKER_RAM = int(2.5 * 1024**3)
 
 
 # ---------------------------------------------------------------------------
@@ -720,6 +723,14 @@ class Pipeline:
             wanted = 1  # one LLM instance at a time
         else:
             wanted = max(1, min(os.cpu_count() or 1, 8) - 1)
+            if self.config.profile is Profile.STANDARD:
+                # Each worker holds its own GLiNER instance (~2 GiB).
+                from anonyma import hardware
+
+                info = hardware.detect_hardware()
+                free = info.available_ram_bytes or info.ram_bytes
+                if free:
+                    wanted = min(wanted, max(1, int(free // GLINER_WORKER_RAM)))
         return max(1, min(wanted, jobs))
 
     def _map(
@@ -792,6 +803,7 @@ class Pipeline:
         entities, clusters = resolve(entities, self.config)
         extra = propagate(documents, clusters, entities, self.config)
         entities, clusters = resolve([*entities, *extra], self.config, clusters)
+        entities = drop_inside_whitelist(documents, entities, self.config)
         return BatchAnalysis(
             batch_id,
             self.config,
@@ -819,7 +831,7 @@ class Pipeline:
         entities, active = resolved.entities, resolved.clusters
         table = Replacer(self.config, self.store).assign(active, entities)
         sensitive = sorted({(v, c.entity_type) for c in active.values() for v in c.variants})
-        allowed = resolved.allowed
+        allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)
         review = {cid for cid, c in active.items() if c.needs_review}
 
         jobs: list[tuple[Any, ...]] = []
@@ -930,6 +942,7 @@ def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> Re
     # A rejected mention stays visible; it is only allowed by the verifier when the
     # same value is not masked elsewhere (otherwise it is a genuine residue).
     allowed |= {e.value for e in dropped if normalize(e.value) not in kept_values}
+    entities = drop_inside_whitelist(analysis.documents, entities, config)
     return ResolvedDecisions(entities, active, sorted(allowed))
 
 
@@ -938,9 +951,12 @@ def manual_entities(analysis: BatchAnalysis, decisions: ReviewDecisions) -> list
     found: list[Entity] = []
     for manual in decisions.manual:
         for doc in analysis.all_documents():
-            if doc.status is not DocumentStatus.EXTRACTED:
-                continue
-            for seg in doc.segments:
+            segments = (
+                doc.segments
+                if doc.status is DocumentStatus.EXTRACTED
+                else [s for s in doc.segments if s.id == FILENAME_SEGMENT_ID]
+            )
+            for seg in segments:
                 for start, end in find_all(seg.text, manual.value):
                     found.append(
                         Entity(
@@ -956,6 +972,33 @@ def manual_entities(analysis: BatchAnalysis, decisions: ReviewDecisions) -> list
                         )
                     )
     return found
+
+
+def drop_inside_whitelist(
+    documents: Sequence[Document], entities: list[Entity], config: Config
+) -> list[Entity]:
+    """Drop entities lying inside an occurrence of a whitelisted value.
+
+    A kept value must stay intact: e.g. a whitelisted e-mail whose local part is
+    also a masked person login. Manual entities are kept (explicit user choice)."""
+    if not config.whitelist or not entities:
+        return entities
+    keep_values = [v for v in config.whitelist if v.strip()]
+    texts = {(d.id, s.id): s.text for root in documents for d in root.walk() for s in d.segments}
+    protected: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for key in {(e.document_id, e.segment_id) for e in entities}:
+        text = texts.get(key)
+        if text:
+            protected[key] = [span for v in keep_values for span in find_all(text, v)]
+    return [
+        e
+        for e in entities
+        if e.review is ReviewStatus.MANUAL
+        or not any(
+            s <= e.start and e.end <= end
+            for s, end in protected.get((e.document_id, e.segment_id), [])
+        )
+    ]
 
 
 OUTPUT_CONFLICT_MESSAGE = (
@@ -988,6 +1031,7 @@ __all__ = [
     "ResolvedDecisions",
     "collect_inputs",
     "detect_tree",
+    "drop_inside_whitelist",
     "extract_file",
     "manual_entities",
     "resolve_decisions",

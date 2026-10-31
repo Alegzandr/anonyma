@@ -41,6 +41,7 @@ from anonyma.extractors._xml import XmlError, local_name, namespace, parse_xml, 
 from anonyma.extractors._xmlscan import ScanSpec, Unit, apply_unit, scan
 from anonyma.extractors._zip import ZipPackage, read_package, write_package
 from anonyma.models import (
+    ANONYMOUS_AUTHOR,
     FILENAME_SEGMENT_ID,
     Document,
     ExtractionContext,
@@ -72,7 +73,7 @@ NS_R = frozenset(
 )
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 
-ANONYMOUS = "Anonyme"
+ANONYMOUS = ANONYMOUS_AUTHOR
 
 MIN_CORE = (
     b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'

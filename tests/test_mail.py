@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import email
 import io
+import re
 import zipfile
 from email.message import EmailMessage, Message
 from email.policy import SMTP, compat32
@@ -152,7 +153,7 @@ def test_eml_round_trip(tmp_path: Path, canary_config: Config) -> None:
     assert b"uintavalle" not in data.lower()
     parsed = email.message_from_bytes(data, policy=compat32)
     assert parsed["DKIM-Signature"] is None
-    assert parsed["X-Originating-IP"] == "[192.0.2.7]"
+    assert "192.0.2.7" not in parsed["X-Originating-IP"]  # IPs are masked
     assert parsed["Authentication-Results"] is not None
     structure = [p.get_content_type() for p in parsed.walk()]
     assert structure == [
@@ -253,7 +254,7 @@ def test_unix_from_line_is_anonymized(tmp_path: Path, canary_config: Config) -> 
         f"From {CANARY_EMAIL} Mon Jan  5 10:00:00 2026\r\nFrom: x@exemple.test\r\n\r\ncorps\r\n"
     ).encode()
     output, _ = _run(tmp_path, "u.eml", raw, canary_config)
-    assert output.read_bytes().startswith(b"From [EMAIL_001] Mon Jan  5 10:00:00 2026\r\n")
+    assert re.match(rb"From \[EMAIL_\d{3}\] Mon Jan  5 10:00:00 2026\r\n", output.read_bytes())
 
 
 def test_nested_mail_in_zip_in_mail(tmp_path: Path, canary_config: Config) -> None:
@@ -345,6 +346,6 @@ def test_mbox_round_trip(tmp_path: Path, canary_config: Config) -> None:
     ).encode()
     output, _ = _run(tmp_path, "boite.mbox", data, canary_config)
     out = output.read_bytes()
-    assert out.count(b"From [EMAIL_001] Mon Jan  5 1") == 2
+    assert len(re.findall(rb"From \[EMAIL_\d{3}\] Mon Jan  5 1", out)) == 2
     assert b"uintavalle" not in out.lower()
     assert len(split_mbox(out)) == 2

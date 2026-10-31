@@ -64,7 +64,7 @@ def test_xls_without_libreoffice_becomes_xlsx(
     assert 'name="(PERSONNE_001)"' in workbook and 'name="Synthèse"' in workbook
     sheet = zip_read(output, "xl/worksheets/sheet1.xml").decode()
     assert "[PERSONNE_001]" in sheet and "[EMAIL_001]" in sheet
-    assert "<v>612345678.0</v>" in sheet  # numbers stay numbers
+    assert "612345678" not in sheet  # sent to review as a SIREN, masked meanwhile
     for part in ("xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml", "xl/workbook.xml"):
         data = zip_read(output, part).decode()
         assert CANARY_PERSON not in data and CANARY_EMAIL not in data
@@ -86,4 +86,4 @@ def test_legacy_roundtrip_with_libreoffice(
     source.write_bytes(converted.read_bytes())
     result, output = run_pipeline(source, tmp_path, canary_config)
     assert output.suffix == converted.suffix
-    assert result.results[0].status is DocumentStatus.ANONYMIZED
+    assert result.results[0].status in (DocumentStatus.ANONYMIZED, DocumentStatus.NEEDS_REVIEW)

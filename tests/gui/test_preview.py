@@ -59,7 +59,7 @@ def test_preview_matches_apply(tmp_path: Path, mode: ReplacementMode) -> None:
     pipeline = Pipeline(config)
     analysis = pipeline.analyze([src])
     helios = next(c for c in analysis.clusters.values() if c.entity_type == "PROJET")
-    lagarde = next(c for c in analysis.clusters.values() if c.canonical == "Lagarde")
+    lagarde = next(c for c in analysis.clusters.values() if "Lagarde" in c.variants)
     decisions = ReviewDecisions(
         rejected_clusters={helios.id},
         retyped_clusters={lagarde.id: "NOM_PROPRE"},

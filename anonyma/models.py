@@ -216,6 +216,10 @@ class Segment:
 
 
 FILENAME_SEGMENT_ID = "__filename__"
+#: Neutral values writers put in place of purged authors/initials (comments,
+#: revisions...). Verification tolerates them in outputs.
+ANONYMOUS_AUTHOR = "Anonyme"
+WRITER_PLACEHOLDERS: frozenset[str] = frozenset({ANONYMOUS_AUTHOR, "A"})
 #: Format id of a folder output re-read by the pipeline for verification.
 FOLDER_FORMAT = "dossier"
 

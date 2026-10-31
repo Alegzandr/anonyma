@@ -297,3 +297,20 @@ def test_folder_output(
     assert archive.output_path is not None
     with zipfile.ZipFile(archive.output_path) as z:
         assert z.namelist() == ["boite.zip"]
+
+
+def test_whitelisted_value_is_kept_intact(tmp_path: Path) -> None:
+    config = Config(
+        profile=Profile.LIGHT,
+        workers=1,
+        whitelist=[CANARY_EMAIL],
+        always_mask=[{"value": CANARY_PERSON, "type": "PERSONNE"}],
+    )
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "a.txt").write_text(f"{CANARY_PERSON} : {CANARY_EMAIL}\n", encoding="utf-8")
+    result = Pipeline(config).run([src], tmp_path / "out")
+    top = result.results[0]
+    assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]
+    assert top.output_path is not None
+    assert top.output_path.read_text(encoding="utf-8") == f"[PERSONNE_001] : {CANARY_EMAIL}\n"

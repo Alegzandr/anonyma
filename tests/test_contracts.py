@@ -75,7 +75,10 @@ def test_fixture_roundtrip(fixture: Path, tmp_path: Path, canary_config: Config)
     result = pipeline.apply(analysis, tmp_path / "out")
     pipeline.close(analysis)
     top = result.results[0]
-    assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]
+    # NEEDS_REVIEW = verified clean, uncertain entities masked and flagged for review.
+    assert top.status in (DocumentStatus.ANONYMIZED, DocumentStatus.NEEDS_REVIEW), [
+        i.message for i in top.issues
+    ]
     assert source.read_bytes() == original_bytes, "original modified"
     assert top.output_path and top.output_path.exists()
 
