@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import html
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import override
 
@@ -102,6 +102,10 @@ class Banner(QFrame):
         self.label.setWordWrap(True)
         self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.label, 1)
+        self.actions_layout = QHBoxLayout()
+        self.actions_layout.setSpacing(6)
+        layout.addLayout(self.actions_layout)
+        self.action_buttons: list[QPushButton] = []
         self.close_button = QPushButton("Masquer")
         self.close_button.setFlat(True)
         self.close_button.clicked.connect(self.clear)
@@ -109,15 +113,38 @@ class Banner(QFrame):
         self.level = "info"
         self.hide()
 
-    def show_message(self, text: str, level: str = "info") -> None:
+    def show_message(
+        self,
+        text: str,
+        level: str = "info",
+        actions: Sequence[tuple[str, Callable[[], None]]] = (),
+    ) -> None:
+        """Show ``text``; each action is a button that runs its callback (then hides)."""
         self.level = level
         self.setProperty("level", level)
         self.label.setText(text)
+        self._clear_actions()
+        for label, callback in actions:
+            action_button = QPushButton(label)
+            action_button.clicked.connect(lambda _c=False, cb=callback: self._run(cb))
+            self.actions_layout.addWidget(action_button)
+            self.action_buttons.append(action_button)
         repolish(self)
         self.show()
 
+    def _run(self, callback: Callable[[], None]) -> None:
+        self.clear()
+        callback()
+
+    def _clear_actions(self) -> None:
+        for action_button in self.action_buttons:
+            self.actions_layout.removeWidget(action_button)
+            action_button.deleteLater()
+        self.action_buttons = []
+
     def clear(self) -> None:
         self.label.clear()
+        self._clear_actions()
         self.hide()
 
     def text(self) -> str:

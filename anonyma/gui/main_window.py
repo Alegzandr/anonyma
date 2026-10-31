@@ -101,6 +101,8 @@ class MainWindow(QMainWindow):
         self.processing.report_requested.connect(lambda: self.show_page("report"))
         self.review.apply_requested.connect(self._apply_from_review)
         self.review.pending_changed.connect(self._update_review_label)
+        self.report.correct_requested.connect(self._correct_and_reapply)
+        self.report.residue_requested.connect(self._show_residue)
         self.controller.result_ready.connect(self._result_ready)
         self.controller.phase_changed.connect(self._phase_changed)
         theme.notifier().changed.connect(self._refresh_icons)
@@ -136,6 +138,18 @@ class MainWindow(QMainWindow):
     def _apply_from_review(self) -> None:
         self.show_page("processing")
         self.processing.start_apply()
+
+    def _correct_and_reapply(self) -> None:
+        self.show_page("review")
+        self.review.banner.show_message(
+            "Corrigez les décisions (validez l'entité oubliée, ajoutez une entité…), puis "
+            "cliquez sur « Appliquer » : les fichiers produits précédemment seront remplacés.",
+            "info",
+        )
+
+    def _show_residue(self, top_document_id: str, location: str, value: str) -> None:
+        self.show_page("review")
+        self.review.show_residue(top_document_id, location, value)
 
     def _result_ready(self) -> None:
         if self.current_page() == "review":
