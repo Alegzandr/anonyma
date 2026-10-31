@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
+    QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -40,8 +42,10 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
+from anonyma.frenchtext import NBSP, plural, typo
 from anonyma.gui import dialogs, theme
 from anonyma.gui.controller import BatchController
 from anonyma.gui.itemmodels import (
@@ -53,7 +57,7 @@ from anonyma.gui.itemmodels import (
     ClusterTreeModel,
     ReviewItemDelegate,
 )
-from anonyma.gui.labels import STATUS_LEVELS, entity_type_label, status_label
+from anonyma.gui.labels import STATUS_LEVELS, detector_label, entity_type_label, status_label
 from anonyma.gui.preview import (
     EntityRow,
     MentionKey,
@@ -81,11 +85,13 @@ from anonyma.gui.widgets import (
     BadgeDelegate,
     Banner,
     EmptyState,
+    KeyButton,
     button,
     legend_html,
     muted,
     page_header,
     primary_button,
+    section_title,
 )
 from anonyma.models import (
     BBox,
@@ -100,6 +106,7 @@ from anonyma.textutils import normalize
 __all__ = ["ReviewPage", "display_text"]
 
 SCOPES = {"batch": "Tout le lot", "doc": "Document affiché"}
+APPLY_LABEL = "Appliquer les décisions"
 
 
 class ReviewPage(QWidget):
@@ -128,25 +135,24 @@ class ReviewPage(QWidget):
         outer.setContentsMargins(24, 20, 24, 16)
         outer.setSpacing(10)
         head = QHBoxLayout()
-        head.addWidget(
-            page_header(
-                "Revue",
-                "Une ligne par entité : une décision vaut pour toutes ses occurrences, dans "
-                "tout le lot. La relecture reste facultative.",
-            ),
-            1,
+        title = page_header("Revue")
+        title.setToolTip(
+            "Une ligne par entité : une décision vaut pour toutes ses occurrences, dans tout "
+            "le lot. La relecture reste facultative."
         )
+        head.addWidget(title, 1)
         self.counter = QLabel("")
         self.counter.setObjectName("ReviewCounter")
-        head.addWidget(self.counter, 0, Qt.AlignmentFlag.AlignBottom)
-        self.next_undecided_button = button("Suivante non décidée", "next")
-        self.next_undecided_button.setToolTip("Aller à la prochaine entité sans décision (Maj+N)")
+        head.addWidget(self.counter, 0, Qt.AlignmentFlag.AlignVCenter)
+        head.addSpacing(8)
+        self.next_undecided_button = KeyButton("Suivante non décidée", "Maj+N")
+        self.next_undecided_button.setToolTip("Aller à la prochaine entité sans décision")
         self.next_undecided_button.clicked.connect(self.next_undecided)
-        head.addWidget(self.next_undecided_button, 0, Qt.AlignmentFlag.AlignBottom)
-        self.apply_button = primary_button("Appliquer", "check")
+        head.addWidget(self.next_undecided_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.apply_button = primary_button(APPLY_LABEL, "check")
         self.apply_button.setToolTip("Écrire les fichiers anonymisés (Ctrl+Entrée)")
         self.apply_button.clicked.connect(self.apply_requested.emit)
-        head.addWidget(self.apply_button, 0, Qt.AlignmentFlag.AlignBottom)
+        head.addWidget(self.apply_button, 0, Qt.AlignmentFlag.AlignVCenter)
         outer.addLayout(head)
         self.banner = Banner()
         outer.addWidget(self.banner)
@@ -166,7 +172,7 @@ class ReviewPage(QWidget):
         content_layout.addWidget(main, 1)
 
         self.tabs = QTabWidget()
-        self.tabs.setMinimumWidth(400)
+        self.tabs.setMinimumWidth(390)
         self.tabs.addTab(self._build_queue(), "Entités")
         self.tabs.addTab(self._build_documents(), "Documents")
         main.addWidget(self.tabs)
@@ -194,22 +200,22 @@ class ReviewPage(QWidget):
         box = QWidget()
         layout = QVBoxLayout(box)
         layout.setContentsMargins(6, 8, 6, 6)
+        filters = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setObjectName("ReviewSearch")
-        self.search.setPlaceholderText("Rechercher une entité ou un type…")
+        self.search.setPlaceholderText("Rechercher…")
+        self.search.setToolTip("Rechercher une entité ou un type")
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda _t: self._search_timer.start())
-        layout.addWidget(self.search)
-        row1 = QHBoxLayout()
+        filters.addWidget(self.search, 1)
         self.state_filter = QComboBox()
+        self.state_filter.setToolTip("Décision")
         for key, label in STATE_FILTERS.items():
             self.state_filter.addItem(label, key)
+        filters.addWidget(self.state_filter)
+        # Less frequent filters live in a menu, so that the row fits the narrowest window.
         self.type_filter = QComboBox()
         self.type_filter.addItem("Tous les types", "")
-        row1.addWidget(self.state_filter, 1)
-        row1.addWidget(self.type_filter, 1)
-        layout.addLayout(row1)
-        row2 = QHBoxLayout()
         self.detector_filter = QComboBox()
         self.detector_filter.addItem("Tous les détecteurs", "")
         self.scope_combo = QComboBox()
@@ -218,12 +224,31 @@ class ReviewPage(QWidget):
         self.sort_combo = QComboBox()
         for key, label in SORTS.items():
             self.sort_combo.addItem(label, key)
-        # Long labels (« Tous les détecteurs », sort order) get the room; the scope
-        # combo keeps its natural width.
-        row2.addWidget(self.detector_filter, 3)
-        row2.addWidget(self.scope_combo, 2)
-        row2.addWidget(self.sort_combo, 3)
-        layout.addLayout(row2)
+        self.filters_button = QToolButton()
+        self.filters_button.setText("Filtres")
+        self.filters_button.setToolTip("Type, détecteur, portée et ordre")
+        self.filters_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        filters_menu = QMenu(self.filters_button)
+        panel = QWidget()
+        form = QFormLayout(panel)
+        form.setContentsMargins(12, 10, 12, 10)
+        for label, combo in (
+            ("&Type", self.type_filter),
+            ("&Détecteur", self.detector_filter),
+            ("&Portée", self.scope_combo),
+            ("&Ordre", self.sort_combo),
+        ):
+            combo.setMinimumWidth(220)
+            form.addRow(label, combo)
+        reset = button("Réinitialiser les filtres")
+        reset.clicked.connect(self.clear_filters)
+        form.addRow("", reset)
+        panel_action = QWidgetAction(filters_menu)
+        panel_action.setDefaultWidget(panel)
+        filters_menu.addAction(panel_action)
+        self.filters_button.setMenu(filters_menu)
+        filters.addWidget(self.filters_button)
+        layout.addLayout(filters)
         for combo in (
             self.state_filter,
             self.type_filter,
@@ -248,56 +273,62 @@ class ReviewPage(QWidget):
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        self.queue.setColumnWidth(1, 132)
+        self.queue.setColumnWidth(1, 108)
         self.queue.selectionModel().currentChanged.connect(self._queue_current_changed)
         layout.addWidget(self.queue, 1)
         self.rows_label = muted("")
         self.rows_label.setWordWrap(False)
-        layout.addWidget(self.rows_label)
+        self.rows_row = QHBoxLayout()
+        self.rows_row.addWidget(self.rows_label, 1)
+        layout.addLayout(self.rows_row)
 
-        actions = QHBoxLayout()
-        self.confirm_button = button("Valider", "check")
-        self.confirm_button.setToolTip("Masquer cette entité partout (V)")
-        self.reject_button = button("Rejeter", "reject")
+        # Decisions: the key of each action is shown on its button.
+        actions = QGridLayout()
+        actions.setHorizontalSpacing(6)
+        actions.setVerticalSpacing(6)
+        self.confirm_button = KeyButton("Masquer", "V", "check")
+        self.confirm_button.setToolTip("Masquer cette entité partout dans le lot")
+        self.reject_button = KeyButton("Ne pas masquer", "R", "reject")
         self.reject_button.setToolTip(
-            "Faux positif : ne pas masquer cette valeur, dans tout le lot (R)"
+            "Faux positif : laisser cette valeur visible, dans tout le lot"
         )
-        self.reject_mention_button = button("Rejeter l'occurrence", "cancel")
-        self.reject_mention_button.setToolTip("Ne pas masquer cette occurrence seulement (O)")
-        self.retype_button = button("Type…", "tag")
-        self.retype_button.setToolTip("Corriger le type de l'entité (T)")
-        self.reset_button = button("Annuler", "undo")
-        self.reset_button.setToolTip("Annuler la décision (U)")
+        self.retype_button = KeyButton("Changer le type…", "T", "tag")
+        self.retype_button.setToolTip("Corriger le type de l'entité")
+        self.reset_button = KeyButton("Retirer la décision", "U", "undo")
+        self.reset_button.setToolTip("Revenir à l'état détecté, sans décision")
+        self.reject_mention_button = KeyButton("Ne pas masquer l'occurrence", "O")
+        self.reject_mention_button.setToolTip(
+            "Laisser visible cette occurrence seulement (dépliez l'entité pour la choisir)"
+        )
         self.bulk_button = QToolButton()
         self.bulk_button.setText("Actions groupées")
         self.bulk_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         bulk = QMenu(self.bulk_button)
-        bulk.addAction("Valider tout ce type…", self.confirm_all_of_type)
-        bulk.addAction("Valider tout le reste…", self.confirm_all_remaining)
-        bulk.addAction("Rejeter la sélection…", self.reject_selection_bulk)
+        bulk.addAction("Masquer tout ce type…", self.confirm_all_of_type)
+        bulk.addAction("Masquer tout le reste…", self.confirm_all_remaining)
+        bulk.addAction("Ne pas masquer la sélection…", self.reject_selection_bulk)
         self.bulk_button.setMenu(bulk)
         self.confirm_button.clicked.connect(self.confirm_selected)
         self.reject_button.clicked.connect(self.reject_selected)
         self.reject_mention_button.clicked.connect(self.reject_selected_mentions)
         self.retype_button.clicked.connect(self.retype_selected)
         self.reset_button.clicked.connect(self.reset_selected)
-        for b in (self.confirm_button, self.reject_button, self.retype_button, self.reset_button):
-            actions.addWidget(b)
+        actions.addWidget(self.confirm_button, 0, 0)
+        actions.addWidget(self.reject_button, 0, 1)
+        actions.addWidget(self.retype_button, 1, 0)
+        actions.addWidget(self.reset_button, 1, 1)
+        actions.addWidget(self.reject_mention_button, 2, 0, 1, 2)
+        self.rows_row.addWidget(self.bulk_button)
         layout.addLayout(actions)
-        more = QHBoxLayout()
-        more.addWidget(self.reject_mention_button)
-        more.addStretch(1)
-        more.addWidget(self.bulk_button)
-        layout.addLayout(more)
-        hint = muted("N / P : naviguer · Maj+N : suivante non décidée · V R O T U · A : ajouter")
+        hint = muted("N / P : entité suivante ou précédente")
         hint.setWordWrap(False)
         hint.setToolTip(
             "N / P : entité ou occurrence suivante / précédente\n"
-            "Maj+N : prochaine entité non décidée\n"
-            "V : valider · R : rejeter · O : rejeter l'occurrence\n"
-            "T : changer le type · U : annuler la décision\n"
+            "Maj+N : prochaine entité sans décision\n"
+            "V : masquer · R : ne pas masquer · O : ne pas masquer l'occurrence\n"
+            "T : changer le type · U : retirer la décision\n"
             "A : ajouter la sélection du texte original comme entité\n"
-            "Ctrl+Entrée : appliquer"
+            "Ctrl+Entrée : appliquer les décisions"
         )
         layout.addWidget(hint)
         return box
@@ -305,7 +336,7 @@ class ReviewPage(QWidget):
     def _build_documents(self) -> QWidget:
         self.tree = QTreeWidget()
         self.tree.setObjectName("DocumentTree")
-        self.tree.setHeaderLabels(["Document", "Entités", "État"])
+        self.tree.setHeaderLabels(["Document", "Occurrences", "État"])
         tree_header = self.tree.header()
         tree_header.setStretchLastSection(False)
         tree_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -323,7 +354,9 @@ class ReviewPage(QWidget):
         self.doc_title = QLabel("")
         self.doc_title.setObjectName("SectionTitle")
         self.doc_title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(self.doc_title)
+        title_row = QHBoxLayout()
+        title_row.addWidget(self.doc_title, 1)
+        layout.addLayout(title_row)
         bar = QHBoxLayout()
         self.text_mode = QPushButton("Texte")
         self.visual_mode = QPushButton("Visuel")
@@ -333,20 +366,30 @@ class ReviewPage(QWidget):
             self.mode_group.addButton(b, i)
             bar.addWidget(b)
         self.text_mode.setChecked(True)
+        self.text_mode.setToolTip("Texte extrait, valeurs surlignées")
         self.visual_mode.setToolTip("Pages PDF et images, zones détectées encadrées")
+        for b in (self.text_mode, self.visual_mode):
+            b.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self.mode_group.idClicked.connect(lambda _i: self._render_current())
         bar.addStretch(1)
         self.source_combo = QComboBox()
-        self.source_combo.addItem("Aperçu (décisions actuelles)", "preview")
+        self.source_combo.addItem("Aperçu", "preview")
         self.source_combo.addItem("Fichier produit", "output")
+        self.source_combo.setItemData(
+            0, "Aperçu avec les décisions actuelles", Qt.ItemDataRole.ToolTipRole
+        )
+        self.source_combo.setItemData(
+            1, "Fichier écrit lors de la dernière application", Qt.ItemDataRole.ToolTipRole
+        )
+        self.source_combo.setToolTip("Côté anonymisé : aperçu ou fichier produit")
         self.source_combo.currentIndexChanged.connect(lambda _i: self._render_current())
         bar.addWidget(self.source_combo)
-        self.add_button = button("Ajouter une entité…", "add")
+        self.add_button = KeyButton("Ajouter une entité…", "A", "add")
         self.add_button.setToolTip(
-            "Sélectionnez du texte dans l'original, puis ajoutez-le comme entité (A)."
+            "Sélectionnez du texte dans l'original, puis ajoutez-le comme entité."
         )
         self.add_button.clicked.connect(self.add_entity_from_selection)
-        bar.addWidget(self.add_button)
+        title_row.addWidget(self.add_button)
         layout.addLayout(bar)
 
         self.view_stack = QStackedWidget()
@@ -355,7 +398,7 @@ class ReviewPage(QWidget):
         left_box = QWidget()
         left_layout = QVBoxLayout(left_box)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.addWidget(QLabel("<b>Original</b>"))
+        left_layout.addWidget(section_title("Original"))
         self.original = QTextEdit()
         self.original.setObjectName("OriginalText")
         self.original.setReadOnly(True)
@@ -372,7 +415,7 @@ class ReviewPage(QWidget):
         right_box = QWidget()
         right_layout = QVBoxLayout(right_box)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.addWidget(QLabel("<b>Anonymisé</b>"))
+        right_layout.addWidget(section_title("Anonymisé"))
         self.anonymized = QTextEdit()
         self.anonymized.setObjectName("AnonymizedText")
         self.anonymized.setReadOnly(True)
@@ -532,7 +575,8 @@ class ReviewPage(QWidget):
             combo.clear()
             combo.addItem(all_label, "")
             for v in values:
-                combo.addItem(entity_type_label(v) if combo is self.type_filter else v, v)
+                label = entity_type_label(v) if combo is self.type_filter else detector_label(v)
+                combo.addItem(label, v)
             combo.setCurrentIndex(max(combo.findData(current), 0))
             combo.blockSignals(False)
 
@@ -548,6 +592,12 @@ class ReviewPage(QWidget):
         self.model.document_ids = (
             {self.current_doc_id} if scope == "doc" and self.current_doc_id else None
         )
+        active = sum(
+            1
+            for combo in (self.type_filter, self.detector_filter, self.scope_combo)
+            if combo.currentIndex() > 0
+        )
+        self.filters_button.setText(f"Filtres ({active})" if active else "Filtres")
         self._refresh_model()
 
     def _refresh_model(self, *, reset: bool | None = None) -> None:
@@ -570,7 +620,12 @@ class ReviewPage(QWidget):
                     self._index_for(cid, mention.key if mention else None), notify=False
                 )
         _decided, total = self.controller.decided_counts()
-        self.rows_label.setText(f"{len(self.model.ids)} entité(s) affichée(s) sur {total}")
+        shown = len(self.model.ids)
+        self.rows_label.setText(
+            plural(total, "entité")
+            if shown == total
+            else f"{shown}{NBSP}/{NBSP}{plural(total, 'entité')} affichées"
+        )
         self.queue.viewport().update()
 
     def _index_for(self, cluster_id: str, key: MentionKey | None = None) -> QModelIndex:
@@ -667,7 +722,7 @@ class ReviewPage(QWidget):
         hidden = [cid for cid in c.cluster_ids() if not c.is_decided(cid)]
         if hidden and (self.model.ids != c.cluster_ids()):
             self.banner.show_message(
-                "Des entités non décidées sont masquées par les filtres.",
+                "Des entités sans décision sont cachées par les filtres.",
                 "info",
                 [("Afficher tout", self.clear_filters)],
             )
@@ -1050,7 +1105,7 @@ class ReviewPage(QWidget):
             preview = " ".join(selected.split())
             if len(preview) > 40:
                 preview = preview[:37] + "…"
-            action = menu.addAction(f"Ajouter « {preview} » comme entité…")
+            action = menu.addAction(typo(f"Ajouter « {preview} » comme entité…"))
             action.triggered.connect(self.add_entity_from_selection)
         menu.exec(self.original.mapToGlobal(pos))
         menu.deleteLater()
@@ -1131,9 +1186,10 @@ class ReviewPage(QWidget):
             view.setPosition(first.selectionStart())
             self.anonymized.setTextCursor(view)
             self.anonymized.ensureCursorVisible()
+            shown = plural(len(selections), "occurrence surlignée", "occurrences surlignées")
             self.banner.show_message(
-                f"Résidu repéré dans le fichier produit ({len(selections)} occurrence(s) "
-                "surlignée(s) en rouge). Corrigez les décisions puis réappliquez.",
+                f"Résidu repéré dans le fichier produit ({shown} en rouge). Corrigez les "
+                "décisions puis réappliquez.",
                 "warning",
             )
         else:
@@ -1203,19 +1259,19 @@ class ReviewPage(QWidget):
         def learn() -> None:
             undo = self.controller.add_to_whitelist(values)
             if undo is None:
-                self.banner.show_message("Déjà dans la liste blanche.", "info")
+                self.banner.show_message("Déjà parmi les valeurs à ne jamais masquer.", "info")
                 return
             self.banner.show_message(
-                f"« {shown} » ajouté à la liste blanche : il ne sera plus masqué dans les "
-                "prochains lots.",
+                f"« {shown} » ajouté aux valeurs à ne jamais masquer : il restera visible "
+                "dans les prochains lots.",
                 "success",
                 [("Annuler", lambda: self._undo(undo))],
             )
 
         self.banner.show_message(
-            f"Faux positif « {shown} » : conservé dans ce lot.",
+            f"« {shown} » reste visible dans ce lot.",
             "info",
-            [("Ajouter à la liste blanche", learn)],
+            [("Ne jamais masquer", learn)],
         )
 
     def _undo(self, undo: object) -> None:
@@ -1223,7 +1279,7 @@ class ReviewPage(QWidget):
 
         if isinstance(undo, ConfigUndo):
             self.controller.undo_learning(undo)
-            self.banner.show_message(f"Modification de la {undo.label} annulée.", "info")
+            self.banner.show_message(f"Ajout aux {undo.label} annulé.", "info")
 
     def reject_selected_mentions(self) -> None:
         if not self._can_act():
@@ -1231,23 +1287,23 @@ class ReviewPage(QWidget):
         mentions = self.selected_mentions()
         if not mentions:
             self.banner.show_message(
-                "Dépliez l'entité et choisissez l'occurrence à conserver.", "info"
+                "Dépliez l'entité et choisissez l'occurrence à laisser visible.", "info"
             )
             return
         manual = [e for e in mentions if e.review is ReviewStatus.MANUAL]
         if manual:
             self.banner.show_message(
-                "Une occurrence issue d'un ajout manuel ne peut pas être rejetée seule : "
-                "rejetez l'ajout entier.",
+                "Une occurrence issue d'un ajout manuel ne peut pas être laissée visible "
+                "seule : choisissez « Ne pas masquer » pour l'ajout entier.",
                 "warning",
             )
         keys = [e.key for e in mentions if e.review is not ReviewStatus.MANUAL]
         if keys:
             self.controller.reject_mentions(keys)
             self.banner.show_message(
-                "Occurrence conservée. Si la même valeur reste masquée ailleurs, la "
-                "vérification la signalera comme résidu : pour la conserver partout, rejetez "
-                "l'entité entière.",
+                "Occurrence laissée visible. Si la même valeur reste masquée ailleurs, la "
+                "vérification la signalera comme résidu : pour la laisser visible partout, "
+                "choisissez « Ne pas masquer » pour l'entité entière.",
                 "info",
             )
 
@@ -1298,12 +1354,13 @@ class ReviewPage(QWidget):
         if not ids:
             self.banner.show_message("Aucune entité non décidée de ce type.", "info")
             return
+        count = plural(len(ids), "entité", "entités")
         if dialogs.confirm(
             self,
-            f"Valider les {len(ids)} entité(s) de type « {entity_type_label(entity_type)} » "
-            "sans décision ? Elles seront masquées dans tout le lot.",
-            title="Valider tout ce type",
-            ok_label="Valider",
+            f"Masquer {count} de type « {entity_type_label(entity_type)} » encore sans "
+            "décision, dans tout le lot ?",
+            title="Masquer tout ce type",
+            ok_label="Masquer",
         ):
             self.controller.confirm(ids)
 
@@ -1320,10 +1377,10 @@ class ReviewPage(QWidget):
             return
         if dialogs.confirm(
             self,
-            f"Valider les {len(ids)} entité(s) restantes sans décision ? Elles seront masquées "
-            "dans tout le lot.",
-            title="Valider tout le reste",
-            ok_label="Valider",
+            f"Masquer les {plural(len(ids), 'entité restante', 'entités restantes')} sans "
+            "décision, dans tout le lot ?",
+            title="Masquer tout le reste",
+            ok_label="Masquer",
         ):
             self.controller.confirm(ids)
 
@@ -1335,10 +1392,11 @@ class ReviewPage(QWidget):
             return
         if dialogs.confirm(
             self,
-            f"Rejeter {len(ids)} entité(s) ? Leurs valeurs resteront visibles dans les fichiers "
-            "produits.",
-            title="Rejeter la sélection",
-            ok_label="Rejeter",
+            f"Ne pas masquer {plural(len(ids), 'entité')} ? Leurs valeurs resteront visibles "
+            "dans les fichiers produits.",
+            title="Ne pas masquer la sélection",
+            ok_label="Ne pas masquer",
+            warn=True,
         ):
             self.controller.reject(ids)
             self._offer_whitelist(ids)

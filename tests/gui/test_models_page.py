@@ -50,7 +50,7 @@ def test_hardware_and_recommendation(
     page = _page(qtbot, manager)
     assert page.hw_labels["ram"].text() == "16,0 Go"
     assert page.hw_labels["gpu"].text() == "Carte de test"
-    assert "Dml" in page.hw_labels["providers"].text()
+    assert page.hw_labels["providers"].text() == "DirectML (GPU), processeur"
     assert "Standard" in page.profile_label.text()
     assert page.table.rowCount() == 2
 
@@ -64,7 +64,7 @@ def test_empty_catalogue(qtbot: Any, recorder: DialogRecorder) -> None:
 def test_download_import_remove(qtbot: Any, recorder: DialogRecorder, tmp_path: Path) -> None:
     manager = FakeModelManager([make_spec()])
     page = _page(qtbot, manager)
-    assert page.table.item(0, 4).text() == "Absent"
+    assert page.table.item(0, 4).text() == "Non installé"
     assert page.table.item(0, 2).text() == "3,0 Mo"
     assert page.table.item(0, 3).text() == "apache-2.0"
     page.table.selectRow(0)
@@ -81,7 +81,7 @@ def test_download_import_remove(qtbot: Any, recorder: DialogRecorder, tmp_path: 
     page.table.selectRow(0)
     assert page.remove_button.isEnabled()
     page.remove_selected()
-    qtbot.waitUntil(lambda: page.table.item(0, 4).text() == "Absent", timeout=TIMEOUT)
+    qtbot.waitUntil(lambda: page.table.item(0, 4).text() == "Non installé", timeout=TIMEOUT)
 
     recorder.files = [tmp_path / "model.onnx"]
     page.table.selectRow(0)

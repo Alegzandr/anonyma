@@ -1,4 +1,4 @@
-"""Reusable widgets: page header, banners, drop area, badge and progress delegates."""
+"""Reusable widgets: page header, banners, drop area, buttons and badge delegate."""
 
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ from PySide6.QtGui import (
     QDragLeaveEvent,
     QDropEvent,
     QFontMetrics,
+    QIcon,
     QPainter,
+    QPaintEvent,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -25,42 +27,45 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStyle,
     QStyledItemDelegate,
+    QStyleOptionButton,
     QStyleOptionViewItem,
+    QStylePainter,
     QVBoxLayout,
     QWidget,
 )
 
+from anonyma.frenchtext import typo
 from anonyma.gui import icons, theme
 from anonyma.gui.labels import entity_type_label
 
 #: Item data role holding a badge level ("success", "warning"...).
 BADGE_ROLE = Qt.ItemDataRole.UserRole + 10
-#: Item data role holding a progress value 0..100 (or None).
-PROGRESS_ROLE = Qt.ItemDataRole.UserRole + 11
 
 IndexLike = QModelIndex | QPersistentModelIndex
 
 
-def page_header(title: str, subtitle: str = "") -> QWidget:
+def page_header(title: str) -> QWidget:
+    """Page title. No subtitle: the page content explains itself."""
     box = QWidget()
     layout = QVBoxLayout(box)
-    layout.setContentsMargins(0, 0, 0, 6)
+    layout.setContentsMargins(0, 0, 0, 4)
     layout.setSpacing(2)
     label = QLabel(title)
     label.setObjectName("PageTitle")
     layout.addWidget(label)
-    if subtitle:
-        sub = QLabel(subtitle)
-        sub.setObjectName("PageSubtitle")
-        sub.setWordWrap(True)
-        layout.addWidget(sub)
     return box
 
 
 def muted(text: str) -> QLabel:
-    label = QLabel(text)
+    label = QLabel(typo(text))
     label.setProperty("muted", True)
     label.setWordWrap(True)
+    return label
+
+
+def section_title(text: str) -> QLabel:
+    label = QLabel(typo(text))
+    label.setObjectName("SectionTitle")
     return label
 
 
@@ -83,6 +88,15 @@ def _set_button_icon(b: QPushButton, icon_name: str) -> None:
         _retint_connected = True
 
 
+def set_button_icon(b: QPushButton, icon_name: str) -> None:
+    """Change (or remove, with "") the themed icon of a button."""
+    if icon_name:
+        _set_button_icon(b, icon_name)
+    else:
+        b.setProperty(_ICON_PROPERTY, "")
+        b.setIcon(QIcon())
+
+
 def _retint_buttons() -> None:
     """Re-tint every themed button icon (dark icons vanish on the dark theme otherwise)."""
     from PySide6.QtWidgets import QApplication
@@ -94,19 +108,85 @@ def _retint_buttons() -> None:
                 widget.setIcon(icons.icon(str(name), _icon_colour(widget)))
 
 
+def _tab_focus(b: QPushButton) -> QPushButton:
+    """Keyboard focus only: a click leaves no focus ring behind (as on Windows and
+    macOS), Tab still reaches the button."""
+    b.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+    return b
+
+
 def primary_button(text: str, icon_name: str = "") -> QPushButton:
-    button = QPushButton(text)
-    button.setProperty("primary", True)
+    """The page's main action (accent fill). Icons are reserved to primary actions,
+    review decisions and the side navigation."""
+    b = QPushButton(text)
+    b.setProperty("primary", True)
     if icon_name:
-        _set_button_icon(button, icon_name)
-    return button
+        _set_button_icon(b, icon_name)
+    return _tab_focus(b)
 
 
 def button(text: str, icon_name: str = "") -> QPushButton:
+    """Secondary action; ``icon_name`` only for icon-only buttons."""
     b = QPushButton(text)
     if icon_name:
         _set_button_icon(b, icon_name)
-    return b
+    return _tab_focus(b)
+
+
+class KeyButton(QPushButton):
+    """Button showing its keyboard shortcut after the label in muted text
+    (« Masquer   V »): the keys are learnt by looking at the buttons."""
+
+    _GAP = 10
+
+    def __init__(self, text: str, key: str, icon_name: str = "") -> None:
+        super().__init__(text)
+        self.key = key
+        if icon_name:
+            _set_button_icon(self, icon_name)
+        _tab_focus(self)
+
+    def _key_width(self) -> int:
+        return self.fontMetrics().horizontalAdvance(self.key) + self._GAP
+
+    @override
+    def sizeHint(self) -> QSize:
+        size = super().sizeHint()
+        return QSize(size.width() + self._key_width(), size.height())
+
+    @override
+    def minimumSizeHint(self) -> QSize:
+        size = super().minimumSizeHint()
+        return QSize(size.width() + self._key_width(), size.height())
+
+    @override
+    def paintEvent(self, event: QPaintEvent) -> None:
+        painter = QStylePainter(self)
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        option.text = ""
+        option.icon = QIcon()
+        painter.drawControl(QStyle.ControlElement.CE_PushButton, option)
+        metrics = self.fontMetrics()
+        has_icon = not self.icon().isNull()
+        icon_size = self.iconSize() if has_icon else QSize(0, 0)
+        icon_gap = 6 if has_icon else 0
+        text_width = metrics.horizontalAdvance(self.text())
+        total = icon_size.width() + icon_gap + text_width + self._key_width()
+        x = max(4, (self.width() - total) // 2)
+        enabled = self.isEnabled()
+        t = theme.tokens()
+        if has_icon:
+            mode = QIcon.Mode.Normal if enabled else QIcon.Mode.Disabled
+            pixmap = self.icon().pixmap(icon_size, self.devicePixelRatioF(), mode)
+            painter.drawPixmap(x, (self.height() - icon_size.height()) // 2, pixmap)
+            x += icon_size.width() + icon_gap
+        flags = int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        painter.setPen(QColor(t.text if enabled else t.muted))
+        painter.drawText(QRect(x, 0, text_width + 2, self.height()), flags, self.text())
+        x += text_width + self._GAP
+        painter.setPen(QColor(t.muted))
+        painter.drawText(QRect(x, 0, self._key_width(), self.height()), flags, self.key)
 
 
 def pad_spin(*spins: QAbstractSpinBox) -> None:
@@ -147,8 +227,9 @@ class Banner(QFrame):
         self.actions_layout.setSpacing(6)
         layout.addLayout(self.actions_layout)
         self.action_buttons: list[QPushButton] = []
-        self.close_button = QPushButton("Masquer")
+        self.close_button = QPushButton("Fermer")
         self.close_button.setFlat(True)
+        _tab_focus(self.close_button)
         self.close_button.clicked.connect(self.clear)
         layout.addWidget(self.close_button)
         self.level = "info"
@@ -163,10 +244,10 @@ class Banner(QFrame):
         """Show ``text``; each action is a button that runs its callback (then hides)."""
         self.level = level
         self.setProperty("level", level)
-        self.label.setText(text)
+        self.label.setText(typo(text))
         self._clear_actions()
         for label, callback in actions:
-            action_button = QPushButton(label)
+            action_button = button(label)
             action_button.clicked.connect(lambda _c=False, cb=callback: self._run(cb))
             self.actions_layout.addWidget(action_button)
             self.action_buttons.append(action_button)
@@ -197,14 +278,17 @@ class EmptyState(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.addStretch(1)
-        heading = QLabel(title)
-        heading.setObjectName("SectionTitle")
-        heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        body = muted(text)
-        body.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(heading)
-        layout.addWidget(body)
+        self.heading = section_title(title)
+        self.heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.body = muted(text)
+        self.body.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.heading)
+        layout.addWidget(self.body)
         layout.addStretch(2)
+
+    def set_text(self, title: str, text: str) -> None:
+        self.heading.setText(typo(title))
+        self.body.setText(typo(text))
 
 
 class DropArea(QFrame):
@@ -219,8 +303,8 @@ class DropArea(QFrame):
         self.setMinimumHeight(96)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
-        self.title = QLabel("Déposez ici des fichiers ou des dossiers")
-        self.title.setObjectName("SectionTitle")
+        layout.addStretch(1)
+        self.title = section_title("Déposez ici des fichiers ou des dossiers")
         self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.hint = muted("")
         self.hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -228,7 +312,9 @@ class DropArea(QFrame):
         layout.addWidget(self.hint)
         self.buttons = QHBoxLayout()
         self.buttons.addStretch(1)
+        layout.addSpacing(6)
         layout.addLayout(self.buttons)
+        layout.addStretch(1)
 
     def add_button(self, widget: QWidget) -> None:
         self.buttons.insertWidget(self.buttons.count(), widget)
@@ -237,49 +323,49 @@ class DropArea(QFrame):
         self.buttons.addStretch(1)
 
     @staticmethod
-    def _paths(event: QDropEvent | QDragEnterEvent) -> list[Path]:
+    def paths(event: QDropEvent | QDragEnterEvent) -> list[Path]:
         mime = event.mimeData()
         if not mime.hasUrls():
             return []
         return [Path(u.toLocalFile()) for u in mime.urls() if u.isLocalFile() and u.toLocalFile()]
 
-    def _set_active(self, active: bool) -> None:
+    def set_active(self, active: bool) -> None:
         self.setProperty("active", active)
         repolish(self)
 
     @override
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        if self._paths(event) and self.isEnabled():
+        if self.paths(event) and self.isEnabled():
             event.acceptProposedAction()
-            self._set_active(True)
+            self.set_active(True)
         else:
             event.ignore()
 
     @override
     def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
-        self._set_active(False)
+        self.set_active(False)
         super().dragLeaveEvent(event)
 
     @override
     def dropEvent(self, event: QDropEvent) -> None:
-        self._set_active(False)
-        found = self._paths(event)
+        self.set_active(False)
+        found = self.paths(event)
         if found:
             event.acceptProposedAction()
             self.dropped.emit(found)
 
 
-def _pill(painter: QPainter, rect: QRect, text: str, colour: QColor) -> None:
+def _pill(painter: QPainter, rect: QRect, text: str, level: str) -> None:
     metrics = QFontMetrics(painter.font())
     width = min(rect.width() - 4, metrics.horizontalAdvance(text) + 16)
     height = min(rect.height() - 6, metrics.height() + 4)
     pill = QRectF(rect.x() + 4, rect.center().y() - height / 2 + 1, width, height)
-    fill = QColor(colour)
-    fill.setAlphaF(0.18 if not theme.is_dark() else 0.28)
+    fill = theme.badge_color(level)
+    fill.setAlphaF(theme.tokens().badge_fill)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(fill)
     painter.drawRoundedRect(pill, height / 2, height / 2)
-    painter.setPen(colour if not theme.is_dark() else colour.lighter(115))
+    painter.setPen(theme.badge_text(level))
     painter.drawText(
         pill,
         Qt.AlignmentFlag.AlignCenter,
@@ -288,22 +374,23 @@ def _pill(painter: QPainter, rect: QRect, text: str, colour: QColor) -> None:
 
 
 class BadgeDelegate(QStyledItemDelegate):
-    """Draws the display text as a coloured pill when the item has a BADGE_ROLE."""
+    """Draws the display text as a coloured pill when the item has a BADGE_ROLE and
+    some text: an empty cell stays empty (pills only where the value varies)."""
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: IndexLike) -> None:
         level = index.data(BADGE_ROLE)
-        if not level:
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        if not level or not text:
             super().paint(painter, option, index)
             return
         self.initStyleOption(option, index)
-        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
         option.text = ""
         style = option.widget.style() if option.widget else None
         if style is not None:
             style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.widget)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        _pill(painter, option.rect, text, theme.badge_color(str(level)))
+        _pill(painter, option.rect, text, str(level))
         painter.restore()
 
     @override
@@ -312,40 +399,15 @@ class BadgeDelegate(QStyledItemDelegate):
         return QSize(size.width() + 20, max(size.height(), 26))
 
 
-class ProgressDelegate(QStyledItemDelegate):
-    """Thin progress bar for items carrying PROGRESS_ROLE (0..100)."""
-
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: IndexLike) -> None:
-        value = index.data(PROGRESS_ROLE)
-        if value is None:
-            super().paint(painter, option, index)
-            return
-        self.initStyleOption(option, index)
-        option.text = ""
-        style = option.widget.style() if option.widget else None
-        if style is not None:
-            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.widget)
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = option.rect.adjusted(6, 0, -6, 0)
-        bar = QRectF(rect.x(), rect.center().y() - 3, rect.width(), 6)
-        t = theme.tokens()
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(t.border))
-        painter.drawRoundedRect(bar, 3, 3)
-        done = QRectF(bar.x(), bar.y(), bar.width() * max(0, min(100, int(value))) / 100, 6)
-        painter.setBrush(QColor(t.accent))
-        painter.drawRoundedRect(done, 3, 3)
-        painter.restore()
-
-
 def legend_html(types: Iterable[str]) -> str:
-    """Rich-text legend: one coloured chip per entity type."""
+    """Rich-text legend: one coloured chip per entity type. Spaces inside a chip are
+    unbreakable, so lines only wrap between chips."""
     chips = []
     for t in sorted(set(types)):
         bg, fg = theme.entity_colors(t)
+        label = html.escape(entity_type_label(t)).replace(" ", "&nbsp;")
         chips.append(
             f'<span style="background-color:{bg.name()}; color:{fg.name()};">'
-            f"&nbsp;{html.escape(entity_type_label(t))}&nbsp;</span>"
+            f"&nbsp;{label}&nbsp;</span>"
         )
-    return "&nbsp;&nbsp;".join(chips)
+    return " &nbsp;".join(chips)

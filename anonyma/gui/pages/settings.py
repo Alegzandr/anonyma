@@ -13,8 +13,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
-    QFormLayout,
-    QGroupBox,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -22,21 +21,36 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPlainTextEdit,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from anonyma import paths
 from anonyma.config import Config, load_business_list
+from anonyma.frenchtext import plural, typo
 from anonyma.gui import dialogs, theme
 from anonyma.gui.context import AppContext
-from anonyma.gui.controller import DEFAULT_STORE_NAME, REVIEW_POLICIES, review_policy
+from anonyma.gui.controller import (
+    DEFAULT_STORE_NAME,
+    REVIEW_POLICIES,
+    REVIEW_POLICY_GLOSSES,
+    review_policy,
+)
 from anonyma.gui.dialogs import normalize_type
-from anonyma.gui.labels import MODE_LABELS, PROFILE_LABELS, REGIME_LABELS
+from anonyma.gui.labels import (
+    MODE_GLOSSES,
+    MODE_LABELS,
+    PROFILE_GLOSSES,
+    PROFILE_LABELS,
+    REGIME_GLOSSES,
+    REGIME_LABELS,
+)
 from anonyma.gui.widgets import (
     Banner,
     button,
@@ -45,6 +59,7 @@ from anonyma.gui.widgets import (
     pad_spin,
     page_header,
     primary_button,
+    section_title,
 )
 from anonyma.logs import get_logger
 from anonyma.model_catalog import ModelKind
@@ -61,16 +76,29 @@ log = get_logger("gui.settings")
 
 LISTS_DIR = "listes"
 ORGANIZATION_POLICY_LABELS: dict[str, str] = {
-    POLICY_EXCEPT_WHITELIST: (
-        "Toutes, sauf la liste blanche (éditeurs, prestataires, sites publics)"
-    ),
+    POLICY_EXCEPT_WHITELIST: "Toutes, sauf exceptions",
     POLICY_ALL: "Toutes, sans exception",
-    POLICY_BLACKLIST: "Uniquement celles de la liste noire",
+    POLICY_BLACKLIST: "Seulement celles de la liste",
+}
+ORGANIZATION_POLICY_GLOSSES: dict[str, str] = {
+    POLICY_EXCEPT_WHITELIST: "Sauf les organisations et domaines « à ne jamais masquer ».",
+    POLICY_ALL: "Même les éditeurs, prestataires et sites publics.",
+    POLICY_BLACKLIST: "Seulement les organisations et domaines « à toujours masquer ».",
 }
 TAG_NUMBERING_LABELS: dict[str, str] = {
-    "sequentiel": "Séquentielle par lot — [PERSONNE_001]",
-    "aleatoire": "Aléatoire — [PERSONNE_K7Q2] (ne révèle ni le nombre ni l'ordre)",
+    "sequentiel": "Séquentielle",
+    "aleatoire": "Aléatoire",
 }
+TAG_NUMBERING_GLOSSES: dict[str, str] = {
+    "sequentiel": "[PERSONNE_001], [PERSONNE_002]… dans l'ordre du lot.",
+    "aleatoire": (
+        "[PERSONNE_K7Q2] : ne révèle ni le nombre ni l'ordre. En pseudonymisation, une "
+        "nouvelle valeur reçoit toujours un identifiant aléatoire."
+    ),
+}
+#: Width of the label column of every settings form, and cap of the content.
+LABEL_WIDTH = 200
+CONTENT_MAX_WIDTH = 820
 
 
 def business_lists_dir() -> Path:
@@ -104,6 +132,37 @@ def _two_column_table(headers: tuple[str, str]) -> QTableWidget:
     return table
 
 
+class _Form(QGridLayout):
+    """Two-column form: a fixed label column (same in every tab) and the fields. Each
+    label sits on the first line of its field, never on the field's helper text."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setHorizontalSpacing(16)
+        self.setVerticalSpacing(12)
+        self.setColumnMinimumWidth(0, LABEL_WIDTH)
+        # Fields with a capped width leave the extra room to an empty last column, not
+        # to the labels.
+        self.setColumnStretch(1, 1)
+        self.setColumnStretch(2, 1)
+        self._rows = 0
+
+    def add_row(
+        self, label: str, field: QWidget, *, buddy: QWidget | None = None, lead: int = 0
+    ) -> None:
+        text = QLabel(label)
+        text.setFixedWidth(LABEL_WIDTH)
+        text.setWordWrap(True)
+        text.setBuddy(buddy or field)
+        height = lead or field.sizeHint().height()
+        text.setContentsMargins(0, max(0, (height - text.sizeHint().height()) // 2), 0, 0)
+        top = Qt.AlignmentFlag.AlignTop
+        self.addWidget(text, self._rows, 0, top | Qt.AlignmentFlag.AlignLeft)
+        self.addWidget(field, self._rows, 1, top)
+        self._rows += 1
+
+
 class SettingsPage(QWidget):
     saved = Signal()
 
@@ -116,166 +175,156 @@ class SettingsPage(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(24, 20, 24, 12)
         outer.setSpacing(10)
-        outer.addWidget(
-            page_header(
-                "Réglages",
-                "Enregistrés dans le dossier de l'application (data/config.json).",
-            )
-        )
+        outer.addWidget(page_header("Réglages"))
         self.banner = Banner()
         outer.addWidget(self.banner)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        body = QWidget()
-        scroll.setWidget(body)
-        form_layout = QVBoxLayout(body)
-        form_layout.setContentsMargins(0, 0, 12, 0)
-        form_layout.setSpacing(12)
-        outer.addWidget(scroll, 1)
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("SettingsTabs")
+        outer.addWidget(self.tabs, 1)
 
         # Detection --------------------------------------------------------------------
-        detection = QGroupBox("Détection")
-        f = QFormLayout(detection)
+        f, _box = self._tab("Détection")
         self.profile = QComboBox()
         for profile, label in PROFILE_LABELS.items():
             self.profile.addItem(label, profile.value if profile else "")
-        f.addRow("Profil", self.profile)
+        self._gloss(
+            f,
+            "&Profil",
+            self.profile,
+            {(p.value if p else ""): g for p, g in PROFILE_GLOSSES.items()},
+        )
         self.min_score = QDoubleSpinBox()
         self.review_threshold = QDoubleSpinBox()
         for spin in (self.min_score, self.review_threshold):
             spin.setRange(0.0, 1.0)
             spin.setSingleStep(0.05)
             spin.setDecimals(2)
+            spin.setMaximumWidth(120)
         pad_spin(self.min_score, self.review_threshold)
-        f.addRow("Score minimal retenu", self.min_score)
-        f.addRow("Seuil d'envoi en revue", self.review_threshold)
-        thresholds_hint = muted(
+        self._row(f, "Score &minimal retenu", self.min_score)
+        self._row(
+            f,
+            "Seuil d'envoi en &revue",
+            self.review_threshold,
             "Sous le score minimal : ignoré. Sous le seuil de revue : masqué et signalé "
-            "« À revoir »."
+            "« À revoir ».",
         )
-        thresholds_hint.setWordWrap(False)
-        f.addRow("", thresholds_hint)
-        self.paranoid = QCheckBox(
-            "Mode paranoïaque (masquer aussi noms propres et séquences suspectes)"
-        )
-        f.addRow("", self.paranoid)
+        self.paranoid = QCheckBox("Mode paranoïaque")
+        self._row(f, "", self.paranoid, "Masque aussi les noms propres et les séquences suspectes.")
         self.gliner_model = QComboBox()
         self.llm_model = QComboBox()
-        f.addRow("Modèle GLiNER", self.gliner_model)
-        f.addRow("Modèle de langue", self.llm_model)
+        for combo in (self.gliner_model, self.llm_model):
+            combo.setMaximumWidth(360)
+        self._row(f, "Modèle &GLiNER", self.gliner_model)
+        self._row(f, "Modèle de &langue", self.llm_model)
         self.detect_dates = QCheckBox("Masquer toutes les dates")
         self.detect_dates.setObjectName("DetectDates")
-        f.addRow("", self.detect_dates)
-        f.addRow(
-            "",
-            muted("Les dates de naissance et les horodatages de signature sont toujours masqués."),
+        self._row(
+            f,
+            "Dates",
+            self.detect_dates,
+            "Les dates de naissance et les horodatages de signature sont toujours masqués.",
         )
-        self.mask_opaque_ids = QCheckBox(
-            "Masquer les identifiants techniques (empreintes, UUID, jetons, n° de transaction)"
-        )
+        self.mask_opaque_ids = QCheckBox("Masquer les identifiants techniques")
         self.mask_opaque_ids.setObjectName("MaskOpaqueIds")
-        f.addRow("", self.mask_opaque_ids)
-        form_layout.addWidget(detection)
+        self._row(
+            f,
+            "Identifiants",
+            self.mask_opaque_ids,
+            "Empreintes, UUID, jetons, numéros de transaction.",
+        )
 
         # Replacement --------------------------------------------------------------------
-        replacement = QGroupBox("Remplacement")
-        f = QFormLayout(replacement)
+        f, _box = self._tab("Remplacement")
         self.mode = QComboBox()
         for mode, label in MODE_LABELS.items():
             self.mode.addItem(label, mode.value)
-        f.addRow("Mode", self.mode)
+        self._gloss(f, "&Mode", self.mode, {m.value: g for m, g in MODE_GLOSSES.items()})
         self.regime = QComboBox()
         for regime, label in REGIME_LABELS.items():
             self.regime.addItem(label, regime.value)
-        f.addRow("Régime", self.regime)
+        self._gloss(f, "Ré&gime", self.regime, {r.value: g for r, g in REGIME_GLOSSES.items()})
         self.review_policy = QComboBox()
         self.review_policy.setObjectName("SettingsReviewPolicy")
         for key, label in REVIEW_POLICIES.items():
             self.review_policy.addItem(label, key)
-        f.addRow("Relecture avant écriture", self.review_policy)
+        self._gloss(f, "&Relecture avant écriture", self.review_policy, REVIEW_POLICY_GLOSSES)
         self.tag_numbering = QComboBox()
         self.tag_numbering.setObjectName("TagNumbering")
         for key, label in TAG_NUMBERING_LABELS.items():
             self.tag_numbering.addItem(label, key)
-        f.addRow("Numérotation des balises", self.tag_numbering)
-        tags_hint = muted(
-            "En pseudonymisation, une nouvelle valeur reçoit toujours un identifiant aléatoire."
-        )
-        tags_hint.setWordWrap(False)
-        f.addRow("", tags_hint)
-        self.neutral_filenames = QCheckBox(
-            "Noms de fichiers neutres en sortie (document_0001.pdf, dossier_0001…)"
-        )
+        self._gloss(f, "&Numérotation des balises", self.tag_numbering, TAG_NUMBERING_GLOSSES)
+        self.neutral_filenames = QCheckBox("Noms de fichiers neutres")
         self.neutral_filenames.setObjectName("NeutralFilenames")
-        f.addRow("", self.neutral_filenames)
+        self._row(
+            f,
+            "Sortie",
+            self.neutral_filenames,
+            "document_0001.pdf, dossier_0001… au lieu des noms anonymisés.",
+        )
         store_row = QHBoxLayout()
         self.store_path = QLineEdit()
         self.store_path.setPlaceholderText(str(paths.data_dir() / DEFAULT_STORE_NAME))
-        store_button = button("Choisir…", "folder")
+        store_button = button("Choisir…")
         store_button.clicked.connect(self._pick_store)
         store_row.addWidget(self.store_path, 1)
         store_row.addWidget(store_button)
         self.store_row_widget = QWidget()
         self.store_row_widget.setLayout(store_row)
         store_row.setContentsMargins(0, 0, 0, 0)
-        f.addRow("Table de correspondance", self.store_row_widget)
         self.store_hint = muted(
             "Chiffrée par une phrase secrète demandée à chaque traitement. Vide : dossier "
             "de l'application."
         )
-        self.store_hint.setWordWrap(False)
-        f.addRow("", self.store_hint)
-        form_layout.addWidget(replacement)
+        self._row(f, "&Table de correspondance", self.store_row_widget, self.store_hint)
 
         # Lists ----------------------------------------------------------------------------
-        lists = QGroupBox("Listes")
-        lv = QVBoxLayout(lists)
-        lv.addWidget(QLabel("<b>Liste blanche</b> — valeurs jamais masquées, une par ligne"))
+        lv = self._list_tab("Listes")
         self.whitelist = QPlainTextEdit()
         self.whitelist.setObjectName("Whitelist")
         self.whitelist.setMinimumHeight(90)
-        lv.addWidget(self.whitelist)
-        lv.addWidget(QLabel("<b>Termes toujours masqués</b>"))
+        self._list_section(
+            lv, "Valeurs à ne jamais masquer", "Une valeur par ligne.", self.whitelist
+        )
         self.always_mask = _two_column_table(("Valeur", "Type"))
         self.always_mask.setObjectName("AlwaysMask")
-        lv.addWidget(self.always_mask)
-        row = QHBoxLayout()
-        add_term = button("Ajouter un terme", "add")
+        add_term = button("Ajouter une valeur")
         add_term.clicked.connect(lambda: self._add_term_row("", EntityType.BUSINESS_TERM.value))
-        del_term = button("Retirer", "trash")
+        del_term = button("Retirer")
         del_term.clicked.connect(lambda: self._remove_rows(self.always_mask))
-        row.addWidget(add_term)
-        row.addWidget(del_term)
-        row.addStretch(1)
-        lv.addLayout(row)
-        lv.addWidget(
-            QLabel("<b>Listes métier</b> — fichiers CSV « valeur[,type] » toujours masqués")
+        self._list_section(
+            lv,
+            "Valeurs à toujours masquer",
+            "Avec leur type (ex. PERSONNE, PROJET).",
+            self.always_mask,
+            (add_term, del_term),
         )
         self.business_lists = QListWidget()
         self.business_lists.setObjectName("BusinessLists")
         self.business_lists.setMinimumHeight(80)
-        lv.addWidget(self.business_lists)
-        row = QHBoxLayout()
-        import_csv = button("Importer un CSV…", "import")
+        import_csv = button("Importer un CSV…")
         import_csv.clicked.connect(self._import_csv)
-        remove_csv = button("Retirer", "trash")
+        remove_csv = button("Retirer")
         remove_csv.clicked.connect(self._remove_list)
-        row.addWidget(import_csv)
-        row.addWidget(remove_csv)
-        row.addStretch(1)
-        lv.addLayout(row)
-        form_layout.addWidget(lists)
+        self._list_section(
+            lv,
+            "Listes métier",
+            "Fichiers CSV « valeur[,type] » : chaque valeur est toujours masquée.",
+            self.business_lists,
+            (import_csv, remove_csv),
+        )
+        lv.addStretch(1)
 
         # Organizations ----------------------------------------------------------------------
-        organizations = QGroupBox("Organisations, sites et domaines")
-        ov = QVBoxLayout(organizations)
-        of = QFormLayout()
+        ov = self._list_tab("Organisations")
+        of = _Form()
         self.organization_policy = QComboBox()
         self.organization_policy.setObjectName("OrganizationPolicy")
         for key, label in ORGANIZATION_POLICY_LABELS.items():
             self.organization_policy.addItem(label, key)
-        of.addRow("Organisations masquées", self.organization_policy)
+        self._gloss(
+            of, "Organisations &masquées", self.organization_policy, ORGANIZATION_POLICY_GLOSSES
+        )
         ov.addLayout(of)
         ov.addWidget(
             muted(
@@ -283,116 +332,113 @@ class SettingsPage(QWidget):
                 "Les données personnelles d'une adresse conservée restent masquées."
             )
         )
-        ov.addWidget(
-            QLabel("<b>Liste blanche</b> — organisations ou domaines jamais masqués, un par ligne")
-        )
         self.organization_whitelist = QPlainTextEdit()
         self.organization_whitelist.setObjectName("OrganizationWhitelist")
         self.organization_whitelist.setMinimumHeight(110)
-        ov.addWidget(self.organization_whitelist)
-        row = QHBoxLayout()
-        reset_whitelist = button("Rétablir la liste par défaut", "undo")
+        reset_whitelist = button("Rétablir la liste par défaut")
         reset_whitelist.clicked.connect(self._reset_organization_whitelist)
-        row.addWidget(reset_whitelist)
-        row.addStretch(1)
-        ov.addLayout(row)
-        ov.addWidget(QLabel("<b>Liste noire</b> — organisations ou domaines toujours masqués"))
+        self._list_section(
+            ov,
+            "Organisations et domaines à ne jamais masquer",
+            "Éditeurs, prestataires, sites publics. Un par ligne.",
+            self.organization_whitelist,
+            (reset_whitelist,),
+        )
         self.organization_blacklist = QPlainTextEdit()
         self.organization_blacklist.setObjectName("OrganizationBlacklist")
         self.organization_blacklist.setMinimumHeight(70)
-        ov.addWidget(self.organization_blacklist)
-        ov.addWidget(
-            QLabel(
-                "<b>Identifiants techniques jamais masqués</b> — valeurs exactes, ou "
-                "expressions régulières préfixées « re: »"
-            )
+        self._list_section(
+            ov,
+            "Organisations et domaines à toujours masquer",
+            "Un par ligne.",
+            self.organization_blacklist,
         )
         self.opaque_id_whitelist = QPlainTextEdit()
         self.opaque_id_whitelist.setObjectName("OpaqueIdWhitelist")
         self.opaque_id_whitelist.setMinimumHeight(60)
         self.opaque_id_whitelist.setPlaceholderText(r"ex. re:FACT-\d{6}")
-        ov.addWidget(self.opaque_id_whitelist)
-        form_layout.addWidget(organizations)
+        self._list_section(
+            ov,
+            "Identifiants techniques à ne jamais masquer",
+            "Valeurs exactes, ou expressions régulières préfixées « re: ».",
+            self.opaque_id_whitelist,
+        )
+        ov.addStretch(1)
 
         # Advanced detection ------------------------------------------------------------------
-        advanced = QGroupBox("Détection avancée")
-        av = QVBoxLayout(advanced)
-        av.addWidget(QLabel("<b>Libellés GLiNER personnalisés</b> — libellé → type d'entité"))
+        av = self._list_tab("Avancé")
         self.custom_labels = _two_column_table(("Libellé", "Type"))
         self.custom_labels.setObjectName("CustomLabels")
-        av.addWidget(self.custom_labels)
-        row = QHBoxLayout()
-        add_label = button("Ajouter un libellé", "add")
+        add_label = button("Ajouter un libellé")
         add_label.clicked.connect(lambda: self._add_row(self.custom_labels, "", "PROJET"))
-        del_label = button("Retirer", "trash")
+        del_label = button("Retirer")
         del_label.clicked.connect(lambda: self._remove_rows(self.custom_labels))
-        row.addWidget(add_label)
-        row.addWidget(del_label)
-        row.addStretch(1)
-        av.addLayout(row)
-        av.addWidget(
-            QLabel("<b>Numéros de dossier internes</b> — expressions régulières, une par ligne")
+        self._list_section(
+            av,
+            "Libellés GLiNER personnalisés",
+            "Ce que le modèle GLiNER doit chercher, et le type d'entité à attribuer.",
+            self.custom_labels,
+            (add_label, del_label),
         )
         self.case_patterns = QPlainTextEdit()
         self.case_patterns.setObjectName("CasePatterns")
         self.case_patterns.setMinimumHeight(70)
         self.case_patterns.setPlaceholderText(r"ex. DOS-\d{4}-\d{5}")
-        av.addWidget(self.case_patterns)
+        self._list_section(
+            av,
+            "Numéros de dossier internes",
+            "Expressions régulières, une par ligne.",
+            self.case_patterns,
+        )
         self.pattern_status = QLabel("")
         self.pattern_status.setWordWrap(True)
         av.addWidget(self.pattern_status)
         self.case_patterns.textChanged.connect(self._check_patterns)
-        form_layout.addWidget(advanced)
+        av.addStretch(1)
 
         # System ---------------------------------------------------------------------------
-        system = QGroupBox("Système")
-        f = QFormLayout(system)
+        f, _box = self._tab("Système")
         self.workers = QSpinBox()
         self.workers.setRange(0, 64)
         self.workers.setSpecialValueText("Automatique")
+        self.workers.setMaximumWidth(160)
         pad_spin(self.workers)
-        f.addRow("Processus de traitement", self.workers)
-        self.ocr = QCheckBox("Reconnaître le texte des images et des documents numérisés (OCR)")
-        f.addRow("", self.ocr)
-        self.ocr_full_pages = QCheckBox(
-            "PDF : reconnaître aussi le texte de chaque page rendue (tampons, signatures, "
-            "champs aplatis)"
-        )
+        self._row(f, "&Processus de traitement", self.workers)
+        self.ocr = QCheckBox("Reconnaître le texte des images et des documents numérisés")
+        self._row(f, "OCR", self.ocr)
+        self.ocr_full_pages = QCheckBox("PDF : relire aussi chaque page rendue")
         self.ocr_full_pages.setObjectName("OcrFullPages")
-        f.addRow("", self.ocr_full_pages)
+        self._row(f, "", self.ocr_full_pages, "Tampons, signatures, champs aplatis.")
         self.decode_barcodes = QCheckBox("Lire et masquer les QR codes et codes-barres")
         self.decode_barcodes.setObjectName("DecodeBarcodes")
-        f.addRow("", self.decode_barcodes)
-        self.remove_invisible_text = QCheckBox("PDF : supprimer le texte invisible")
+        self._row(f, "Codes-barres", self.decode_barcodes)
+        self.remove_invisible_text = QCheckBox("Supprimer le texte invisible")
         self.remove_invisible_text.setObjectName("RemoveInvisibleText")
-        f.addRow("", self.remove_invisible_text)
-        self.use_libreoffice = QCheckBox(
-            "Utiliser LibreOffice pour les anciens formats (.doc, .xls…)"
-        )
-        f.addRow("", self.use_libreoffice)
+        self._row(f, "PDF", self.remove_invisible_text)
+        self.use_libreoffice = QCheckBox("Utiliser LibreOffice pour les anciens formats")
+        self._row(f, "LibreOffice", self.use_libreoffice, ".doc, .xls, .ppt…")
         lo_row = QHBoxLayout()
         lo_row.setContentsMargins(0, 0, 0, 0)
         self.libreoffice_path = QLineEdit()
         self.libreoffice_path.setPlaceholderText("Détection automatique")
-        lo_button = button("Choisir…", "file")
+        lo_button = button("Choisir…")
         lo_button.clicked.connect(self._pick_libreoffice)
         lo_row.addWidget(self.libreoffice_path, 1)
         lo_row.addWidget(lo_button)
         lo_widget = QWidget()
         lo_widget.setLayout(lo_row)
-        f.addRow("Chemin de LibreOffice", lo_widget)
+        self._row(f, "&Chemin de LibreOffice", lo_widget)
         self.theme = QComboBox()
         for key, label in theme.THEMES.items():
             self.theme.addItem(label, key)
+        self.theme.setMaximumWidth(200)
         self.theme.currentIndexChanged.connect(self._theme_changed)
-        f.addRow("Thème", self.theme)
-        form_layout.addWidget(system)
-        form_layout.addStretch(1)
+        self._row(f, "T&hème", self.theme)
 
         buttons = QHBoxLayout()
         self.dirty_label = muted("")
         buttons.addWidget(self.dirty_label, 1)
-        self.revert_button = button("Rétablir", "undo")
+        self.revert_button = button("Annuler les modifications")
         self.revert_button.clicked.connect(self.load)
         self.save_button = primary_button("Enregistrer", "check")
         self.save_button.clicked.connect(self.save)
@@ -445,6 +491,92 @@ class SettingsPage(QWidget):
         self.context.config_changed.connect(self._external_change)
         self.use_libreoffice.toggled.connect(lo_widget.setEnabled)
         self.load()
+
+    # -- layout helpers -------------------------------------------------------------
+
+    def _page(self, title: str) -> QWidget:
+        """A scrollable tab whose content keeps a readable width."""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        holder = QWidget()
+        row = QHBoxLayout(holder)
+        row.setContentsMargins(4, 14, 12, 8)
+        body = QWidget()
+        body.setMaximumWidth(CONTENT_MAX_WIDTH)
+        row.addWidget(body, 1)
+        row.addStretch(0)
+        scroll.setWidget(holder)
+        self.tabs.addTab(scroll, title)
+        return body
+
+    def _tab(self, title: str) -> tuple[_Form, QWidget]:
+        body = self._page(title)
+        column = QVBoxLayout(body)
+        column.setContentsMargins(0, 0, 0, 0)
+        form = _Form()
+        column.addLayout(form)
+        column.addStretch(1)
+        return form, body
+
+    def _list_tab(self, title: str) -> QVBoxLayout:
+        column = QVBoxLayout(self._page(title))
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(6)
+        return column
+
+    @staticmethod
+    def _list_section(
+        column: QVBoxLayout,
+        title: str,
+        hint: str,
+        editor: QWidget,
+        actions: tuple[QPushButton, ...] = (),
+    ) -> None:
+        if column.count():
+            column.addSpacing(14)
+        heading = section_title(title)
+        heading.setBuddy(editor)
+        column.addWidget(heading)
+        column.addWidget(muted(hint))
+        column.addWidget(editor)
+        if actions:
+            row = QHBoxLayout()
+            for action in actions:
+                row.addWidget(action)
+            row.addStretch(1)
+            column.addLayout(row)
+
+    @staticmethod
+    def _row(form: _Form, label: str, field: QWidget, hint: str | QLabel | None = None) -> None:
+        """A form row; ``hint`` sits right under the field (muted helper text)."""
+        if hint is None:
+            form.add_row(label, field)
+            return
+        box = QWidget()
+        column = QVBoxLayout(box)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(3)
+        column.addWidget(field)
+        column.addWidget(hint if isinstance(hint, QLabel) else muted(hint))
+        form.add_row(label, box, buddy=field, lead=field.sizeHint().height())
+
+    def _gloss(self, form: _Form, label: str, combo: QComboBox, glosses: dict[str, str]) -> None:
+        """Add ``combo`` with a short label; the gloss of the current choice shows in a
+        muted line below, and every choice's gloss in its tooltip."""
+        for i in range(combo.count()):
+            gloss = glosses.get(str(combo.itemData(i)), "")
+            if gloss:
+                combo.setItemData(i, typo(gloss), Qt.ItemDataRole.ToolTipRole)
+        combo.setMaximumWidth(360)
+        hint = muted("")
+        self._row(form, label, combo, hint)
+
+        def update(*_args: object) -> None:
+            hint.setText(typo(glosses.get(str(combo.currentData()), "")))
+
+        combo.currentIndexChanged.connect(update)
+        update()
 
     # -- load / collect ---------------------------------------------------------------
 
@@ -656,7 +788,7 @@ class SettingsPage(QWidget):
     def _add_list_item(self, path: Path) -> None:
         try:
             count = len(load_business_list(path))
-            text = f"{path.name} — {count} terme(s)"
+            text = f"{path.name} · {plural(count, 'terme')}"
         except (OSError, UnicodeDecodeError, ValueError):
             text = f"{path.name} — fichier illisible ou introuvable"
         item = QListWidgetItem(text)
@@ -692,7 +824,8 @@ class SettingsPage(QWidget):
         self._add_list_item(target)
         self._mark_dirty()
         self.banner.show_message(
-            f"Liste importée : {len(terms)} terme(s). Enregistrez pour l'activer.", "success"
+            f"Liste importée : {plural(len(terms), 'terme')}. Enregistrez pour l'activer.",
+            "success",
         )
         return True
 
@@ -750,7 +883,9 @@ class SettingsPage(QWidget):
             )
         else:
             count = len(_lines(self.case_patterns))
-            self.pattern_status.setText(f"{count} expression(s) valide(s)." if count else "")
+            self.pattern_status.setText(
+                f"{plural(count, 'expression valide', 'expressions valides')}." if count else ""
+            )
 
     def _theme_changed(self) -> None:
         if self._loading:

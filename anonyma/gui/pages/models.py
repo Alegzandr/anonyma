@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from anonyma import hardware
+from anonyma.frenchtext import typo
 from anonyma.gui import dialogs
 from anonyma.gui.context import AppContext
 from anonyma.gui.labels import PROFILE_SHORT, format_bytes
@@ -45,6 +46,23 @@ from anonyma.model_manager import ModelStatus
 KIND_LABELS = {ModelKind.GLINER: "GLiNER", ModelKind.LLM: "Modèle de langue", ModelKind.OCR: "OCR"}
 COLUMNS = ("Modèle", "Type", "Taille", "Licence", "État")
 
+#: ONNX Runtime execution providers -> French label.
+PROVIDER_LABELS = {
+    "DmlExecutionProvider": "DirectML (GPU)",
+    "CUDAExecutionProvider": "CUDA (GPU)",
+    "TensorrtExecutionProvider": "TensorRT (GPU)",
+    "ROCMExecutionProvider": "ROCm (GPU)",
+    "CoreMLExecutionProvider": "Core ML",
+    "OpenVINOExecutionProvider": "OpenVINO",
+    "CPUExecutionProvider": "processeur",
+}
+
+
+def providers_label(providers: tuple[str, ...] | list[str]) -> str:
+    labels = [PROVIDER_LABELS.get(p, p.replace("ExecutionProvider", "")) for p in providers]
+    text = ", ".join(labels) or "processeur"
+    return text[0].upper() + text[1:]
+
 
 def spec_size(spec: ModelSpec) -> int:
     return sum(f.size for f in spec.files)
@@ -57,7 +75,8 @@ def status_text(status: ModelStatus | None) -> tuple[str, str]:
         return "Installé · vérifié", "success"
     if status.installed:
         return "Installé · non vérifié", "warning"
-    return "Absent", "neutral"
+    # The common case: plain muted text, no badge.
+    return "Non installé", ""
 
 
 class ModelsPage(QWidget):
@@ -74,13 +93,7 @@ class ModelsPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(12)
-        layout.addWidget(
-            page_header(
-                "Modèles",
-                "Matériel détecté, profil conseillé et modèles d'intelligence artificielle "
-                "installés. Tout fonctionne hors ligne une fois les modèles en place.",
-            )
-        )
+        layout.addWidget(page_header("Modèles"))
         self.banner = Banner()
         layout.addWidget(self.banner)
 
@@ -111,7 +124,7 @@ class ModelsPage(QWidget):
         rec_layout.addWidget(self.profile_label)
         rec_layout.addWidget(self.llm_label)
         rec_layout.addStretch(1)
-        self.refresh_hw_button = button("Actualiser")
+        self.refresh_hw_button = button("Détecter à nouveau")
         self.refresh_hw_button.clicked.connect(self.refresh_hardware)
         rec_layout.addWidget(self.refresh_hw_button, 0, Qt.AlignmentFlag.AlignRight)
         top.addWidget(rec_box, 1)
@@ -121,9 +134,9 @@ class ModelsPage(QWidget):
         cat_layout = QVBoxLayout(catalogue)
         cat_layout.addWidget(
             muted(
-                "Le téléchargement est la seule action d'Anonyma qui accède au réseau ; il n'a "
-                "lieu qu'à votre demande, après vérification de la licence. Sans réseau, "
-                "importez les fichiers du modèle depuis un support amovible."
+                "Le téléchargement est la seule action réseau d'Anonyma, toujours à votre "
+                "demande. Sans réseau, importez les fichiers du modèle depuis un support "
+                "amovible."
             )
         )
         self.cat_stack = QStackedWidget()
@@ -168,10 +181,10 @@ class ModelsPage(QWidget):
         actions = QHBoxLayout(self.actions_box)
         actions.setContentsMargins(0, 0, 0, 0)
         self.download_button = primary_button("Télécharger…", "download")
-        self.cancel_button = button("Annuler le téléchargement", "cancel")
-        self.import_files_button = button("Importer des fichiers…", "import")
-        self.import_folder_button = button("Importer un dossier…", "folder")
-        self.remove_button = button("Supprimer", "trash")
+        self.cancel_button = button("Annuler le téléchargement")
+        self.import_files_button = button("Importer des fichiers…")
+        self.import_folder_button = button("Importer un dossier…")
+        self.remove_button = button("Supprimer")
         self.remove_button.setProperty("danger", True)
         self.download_button.clicked.connect(self.download_selected)
         self.cancel_button.clicked.connect(self.cancel_download)
@@ -188,6 +201,7 @@ class ModelsPage(QWidget):
         layout.addWidget(catalogue, 1)
 
         self._loaded = False
+        self._recommended_llm = ""
         self._update_buttons()
 
     # -- lifecycle -------------------------------------------------------------------
@@ -241,7 +255,7 @@ class ModelsPage(QWidget):
             self.refresh_hw_button.setEnabled(True)
             for label in self.hw_labels.values():
                 label.setText("—")
-            self.profile_label.setText("Détection du matériel impossible : " + message)
+            self.profile_label.setText(typo("Détection du matériel impossible : " + message))
 
         self._run(work, self._show_hardware, ko)
 
@@ -256,17 +270,19 @@ class ModelsPage(QWidget):
         self.hw_labels["cpu"].setText(str(info.cpu_count))
         self.hw_labels["gpu"].setText(info.gpu_name or "Aucune détectée")
         self.hw_labels["vram"].setText(format_bytes(info.vram_bytes) if info.vram_bytes else "—")
-        providers = [p.replace("ExecutionProvider", "") for p in info.providers]
-        self.hw_labels["providers"].setText(", ".join(providers) or "CPU")
+        self.hw_labels["providers"].setText(providers_label(info.providers))
         self.hw_labels["notes"].setText(" ".join(info.notes) or "—")
         label = PROFILE_SHORT.get(profile, str(profile))
-        self.profile_label.setText(f"Profil conseillé : <b>{label}</b>")
+        self.profile_label.setText(typo(f"Profil conseillé : <b>{label}</b>"))
+        self._recommended_llm = str(llm or "")
+        if self.specs:
+            self._show_catalog((self.specs, self.statuses))
         if llm:
             spec = next((s for s in self.specs if s.id == llm), None)
             name = spec.title if spec else str(llm)
-            self.llm_label.setText(f"Modèle de langue conseillé : <b>{name}</b>")
+            self.llm_label.setText(typo(f"Modèle de langue conseillé : <b>{name}</b>"))
         else:
-            self.llm_label.setText("Modèle de langue conseillé : aucun pour cette machine.")
+            self.llm_label.setText(typo("Modèle de langue conseillé : aucun pour cette machine."))
 
     # -- catalogue ------------------------------------------------------------------------
 
@@ -294,8 +310,11 @@ class ModelsPage(QWidget):
             status = self.statuses.get(spec.id)
             text, level = status_text(status)
             size = status.size_on_disk if status and status.size_on_disk else spec_size(spec)
+            name = spec.title or spec.id
+            if spec.id == self._recommended_llm:
+                name += " (conseillé)"
             cells = [
-                spec.title or spec.id,
+                name,
                 KIND_LABELS.get(spec.kind, str(spec.kind)),
                 format_bytes(size),
                 spec.license or "—",
@@ -306,7 +325,7 @@ class ModelsPage(QWidget):
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, spec.id)
                     item.setToolTip(spec.description or spec.repo_id)
-                if col == 4:
+                if col == 4 and level:
                     item.setData(BADGE_ROLE, level)
                 self.table.setItem(row, col, item)
             if selected is not None and spec.id == selected.id:
@@ -327,7 +346,17 @@ class ModelsPage(QWidget):
         spec = self.selected_spec()
         status = self.statuses.get(spec.id) if spec else None
         working = bool(self._busy_model)
-        self.download_button.setEnabled(spec is not None and not working)
+        installed = bool(status and status.installed)
+        self.download_button.setEnabled(spec is not None and not working and not installed)
+        if spec is None:
+            tip = "Sélectionnez d'abord un modèle dans le catalogue."
+        elif installed:
+            tip = "Ce modèle est déjà installé."
+        elif working:
+            tip = "Une opération est en cours."
+        else:
+            tip = "Télécharger ce modèle (seule action réseau d'Anonyma)."
+        self.download_button.setToolTip(tip)
         self.import_files_button.setEnabled(spec is not None and not working)
         self.import_folder_button.setEnabled(spec is not None and not working)
         self.remove_button.setEnabled(bool(status and status.installed) and not working)
@@ -397,11 +426,11 @@ class ModelsPage(QWidget):
             self.progress.setRange(0, 1000)
             self.progress.setValue(int(done / total * 1000))
             self.progress_label.setText(
-                f"Téléchargement : {format_bytes(done)} sur {format_bytes(total)}"
+                typo(f"Téléchargement : {format_bytes(done)} sur {format_bytes(total)}")
             )
         else:
             self.progress.setRange(0, 0)
-            self.progress_label.setText(f"Téléchargement : {format_bytes(done)}")
+            self.progress_label.setText(typo(f"Téléchargement : {format_bytes(done)}"))
 
     def cancel_download(self) -> None:
         if self._download is not None:

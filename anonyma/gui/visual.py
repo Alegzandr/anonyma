@@ -16,7 +16,17 @@ from pathlib import Path
 from typing import override
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QImage, QPen, QPixmap, QTransform, QWheelEvent
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QImage,
+    QPen,
+    QPixmap,
+    QResizeEvent,
+    QTransform,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import (
     QGraphicsRectItem,
     QGraphicsScene,
@@ -40,6 +50,8 @@ _LOCK = threading.Lock()
 PDF_ZOOM = 2.0
 MAX_SIDE = 2400
 CACHE_SIZE = 8
+#: Smallest automatic zoom (a PDF rendered at ``PDF_ZOOM`` shown at about 100 %).
+MIN_FIT_ZOOM = 0.5
 
 
 def visual_kind(doc: Document) -> str | None:
@@ -262,6 +274,8 @@ class VisualPair(QWidget):
         self.zoom = 1.0
         self.page_count = 1
         self._fit_pending = False
+        #: Follow the view width (default) until the user zooms by hand.
+        self._auto_fit = True
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -275,9 +289,15 @@ class VisualPair(QWidget):
         self.page_spin.setPrefix("Page ")
         self.page_label = QLabel("/ 1")
         self.zoom_out = button("−")
+        self.zoom_out.setToolTip("Réduire (Ctrl+molette)")
         self.zoom_in = button("+")
+        self.zoom_in.setToolTip("Agrandir (Ctrl+molette)")
         self.fit_button = button("Ajuster")
-        self.zoom_label = QLabel("100 %")
+        self.fit_button.setToolTip("Ajuster la page à la largeur de la vue")
+        for small in (self.previous_button, self.next_button, self.zoom_out, self.zoom_in):
+            small.setFixedWidth(34)
+        self.page_spin.setMaximumWidth(96)
+        self.zoom_label = QLabel("100\u00a0%")
         for w in (self.previous_button, self.page_spin, self.page_label, self.next_button):
             bar.addWidget(w)
         bar.addStretch(1)
@@ -296,11 +316,11 @@ class VisualPair(QWidget):
         self.previous_button.clicked.connect(lambda: self.set_page(self.current_page() - 1))
         self.next_button.clicked.connect(lambda: self.set_page(self.current_page() + 1))
         self.page_spin.valueChanged.connect(lambda v: self._render(v - 1))
-        self.zoom_in.clicked.connect(lambda: self.set_zoom(self.zoom * 1.25))
-        self.zoom_out.clicked.connect(lambda: self.set_zoom(self.zoom / 1.25))
+        self.zoom_in.clicked.connect(lambda: self.zoom_by(1.25))
+        self.zoom_out.clicked.connect(lambda: self.zoom_by(1 / 1.25))
         self.fit_button.clicked.connect(self.fit)
         for view in (self.left, self.right):
-            view.zoom_requested.connect(lambda f: self.set_zoom(self.zoom * f))
+            view.zoom_requested.connect(self.zoom_by)
         for a, b in ((self.left, self.right), (self.right, self.left)):
             a.verticalScrollBar().valueChanged.connect(
                 lambda _v, a=a, b=b: self._sync(a.verticalScrollBar(), b.verticalScrollBar())
@@ -353,14 +373,32 @@ class VisualPair(QWidget):
         self.zoom = max(0.1, min(zoom, 8.0))
         for view in (self.left, self.right):
             view.setTransform(QTransform.fromScale(self.zoom, self.zoom))
-        self.zoom_label.setText(f"{round(self.zoom * 100)} %")
+        self.zoom_label.setText(f"{round(self.zoom * 100)}\u00a0%")
+
+    def zoom_by(self, factor: float) -> None:
+        """Manual zoom: the page stops following the view width."""
+        self._auto_fit = False
+        self.set_zoom(self.zoom * factor)
 
     def fit(self) -> None:
+        """Fit the page to the view width (and keep fitting it on resize)."""
+        self._auto_fit = True
         page = self.left.page or self.right.page
         if page is None:
             return
-        width = max(self.left.viewport().width() - 24, 50)
-        self.set_zoom(width / max(page.image.width(), 1))
+        viewport = self.left.viewport().width()
+        if viewport < 120:  # not laid out yet: fitted again on the first resize
+            return
+        width = viewport - self.left.verticalScrollBar().sizeHint().width() - 8
+        # Never below text-reading size: a narrow pane scrolls instead (the current
+        # entity is centred by ``highlight``).
+        self.set_zoom(max(width / max(page.image.width(), 1), MIN_FIT_ZOOM))
+
+    @override
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        if self._auto_fit:
+            self.fit()
 
     # -- rendering ------------------------------------------------------------------------------
 
@@ -420,7 +458,7 @@ class VisualPair(QWidget):
             self.page_spin.setMaximum(max(1, page.page_count))
             self.page_spin.blockSignals(False)
             self.page_label.setText(f"/ {page.page_count}")
-        if self._fit_pending:
+        if self._fit_pending or self._auto_fit:
             self._fit_pending = False
             self.fit()
         self._apply_highlight()

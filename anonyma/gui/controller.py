@@ -35,6 +35,7 @@ from anonyma.logs import get_logger
 from anonyma.models import (
     Document,
     DocumentResult,
+    DocumentStatus,
     ManualEntity,
     Regime,
     ReviewDecisions,
@@ -61,9 +62,15 @@ DEFAULT_STORE_NAME = "correspondances.db"
 
 #: Config.review_policy values -> French labels.
 REVIEW_POLICIES: dict[str, str] = {
-    "aucune": "Aucune — écrire directement",
-    "incertaines": "Entités incertaines seulement",
-    "systematique": "Systématique — toujours revoir avant d'écrire",
+    "aucune": "Aucune",
+    "incertaines": "Entités incertaines",
+    "systematique": "Systématique",
+}
+#: What « Anonymiser » does under each policy (helper line and tooltip).
+REVIEW_POLICY_GLOSSES: dict[str, str] = {
+    "aucune": "« Anonymiser » écrit les fichiers sans s'arrêter à la revue.",
+    "incertaines": "« Anonymiser » s'arrête à la revue si des entités sont incertaines.",
+    "systematique": "« Anonymiser » s'arrête toujours à la revue avant d'écrire.",
 }
 DEFAULT_REVIEW_POLICY = "incertaines"
 
@@ -334,6 +341,12 @@ class BatchController(QObject):
     def is_decided(self, cluster_id: str) -> bool:
         return self.analysis is not None and is_decided(cluster_id, self.analysis, self.decisions)
 
+    def decision_count(self) -> int:
+        """Review decisions a new analysis would discard."""
+        d = self.decisions
+        clusters = d.confirmed_clusters | d.rejected_clusters | set(d.retyped_clusters)
+        return len(clusters) + len(d.manual) + len(d.rejected_mentions)
+
     def decisions_since_apply(self) -> bool:
         """True when decisions changed after the last application."""
         return self.result is not None and self._applied_decisions != self.decisions
@@ -505,7 +518,17 @@ class BatchController(QObject):
         return True
 
     def run_all(self, passphrase: str | None = None) -> bool:
-        """One-click flow: analyze, then apply according to the review policy."""
+        """One-click flow: analyze, then apply according to the review policy. A current
+        analysis that was never applied is reused instead of being recomputed."""
+        if (
+            not self.busy
+            and self.analysis is not None
+            and self.result is None
+            and not self.analysis_is_stale()
+            and not any(d.status is DocumentStatus.CANCELLED for d in self.analysis.documents)
+        ):
+            self._after_one_click_analysis(passphrase)
+            return True
         return self.analyze(then_apply=True, passphrase=passphrase)
 
     # -- preview (background) ---------------------------------------------------------
@@ -668,7 +691,7 @@ class BatchController(QObject):
                 added = True
         if not added:
             return None
-        return self._save_learned(config, "liste blanche", before)
+        return self._save_learned(config, "valeurs à ne jamais masquer", before)
 
     def add_always_mask(self, value: str, entity_type: str) -> ConfigUndo | None:
         """Persist a term in ``always_mask`` (masked in every future batch)."""
@@ -680,7 +703,7 @@ class BatchController(QObject):
         ):
             return None
         config.always_mask.append({"value": value.strip(), "type": entity_type})
-        return self._save_learned(config, "termes toujours masqués", before)
+        return self._save_learned(config, "valeurs à toujours masquer", before)
 
     def undo_learning(self, undo: ConfigUndo) -> None:
         before = self.context.config

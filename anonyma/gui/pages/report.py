@@ -1,26 +1,30 @@
-"""« Rapport » page: end-of-batch summary, quarantine, residues and export."""
+"""« Rapport » page: end-of-batch verdict, quarantine, residues and export."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMenu,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from anonyma.frenchtext import NBSP, plural, typo
 from anonyma.gui import dialogs, theme
 from anonyma.gui.controller import BatchController
 from anonyma.gui.labels import STATUS_LEVELS, entity_type_label, status_label
@@ -43,19 +47,21 @@ from anonyma.report import STATUS_LABELS, BatchReport
 
 log = get_logger("gui.report")
 
-#: Summary cards, in display order.
-CARDS = (
-    DocumentStatus.ANONYMIZED,
-    DocumentStatus.NEEDS_REVIEW,
-    DocumentStatus.RESIDUE,
-    DocumentStatus.FAILED,
-    DocumentStatus.UNSUPPORTED,
-    DocumentStatus.CANCELLED,
-)
+#: Breakdown under the verdict: status -> (singular, plural) after the number.
+COUNT_WORDS: dict[DocumentStatus, tuple[str, str]] = {
+    DocumentStatus.ANONYMIZED: ("anonymisé", "anonymisés"),
+    DocumentStatus.NEEDS_REVIEW: ("à revoir", "à revoir"),
+    DocumentStatus.RESIDUE: ("avec résidus", "avec résidus"),
+    DocumentStatus.FAILED: ("en échec", "en échec"),
+    DocumentStatus.UNSUPPORTED: ("non pris en charge", "non pris en charge"),
+    DocumentStatus.CANCELLED: ("annulé", "annulés"),
+}
 
 _LABEL_TO_LEVEL = {STATUS_LABELS[s]: STATUS_LEVELS.get(s, "neutral") for s in STATUS_LABELS}
 
 ORIGINS = {"original_value": "valeur d'origine", "detector": "détecteur"}
+
+EXPORTS = (("json", "JSON…"), ("md", "Markdown…"), ("html", "HTML…"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,37 +111,86 @@ def _fill(
             table.setItem(r, c, item)
 
 
+def _nonzero(value: object) -> str:
+    """Empty cell for a zero count: only the files with something to see stand out."""
+    return "" if str(value) in ("0", "") else str(value)
+
+
 def quarantine_reason(result: DocumentResult) -> str:
     """Plain-French explanation of why a file went to quarantine."""
     messages = [i.message for i in result.issues if i.severity is Severity.ERROR]
     if result.status is DocumentStatus.RESIDUE:
-        head = (
-            f"{result.residue_count} valeur(s) sensible(s) encore présente(s) après anonymisation."
+        values = plural(
+            result.residue_count,
+            "valeur sensible encore présente",
+            "valeurs sensibles encore présentes",
         )
+        head = f"{values} après anonymisation."
     else:
         head = "La vérification du fichier produit n'a pas pu aboutir."
     detail = " ".join(m for m in messages if "quarantaine" not in m)
-    return f"{head} {detail}".strip()
+    return typo(f"{head} {detail}".strip())
 
 
-class _Card(QFrame):
-    def __init__(self, title: str, level: str) -> None:
+def verdict(counts: dict[DocumentStatus, int]) -> tuple[str, str]:
+    """(sentence, level) answering « can I hand this folder over? »."""
+    total = sum(counts.values())
+    ready = counts.get(DocumentStatus.ANONYMIZED, 0)
+    if total and ready == total:
+        if total == 1:
+            return "Le fichier est anonymisé et vérifié.", "success"
+        return f"Les {total} fichiers sont anonymisés et vérifiés.", "success"
+    blocked = sum(
+        counts.get(s, 0)
+        for s in (DocumentStatus.RESIDUE, DocumentStatus.FAILED, DocumentStatus.UNSUPPORTED)
+    )
+    level = "danger" if counts.get(DocumentStatus.RESIDUE, 0) else "warning"
+    if not blocked and not counts.get(DocumentStatus.NEEDS_REVIEW, 0):
+        level = "neutral"
+    if ready == 0:
+        return "Aucun fichier n'est prêt à être diffusé.", level
+    if ready == 1:
+        return f"1 fichier sur {total} est prêt à être diffusé.", level
+    return f"{ready} fichiers sur {total} sont prêts à être diffusés.", level
+
+
+def breakdown(counts: dict[DocumentStatus, int]) -> str:
+    """« 8 fichiers : 6 anonymisés · 2 à revoir » (zeros left out)."""
+    parts = [
+        f"{n}{NBSP}{words[0] if n < 2 else words[1]}"
+        for status, words in COUNT_WORDS.items()
+        if (n := counts.get(status, 0))
+    ]
+    total = sum(counts.values())
+    if len(parts) < 2:  # a single status: the verdict already says it
+        return ""
+    return typo(f"{plural(total, 'fichier')} : " + " · ".join(parts))
+
+
+def batch_period(started: str, finished: str) -> str:
+    """« Traité le 31/10/2026 de 14:08 à 14:09 » from ISO timestamps."""
+    try:
+        start = datetime.fromisoformat(started)
+        end = datetime.fromisoformat(finished)
+    except ValueError:
+        return ""
+    day = start.strftime("%d/%m/%Y")
+    if end.date() != start.date():
+        return f"Traité du {day} {start:%H:%M} au {end:%d/%m/%Y} {end:%H:%M}"
+    return f"Traité le {day} de {start:%H:%M} à {end:%H:%M}"
+
+
+class _Tab(QStackedWidget):
+    """A report tab: its content, or an empty state when there is nothing to show."""
+
+    def __init__(self, content: QWidget, empty_title: str, empty_text: str) -> None:
         super().__init__()
-        self.setObjectName("Card")
-        self.level = level
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 10)
-        self.value = QLabel("0")
-        self.value.setStyleSheet("font-size: 18pt; font-weight: 600;")
-        self.title = QLabel(title)
-        self.title.setProperty("muted", True)
-        layout.addWidget(self.value)
-        layout.addWidget(self.title)
+        self.empty = EmptyState(empty_title, empty_text)
+        self.addWidget(self.empty)
+        self.addWidget(content)
 
-    def set_value(self, value: int) -> None:
-        colour = theme.badge_color(self.level).name() if value else theme.tokens().muted
-        self.value.setText(str(value))
-        self.value.setStyleSheet(f"font-size: 18pt; font-weight: 600; color: {colour};")
+    def set_empty(self, empty: bool) -> None:
+        self.setCurrentIndex(0 if empty else 1)
 
 
 class ReportPage(QWidget):
@@ -148,19 +203,14 @@ class ReportPage(QWidget):
         super().__init__(parent)
         self.controller = controller
         self.report: BatchReport | None = None
+        self.status_counts: dict[DocumentStatus, int] = {}
         self.residue_rows: list[ResidueRow] = []
         self.quarantined: list[DocumentResult] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(12)
-        layout.addWidget(
-            page_header(
-                "Rapport",
-                "Bilan du dernier lot. Les exports ne contiennent que des noms anonymisés, des "
-                "nombres et des codes : aucune valeur sensible.",
-            )
-        )
+        layout.addWidget(page_header("Rapport"))
         self.banner = Banner()
         layout.addWidget(self.banner)
 
@@ -173,47 +223,56 @@ class ReportPage(QWidget):
         self.stack.addWidget(content)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(4)
 
-        self.meta = QLabel("")
-        self.meta.setProperty("muted", True)
-        self.meta.setWordWrap(True)
+        verdict_row = QHBoxLayout()
+        verdict_row.setSpacing(8)
+        self.marker = QLabel("●")
+        verdict_row.addWidget(self.marker, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.verdict = QLabel("")
+        self.verdict.setObjectName("Verdict")
+        self.verdict.setWordWrap(True)
+        verdict_row.addWidget(self.verdict, 1)
+        content_layout.addLayout(verdict_row)
+        self.counts_label = muted("")
+        content_layout.addWidget(self.counts_label)
+        self.meta = muted("")
+        self.meta.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         content_layout.addWidget(self.meta)
-        cards = QHBoxLayout()
-        self.cards: dict[DocumentStatus, _Card] = {}
-        for status in CARDS:
-            card = _Card(STATUS_LABELS[status], STATUS_LEVELS.get(status, "neutral"))
-            self.cards[status] = card
-            cards.addWidget(card)
-        content_layout.addLayout(cards)
+        content_layout.addSpacing(8)
 
         self.tabs = QTabWidget()
-        self.files_table = _table(["Fichier", "Format", "Statut", "Entités", "Résidus", "À revoir"])
+        self.files_table = _table(
+            ["Fichier", "Format", "Statut", "Occurrences", "Résidus", "À revoir"]
+        )
         self.files_table.setItemDelegateForColumn(2, BadgeDelegate(self.files_table))
         self.files_table.doubleClicked.connect(lambda _i: self.open_selected_output())
-        self.types_table = _table(["Type", "Code", "Nombre"])
+        self.types_table = _table(["Type", "Code", "Occurrences"])
 
         quarantine_box = QWidget()
         q_layout = QVBoxLayout(quarantine_box)
         q_layout.setContentsMargins(0, 8, 0, 0)
-        q_layout.addWidget(
-            muted(
-                "Un fichier est mis en quarantaine quand la vérification finale retrouve une "
-                "valeur sensible ou ne peut pas relire le fichier produit. Il n'est pas "
-                "considéré comme anonymisé et ne doit pas être diffusé. Corrigez les décisions "
-                "dans « Revue » (valider l'entité oubliée, ajouter une entité…) puis réappliquez."
-            )
-        )
+        self.quarantine_hint = muted("")
+        q_layout.addWidget(self.quarantine_hint)
         self.quarantine_table = _table(["Fichier", "Statut", "Raison"])
         self.quarantine_table.setItemDelegateForColumn(1, BadgeDelegate(self.quarantine_table))
         self.quarantine_table.setWordWrap(True)
         q_layout.addWidget(self.quarantine_table, 1)
         q_actions = QHBoxLayout()
-        self.correct_button = primary_button("Corriger et réappliquer", "review")
+        self.correct_button = primary_button("Corriger et réappliquer")
+        self.correct_button.setToolTip(
+            "Revenir à la revue (masquer l'entité oubliée, ajouter une entité…), puis "
+            "remplacer les fichiers produits."
+        )
         self.correct_button.clicked.connect(self.correct_requested.emit)
         q_actions.addStretch(1)
         q_actions.addWidget(self.correct_button)
         q_layout.addLayout(q_actions)
+        self.quarantine_tab = _Tab(
+            quarantine_box,
+            "Aucun fichier en quarantaine",
+            "La vérification n'a retrouvé aucune valeur d'origine dans les fichiers produits.",
+        )
 
         residues_box = QWidget()
         r_layout = QVBoxLayout(residues_box)
@@ -222,38 +281,47 @@ class ReportPage(QWidget):
         self.residues_table.doubleClicked.connect(lambda _i: self.show_selected_residue())
         r_layout.addWidget(self.residues_table, 1)
         r_actions = QHBoxLayout()
-        r_actions.addWidget(
-            muted("Double-cliquez sur un résidu pour le voir dans le fichier produit.")
-        )
+        r_actions.addWidget(muted("Double-cliquez sur un résidu pour le voir en place."))
         r_actions.addStretch(1)
-        self.residue_button = button("Voir dans le fichier produit", "review")
+        self.residue_button = button("Voir dans le fichier produit")
         self.residue_button.clicked.connect(self.show_selected_residue)
         r_actions.addWidget(self.residue_button)
         r_layout.addLayout(r_actions)
+        self.residues_tab = _Tab(
+            residues_box, "Aucun résidu", "Aucune valeur sensible n'a été retrouvée."
+        )
 
         self.failures_table = _table(["Fichier", "Statut", "Problèmes"])
         self.failures_table.setItemDelegateForColumn(1, BadgeDelegate(self.failures_table))
         self.failures_table.setWordWrap(True)
+        self.failures_tab = _Tab(
+            self.failures_table, "Aucun échec", "Tous les fichiers ont pu être traités."
+        )
         self.tabs.addTab(self.files_table, "Fichiers")
-        self.tabs.addTab(self.types_table, "Entités par type")
-        self.tabs.addTab(quarantine_box, "Quarantaine")
-        self.tabs.addTab(residues_box, "Résidus")
-        self.tabs.addTab(self.failures_table, "Échecs")
+        self.tabs.addTab(self.types_table, "Occurrences par type")
+        self.tabs.addTab(self.quarantine_tab, "Quarantaine")
+        self.tabs.addTab(self.residues_tab, "Résidus")
+        self.tabs.addTab(self.failures_tab, "Échecs")
         content_layout.addWidget(self.tabs, 1)
+        content_layout.addSpacing(8)
 
         actions = QHBoxLayout()
-        self.json_button = button("Exporter en JSON…", "export")
-        self.md_button = button("Exporter en Markdown…", "export")
-        self.html_button = button("Exporter en HTML…", "export")
-        self.open_file_button = button("Afficher le fichier produit", "file")
-        self.open_button = button("Ouvrir le dossier de sortie", "folder")
-        self.json_button.clicked.connect(lambda: self.export("json"))
-        self.md_button.clicked.connect(lambda: self.export("md"))
-        self.html_button.clicked.connect(lambda: self.export("html"))
+        self.export_button = QToolButton()
+        self.export_button.setText("Exporter")
+        self.export_button.setToolTip(
+            "Les exports ne contiennent que des noms anonymisés, des nombres et des codes : "
+            "aucune valeur sensible."
+        )
+        self.export_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        export_menu = QMenu(self.export_button)
+        for kind, label in EXPORTS:
+            export_menu.addAction(label, self._export_action(kind))
+        self.export_button.setMenu(export_menu)
+        self.open_file_button = button("Afficher le fichier produit")
+        self.open_button = button("Ouvrir le dossier de sortie")
         self.open_file_button.clicked.connect(self.open_selected_output)
         self.open_button.clicked.connect(self.open_output)
-        for b in (self.json_button, self.md_button, self.html_button):
-            actions.addWidget(b)
+        actions.addWidget(self.export_button)
         actions.addStretch(1)
         actions.addWidget(self.open_file_button)
         actions.addWidget(self.open_button)
@@ -261,13 +329,20 @@ class ReportPage(QWidget):
 
         controller.result_ready.connect(self.reload)
         controller.analysis_cleared.connect(self.reload)
+        theme.notifier().changed.connect(self._paint_marker)
+        self._level = "neutral"
         self.reload()
+
+    def _paint_marker(self) -> None:
+        colour = theme.badge_color(self._level).name()
+        self.marker.setStyleSheet(f"color: {colour}; font-size: 12pt;")
 
     def reload(self) -> None:
         result = self.controller.result
         self.banner.clear()
         if result is None:
             self.report = None
+            self.status_counts = {}
             self.residue_rows = []
             self.quarantined = []
             self.stack.setCurrentIndex(0)
@@ -282,12 +357,14 @@ class ReportPage(QWidget):
             return
         self.report = report
         self.stack.setCurrentIndex(1)
-        self.meta.setText(
-            f"Lot {report.batch_id} · début {report.started_at.replace('T', ' ')} · fin "
-            f"{report.finished_at.replace('T', ' ')} · sortie : {result.output_dir}"
-        )
-        for status, card in self.cards.items():
-            card.set_value(report.status_counts.get(status, 0))
+        self.status_counts = {s: report.status_counts.get(s, 0) for s in COUNT_WORDS}
+        sentence, self._level = verdict(self.status_counts)
+        self.verdict.setText(sentence)
+        self._paint_marker()
+        self.counts_label.setText(breakdown(self.status_counts))
+        period = batch_period(report.started_at, report.finished_at)
+        self.meta.setText(" · ".join(p for p in (period, f"lot {report.batch_id}") if p))
+        self.open_button.setToolTip(str(result.output_dir))
         _fill(
             self.files_table,
             [
@@ -296,8 +373,8 @@ class ReportPage(QWidget):
                     str(f["format"]),
                     str(f["statut"]),
                     str(f["entites"]),
-                    str(f["residus"]),
-                    str(f["a_revoir"]),
+                    _nonzero(f["residus"]),
+                    _nonzero(f["a_revoir"]),
                 ]
                 for f in report.files
             ],
@@ -313,6 +390,14 @@ class ReportPage(QWidget):
             numeric=(2,),
         )
         self.quarantined = [r for r in result.results if is_quarantined(r, result.output_dir)]
+        folder = quarantine_dir(result.output_dir).name
+        self.quarantine_hint.setText(
+            typo(
+                f"Ces fichiers sont dans le dossier « {folder} », à côté du dossier de sortie. "
+                "La vérification finale y a retrouvé une valeur sensible, ou n'a pas pu les "
+                "relire : ils ne sont pas anonymisés et ne doivent pas être diffusés."
+            )
+        )
         _fill(
             self.quarantine_table,
             [
@@ -350,6 +435,9 @@ class ReportPage(QWidget):
             badge_col=1,
         )
         self.failures_table.resizeRowsToContents()
+        self.quarantine_tab.set_empty(not self.quarantined)
+        self.residues_tab.set_empty(not self.residue_rows)
+        self.failures_tab.set_empty(not report.failures)
         self.tabs.setTabText(2, f"Quarantaine ({len(self.quarantined)})")
         self.tabs.setTabText(3, f"Résidus ({len(self.residue_rows)})")
         self.tabs.setTabText(4, f"Échecs ({len(report.failures)})")
@@ -359,15 +447,20 @@ class ReportPage(QWidget):
         self.residue_button.setEnabled(bool(self.residue_rows))
         if self.quarantined:
             self.banner.show_message(
-                f"{len(self.quarantined)} fichier(s) en quarantaine dans "
-                f"« {quarantine_dir(result.output_dir)} » : ils ne sont pas considérés comme "
-                "anonymisés.",
+                f"{plural(len(self.quarantined), 'fichier')} en quarantaine dans le dossier "
+                f"« {folder} » : à ne pas diffuser.",
                 "warning",
                 [
                     ("Voir pourquoi", lambda: self.tabs.setCurrentIndex(2)),
                     ("Corriger et réappliquer", self.correct_requested.emit),
                 ],
             )
+
+    def _export_action(self, kind: str) -> Callable[[], None]:
+        def run() -> None:
+            self.export(kind)
+
+        return run
 
     def show_selected_residue(self) -> None:
         row = self.residues_table.currentRow()
@@ -415,7 +508,7 @@ class ReportPage(QWidget):
         """Show the produced file in the file manager; a folder output is opened."""
         path = self.selected_output()
         if path is None or not path.exists():
-            dialogs.warning(self, "Aucun fichier produit pour cette ligne.")
+            dialogs.warning(self, "Aucun fichier produit pour cette ligne.", title="Rapport")
             return
         self._open(path if path.is_dir() else path.parent)
 
@@ -424,7 +517,7 @@ class ReportPage(QWidget):
         if result is None:
             return
         if not result.output_dir.is_dir():
-            dialogs.warning(self, "Le dossier de sortie n'existe plus.")
+            dialogs.warning(self, "Le dossier de sortie n'existe plus.", title="Rapport")
             return
         self._open(result.output_dir)
 

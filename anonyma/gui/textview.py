@@ -15,8 +15,8 @@ from PySide6.QtGui import QColor, QTextBlockFormat, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QTextEdit
 
 from anonyma.gui import theme
-from anonyma.gui.labels import KIND_LABELS, entity_type_label
-from anonyma.gui.preview import STATE_LABELS, EntityRow, RowState
+from anonyma.gui.labels import KIND_LABELS, detector_label, entity_type_label
+from anonyma.gui.preview import STATE_LABELS, EntityRow, RowState, confidence_label
 from anonyma.models import FILENAME_SEGMENT_ID, Document, Segment, SegmentContext, SegmentKind
 
 #: Mail header names shown first, with their French label.
@@ -32,9 +32,38 @@ HEADER_LABELS: dict[str, str] = {
 }
 _HEADER_ORDER = list(HEADER_LABELS)
 
+#: Document metadata keys (PDF Info, Office core properties…) -> French label.
+METADATA_LABELS: dict[str, str] = {
+    "title": "Titre",
+    "author": "Auteur",
+    "subject": "Sujet",
+    "keywords": "Mots-clés",
+    "creator": "Application d'origine",
+    "producer": "Producteur",
+    "creationdate": "Date de création",
+    "moddate": "Date de modification",
+    "trapped": "Recouvrement",
+    "description": "Description",
+    "lastmodifiedby": "Modifié par",
+    "last_modified_by": "Modifié par",
+    "company": "Société",
+    "manager": "Responsable",
+    "category": "Catégorie",
+    "comments": "Commentaires",
+    "created": "Date de création",
+    "modified": "Date de modification",
+    "initial-creator": "Créateur initial",
+}
+
 
 def header_label(label: str) -> str:
     return HEADER_LABELS.get(label.strip().lower(), label)
+
+
+def metadata_label(label: str) -> str:
+    key = label.strip()
+    simple = key.rsplit(":", 1)[-1].lower().replace(" ", "")
+    return METADATA_LABELS.get(simple, key)
 
 
 # ---------------------------------------------------------------------------
@@ -174,9 +203,11 @@ def render_segments(
                 cursor.insertBlock(body_block, base)
                 previous_page = context.page
         elif kind is SegmentKind.HEADER and context.label:
-            cursor.insertText(f"{header_label(context.label)} : ", label_format)
+            cursor.insertText(f"{header_label(context.label)}\u00a0: ", label_format)
+        elif context.label and kind is SegmentKind.METADATA:
+            cursor.insertText(f"{metadata_label(context.label)}\u00a0: ", label_format)
         elif context.label and kind is not SegmentKind.FILENAME:
-            cursor.insertText(f"{context.label} : ", caption)
+            cursor.insertText(f"{context.label}\u00a0: ", caption)
         start = cursor.position()
         shown = display_text(text)
         cursor.insertText(shown, base)
@@ -225,5 +256,5 @@ def row_tooltip(row: EntityRow) -> str:
     e = row.entity
     return (
         f"{entity_type_label(row.entity_type)} · {STATE_LABELS[row.state]} · "
-        f"détecteur « {e.detector} » · score {e.score:.2f}"
+        f"{detector_label(e.detector)} · {confidence_label(e.score, row.needs_review)}"
     )

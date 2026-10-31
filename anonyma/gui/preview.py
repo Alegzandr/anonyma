@@ -16,6 +16,8 @@ import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 
+from anonyma.frenchtext import plural
+from anonyma.gui.labels import detector_label
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
     Document,
@@ -43,12 +45,14 @@ class RowState(enum.StrEnum):
     MANUAL = "manuel"
 
 
+#: State of an entity (« entité », feminine). ``AUTO`` is the default (masked
+#: without a decision): the review list shows no badge for it.
 STATE_LABELS: dict[RowState, str] = {
-    RowState.AUTO: "Détecté",
+    RowState.AUTO: "Détectée",
     RowState.REVIEW: "À revoir",
-    RowState.CONFIRMED: "Validé",
-    RowState.REJECTED: "Rejeté",
-    RowState.MENTION_REJECTED: "Occurrence rejetée",
+    RowState.CONFIRMED: "Masquée",
+    RowState.REJECTED: "Non masquée",
+    RowState.MENTION_REJECTED: "Occurrence non masquée",
     RowState.MANUAL: "Ajout manuel",
 }
 
@@ -337,23 +341,36 @@ def _num(value: float) -> str:
     return f"{value:.2f}".replace(".", ",")
 
 
+#: Score from which a detection reads « confiance élevée ».
+HIGH_CONFIDENCE = 0.85
+
+
+def confidence_label(score: float, needs_review: bool) -> str:
+    """Plain-French reading of a detection score."""
+    if needs_review:
+        return "confiance faible"
+    return "confiance élevée" if score >= HIGH_CONFIDENCE else "confiance moyenne"
+
+
 def flag_reason(cluster: EntityCluster, threshold: float, manual: bool = False) -> str:
-    """Why the entity is masked / sent to review (French, value-free)."""
+    """Why the entity is masked / sent to review (French, value-free): confidence and
+    which detectors found it, in words."""
     if manual or cluster.review is ReviewStatus.MANUAL:
         return "ajout manuel"
     detectors = sorted(cluster.detectors - {"propagation"}) or sorted(cluster.detectors)
-    who = ", ".join(detectors)
-    if cluster.needs_review:
-        return f"score {_num(cluster.max_score)} sous le seuil de revue ({_num(threshold)}) · {who}"
-    if detectors == ["listes_metier"]:
-        return "liste métier ou terme toujours masqué"
-    return f"score {_num(cluster.max_score)} · {who}"
+    who = ", ".join(detector_label(d) for d in detectors)
+    if detectors == ["listes_metier"] and not cluster.needs_review:
+        return "liste métier ou valeur à toujours masquer"
+    return f"{confidence_label(cluster.max_score, cluster.needs_review)} · {who}"
+
+
+def score_detail(cluster: EntityCluster, threshold: float) -> str:
+    """Numbers behind ``flag_reason`` (tooltip)."""
+    return f"Score {_num(cluster.max_score)}, seuil de revue {_num(threshold)}"
 
 
 def occurrences_label(occurrences: int, documents: int) -> str:
-    occ = "occurrence" if occurrences == 1 else "occurrences"
-    files = "fichier" if documents == 1 else "fichiers"
-    return f"{occurrences} {occ} dans {documents} {files}"
+    return f"{plural(occurrences, 'occurrence')} dans {plural(documents, 'fichier')}"
 
 
 def snippet(

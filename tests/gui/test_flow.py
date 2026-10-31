@@ -47,11 +47,11 @@ def test_full_review_flow(
     orsini = review.cluster_for_value("Orsini")
     assert review.model.ids[0] == orsini
     lagarde = review.cluster_for_value("Bérénice Lagarde")
-    assert review.cluster_title(lagarde) == (
+    assert review.cluster_title(lagarde).replace(" ", " ") == (
         "Bérénice Lagarde — PERSONNE — 2 occurrences dans 2 fichiers"
     )
     view = review.model.view(orsini)
-    assert view is not None and "seuil de revue" in view.reason
+    assert view is not None and "confiance faible" in view.reason
     assert "0 / 3 décidées" in review.counter.text()
     assert "1 à revoir" in review.counter.text()
     assert window.nav.item(1).text() == "Revue (1)"
@@ -80,7 +80,9 @@ def test_full_review_flow(
     assert "Brest" not in preview and "[LIEU_001]" in preview
     assert "Hélios" in preview  # rejected: kept
     brest = review.cluster_for_value("Brest")
-    assert brest and review.cluster_title(brest).endswith("2 occurrences dans 2 fichiers")
+    assert brest and review.cluster_title(brest).replace(" ", " ").endswith(
+        "2 occurrences dans 2 fichiers"
+    )
 
     # Apply from the review page.
     with qtbot.waitSignal(c.result_ready, timeout=TIMEOUT):
@@ -107,7 +109,9 @@ def test_full_review_flow(
     report = window.report
     assert report.report is not None
     assert report.files_table.rowCount() == 2
-    assert report.cards[DocumentStatus.ANONYMIZED].value.text() == "2"
+    assert report.status_counts[DocumentStatus.ANONYMIZED] == 2
+    assert report.verdict.text() == "Les 2 fichiers sont anonymisés et vérifiés."
+    assert report.counts_label.text() == ""  # a single status: the verdict says it all
     exported = report.export("json", tmp_path / "rapport.json")
     assert exported is not None and "Bérénice" not in exported.read_text(encoding="utf-8")
 
@@ -214,7 +218,7 @@ def test_learning_whitelist_and_always_mask_with_undo(
     review.select_cluster(review.cluster_for_value("Hélios"))
     review.reject_selected()
     labels = [b.text() for b in review.banner.action_buttons]
-    assert labels == ["Ajouter à la liste blanche"]
+    assert labels == ["Ne jamais masquer"]
     review.banner.action_buttons[0].click()
     saved = Config.load(path)
     assert [normalize(v) for v in saved.whitelist] == ["helios"]
@@ -272,6 +276,36 @@ def test_systematic_review_even_without_uncertainty(
         window.processing.run_button.click()
     assert window.controller.pending_review_count() == 0
     assert window.controller.result is None
+
+
+def test_primary_button_applies_decisions_and_reanalysis_asks_first(
+    qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path, recorder: DialogRecorder
+) -> None:
+    prepare(qtbot, window, batch, tmp_path / "sortie")
+    page = window.processing
+    assert page.run_button.text() == "Anonymiser"
+    analyze(qtbot, window)
+    c = window.controller
+    assert page.run_button.text() == "Anonymiser"  # no decision yet: nothing to lose
+    review = window.review
+    review.select_cluster(review.cluster_for_value("Hélios"))
+    review.reject_selected()
+    assert c.decision_count() == 1
+    assert page.run_button.text() == "Appliquer les décisions"
+
+    # Re-analysing would discard the decision: the user is asked, and can keep it.
+    recorder.confirm_answer = False
+    page.start_analyze()
+    assert recorder.confirms[-1].startswith("Relancer l'analyse efface 1")
+    assert not c.busy and c.decision_count() == 1
+
+    # The primary button applies the decisions with the existing analysis.
+    recorder.confirm_answer = True
+    analysis = c.analysis
+    with qtbot.waitSignal(c.result_ready, timeout=TIMEOUT):
+        page.run_button.click()
+    assert c.analysis is analysis and c.result is not None
+    assert c.decisions.rejected_clusters
 
 
 def test_one_click_anonymize(
@@ -388,3 +422,4 @@ def test_failed_batch_shows_french_message(
         window.processing.analyze_button.click()
     assert recorder.errors == ["Une erreur inattendue s'est produite (RuntimeError)."]
     assert "Bérénice" not in window.processing.banner.text()
+    assert "Bérénice" not in window.processing.stage_label.text()
