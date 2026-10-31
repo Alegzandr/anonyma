@@ -27,9 +27,8 @@ from anonyma.extractors._pdf import (
     OCR_DPI,
     SCAN_COVERAGE,
     TEXT_FLAGS,
+    exposed_strings,
     has_drawings,
-    is_textual,
-    iter_strings,
     object_sources,
     page_coverage,
     pixel_rect_to_page,
@@ -72,19 +71,24 @@ def text_segments(page: pymupdf.Page) -> tuple[list[Segment], int]:
         chars: list[str] = []
         boxes: list[BBox] = []
         for line in block.get("lines", []):
-            if chars:
-                last = boxes[-1]
-                chars.append("\n")
-                boxes.append(BBox(last.x1, last.y0, last.x1, last.y1))
+            line_chars: list[str] = []
+            line_boxes: list[BBox] = []
             for span in line.get("spans", []):
                 for char in span.get("chars", []):
                     c = char.get("c", "")
                     if not c:
                         continue
                     box = to_bbox(char["bbox"])
-                    parts = split_box(box, len(c)) if len(c) > 1 else [box]
-                    chars.extend(c)
-                    boxes.extend(parts)
+                    line_chars.extend(c)
+                    line_boxes.extend(split_box(box, len(c)) if len(c) > 1 else [box])
+            if not any(c.isalnum() for c in line_chars):
+                continue  # punctuation-only lines cannot carry personal data
+            if chars:
+                last = boxes[-1]
+                chars.append("\n")
+                boxes.append(BBox(last.x1, last.y0, last.x1, last.y1))
+            chars.extend(line_chars)
+            boxes.extend(line_boxes)
         text = "".join(chars)
         if not text.strip():
             continue
@@ -219,17 +223,16 @@ class PdfExtractor(Extractor):
         attachments = self._annotations(doc, document, ctx)
         embedded = self._embedded(doc, document, ctx)
         for xref, source in object_sources(doc):
-            for s_index, string in enumerate(iter_strings(source)):
-                if is_textual(string.value):
-                    segments.append(
-                        _segment(
-                            f"s{xref}_{s_index}",
-                            string.value,
-                            ("obj", xref, s_index),
-                            SegmentKind.HIDDEN,
-                            "objet PDF",
-                        )
+            for s_index, string in exposed_strings(source):
+                segments.append(
+                    _segment(
+                        f"s{xref}_{s_index}",
+                        string.value,
+                        ("obj", xref, s_index),
+                        SegmentKind.HIDDEN,
+                        "objet PDF",
                     )
+                )
         document.properties["pdf_images"] = images
         document.properties["pdf_unextracted"] = unextracted
         document.properties["pdf_attachments"] = attachments

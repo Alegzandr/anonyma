@@ -80,6 +80,8 @@ class PdfString:
     start: int  # span inside the object source
     end: int
     value: str
+    #: Dictionary key the string is the value of ("" inside arrays).
+    key: str = ""
 
 
 def _decode_literal(raw: str) -> bytes:
@@ -126,10 +128,15 @@ def decode_pdf_bytes(data: bytes) -> str:
     return data.decode("latin-1")
 
 
+_DELIMITERS = frozenset("()<>[]{}/% \t\r\n\f\x00")
+
+
 def iter_strings(source: str) -> Iterator[PdfString]:
-    """String literals ``(...)`` and hex strings ``<...>`` of an object source."""
+    """String literals ``(...)`` and hex strings ``<...>`` of an object source,
+    with the dictionary key they belong to."""
     i = 0
     n = len(source)
+    key = ""
     while i < n:
         ch = source[i]
         if ch == "(":
@@ -147,11 +154,13 @@ def iter_strings(source: str) -> Iterator[PdfString]:
                     depth -= 1
                 i += 1
             raw = source[start + 1 : i - 1]
-            yield PdfString(start, i, decode_pdf_bytes(_decode_literal(raw)))
+            yield PdfString(start, i, decode_pdf_bytes(_decode_literal(raw)), key)
+            key = ""
             continue
         if ch == "<":
             if i + 1 < n and source[i + 1] == "<":
                 i += 2
+                key = ""
                 continue
             end = source.find(">", i)
             if end == -1:
@@ -159,14 +168,37 @@ def iter_strings(source: str) -> Iterator[PdfString]:
             hexdata = "".join(c for c in source[i + 1 : end] if c in "0123456789abcdefABCDEF")
             if len(hexdata) % 2:
                 hexdata += "0"
-            yield PdfString(i, end + 1, decode_pdf_bytes(bytes.fromhex(hexdata)))
+            yield PdfString(i, end + 1, decode_pdf_bytes(bytes.fromhex(hexdata)), key)
+            key = ""
             i = end + 1
+            continue
+        if ch == "/":
+            j = i + 1
+            while j < n and source[j] not in _DELIMITERS:
+                j += 1
+            key = source[i + 1 : j]
+            i = j
             continue
         if ch == "%":  # comment until end of line
             while i < n and source[i] not in "\r\n":
                 i += 1
             continue
+        if not ch.isspace():
+            key = ""
         i += 1
+
+
+#: Keys whose strings are PDF operator syntax, never human text (form field
+#: default appearance and default style).
+OPERATOR_KEYS = frozenset({"DA", "DS"})
+
+
+def exposed_strings(source: str) -> Iterator[tuple[int, PdfString]]:
+    """``(index, string)`` of the strings of an object worth analysing: textual,
+    and not operator syntax."""
+    for index, string in enumerate(iter_strings(source)):
+        if string.key not in OPERATOR_KEYS and is_textual(string.value):
+            yield index, string
 
 
 def encode_pdf_string(value: str) -> str:

@@ -22,7 +22,7 @@ from pathlib import Path
 import pymupdf
 
 from anonyma.extractors._media import BLANKED_CODE, blanked_message
-from anonyma.extractors._pdf import encode_pdf_string, iter_strings
+from anonyma.extractors._pdf import encode_pdf_string, iter_strings, object_sources
 from anonyma.extractors.pdf import open_pdf
 from anonyma.models import (
     BBox,
@@ -161,7 +161,6 @@ class PdfWriter(Writer):
             reps = plan.for_segment(seg.id)
             if reps and seg.locator:
                 by_kind.setdefault(str(seg.locator[0]), []).append((seg, reps))
-        self._object_strings(doc, by_kind.get("obj", []))
         blanked = self._images(doc, document, ctx)
         self._redact(doc, by_kind.get("text", []) + by_kind.get("ocr", []), ctx.mode)
         self._widgets(doc, by_kind.get("widget", []))
@@ -191,6 +190,8 @@ class PdfWriter(Writer):
         doc.set_metadata({})
         doc.del_xml_metadata()
         doc.set_toc([])
+        # Last: earlier steps (form field updates...) rewrite object dictionaries.
+        self._object_strings(doc, by_kind.get("obj", []))
         if blanked:
             issues.append(Issue(Severity.WARNING, BLANKED_CODE, blanked_message(blanked)))
         return issues
@@ -199,22 +200,33 @@ class PdfWriter(Writer):
     def _object_strings(
         doc: pymupdf.Document, items: Sequence[tuple[Segment, list[Replacement]]]
     ) -> None:
-        by_xref: dict[int, dict[int, list[Replacement]]] = {}
+        """Rewrite every planned object string, matched by its original value.
+
+        Matching by value (per object, then document-wide) keeps working after
+        PyMuPDF regenerated or reordered a dictionary, and also catches copies.
+        """
+        per_xref: dict[int, dict[str, str]] = {}
+        everywhere: dict[str, str] = {}
         for seg, reps in items:
-            by_xref.setdefault(int(seg.locator[1]), {})[int(seg.locator[2])] = reps
-        for xref, per_string in by_xref.items():
-            source = doc.xref_object(xref, compressed=False)
+            new_value = apply_replacements(seg.text, reps)
+            per_xref.setdefault(int(seg.locator[1]), {})[seg.text] = new_value
+            everywhere.setdefault(seg.text, new_value)
+        if not everywhere:
+            return
+        for xref, source in list(object_sources(doc)):
+            mapping = per_xref.get(xref, {})
             out: list[str] = []
             cursor = 0
-            for index, string in enumerate(iter_strings(source)):
-                string_reps = per_string.get(index)
-                if not string_reps:
+            for string in iter_strings(source):
+                replacement = mapping.get(string.value, everywhere.get(string.value))
+                if replacement is None:
                     continue
                 out.append(source[cursor : string.start])
-                out.append(encode_pdf_string(apply_replacements(string.value, string_reps)))
+                out.append(encode_pdf_string(replacement))
                 cursor = string.end
-            out.append(source[cursor:])
-            doc.update_object(xref, "".join(out))
+            if out:
+                out.append(source[cursor:])
+                doc.update_object(xref, "".join(out))
 
     @staticmethod
     def _images(doc: pymupdf.Document, document: Document, ctx: WriteContext) -> int:
