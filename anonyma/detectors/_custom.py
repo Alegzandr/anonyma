@@ -421,9 +421,16 @@ _CUE = regex.compile(
     r"|pr[ée]noms?[ \t]+et[ \t]+nom|nom[ \t]*,[ \t]*pr[ée]noms?|full[ \t]+name)(?![\w])"
     r"|(?P<field>nom(?:[ \t]+(?:de[ \t]+famille|d['’][ \t]*usage|de[ \t]+naissance|usuel))?"
     r"|pr[ée]noms?|name|first[ \t]*name|last[ \t]*name|surname|given[ \t]*name|de|from"
-    r"|exp[ée]diteur|sender)(?=[ \t]*:)"
+    r"|exp[ée]diteur|sender"
+    # Badges, cards and forms: « Badge : Bérénice Lagarde-Moreau » (OCR may misread
+    # the given name, the cue still tells a name follows).
+    r"|badge|titulaire|porteur|porteuse|collaborat(?:eur|rice)|salari[ée]e?|employ[ée]e?"
+    r"|candidat(?:e)?|stagiaire|b[ée]n[ée]ficiaire|interlocut(?:eur|rice)|assur[ée]e?"
+    r"|locataire|demandeu(?:r|se))(?=[ \t]*:)"
     r"|(?P<closing>(?:bien[ \t]+)?cordialement|(?:(?:best|kind|warm)[ \t]+)?regards|sincerely"
-    r"|bien[ \t]+[àa][ \t]+(?:vous|toi))(?=[ \t]*,?[ \t]*\r?\n)"
+    r"|bien[ \t]+[àa][ \t]+(?:vous|toi)|(?:tr[èe]s[ \t]+)?bonne[ \t]+(?:journ[ée]e|soir[ée]e)"
+    r"|salutations(?:[ \t]+distingu[ée]es)?|merci(?:[ \t]+d['’][ \t]*avance)?|[àa][ \t]+bient[ôo]t"
+    r"|amicalement|sinc[èe]res[ \t]+salutations)(?=[ \t]*[,.!]?[ \t]*\r?\n)"
     r"|(?P<civ>M\.|Mme\.?|Mlle\.?|Mr\.?|Mrs\.?|Ms\.?|(?i:monsieur|madame|mademoiselle))"
     r"(?=[ \t]+(?-i:[a-zß-öø-ÿ]))"
     r")[ \t]*[:,]?[ \t]*(?:\r?\n[ \t]*){0,2}",
@@ -796,7 +803,9 @@ _CITY = (
 )
 _CP = r"(?:0[1-9]|[1-8]\d|9[0-8]|2[AB])" + SP + r"?\d{3}"
 _STREET_NAME_WORD = (
-    rf"(?:[{UPPER}0-9][\w'’\-\.]*|(?:(?i:l'|d')(?=\w))|(?i:de|du|des|la|le|les|aux|au|à|sur|sous|"
+    # Never a postcode: a street name stops before « 55846 Mendès ».
+    rf"(?:(?!\d{{5}}(?![\w]))[{UPPER}0-9][\w'’\-\.]*|(?:(?i:l'|d')(?=\w))"
+    r"|(?i:de|du|des|la|le|les|aux|au|à|sur|sous|"
     r"en|et|saint|sainte|st|ste|grande?|petite?|vieille|vieux|haute?|basse?|neuve?|nouvelle|"
     r"g[ée]n[ée]ral|mar[ée]chal|pr[ée]sident|docteur|abb[ée]|colonel|capitaine|commandant|"
     r"lieutenant|professeur|notre-dame|fr[èe]res|martyrs|r[ée]sistance|lib[ée]ration|paix|"
@@ -823,6 +832,17 @@ _ADDRESS_LOOSE = regex.compile(
 _STREET_NO_NUMBER = regex.compile(
     rf"(?<![\w])(?i:{STRICT_STREET_TYPES}){SP}+(?:(?i:de|du|des|la|le|les|l'|d'){SP}*)*"
     rf"[{UPPER}][\w'’\-]+(?:{SP}+(?:(?i:de|du|des|la|le|les|l'|d'){SP}*)*[{UPPER}][\w'’\-]+){{0,3}}",
+    regex.MULTILINE,
+)
+#: Business parks and localities named without a house number (« ZA des Écureuils »,
+#: « Parc d'activités du Moulin », « ZI Nord »): an address of their own.
+_ZONE = regex.compile(
+    rf"(?<![\w])(?:Z\.?A\.?C?\.?E?|Z\.?I\.?|ZUP|(?i:zone{SP}+(?:artisanale|industrielle"
+    rf"|commerciale|d['’]activit[ée]s?|portuaire))|(?i:parc{SP}+(?:d['’]activit[ée]s?|industriel"
+    rf"|technologique|tertiaire|d['’]affaires)))(?![\w])"
+    rf"{SP}+(?:(?i:de|du|des|la|le|les|l['’]|d['’]){SP}*)*"
+    rf"[{UPPER}0-9][\w'’\-]*(?:{SP}+(?:(?i:de|du|des|la|le|les|l['’]|d['’]){SP}*)*"
+    rf"[{UPPER}][\w'’\-]+){{0,3}}",
     regex.MULTILINE,
 )
 #: Postcode then city; OCR may glue them (``37000Tours``): a capitalised word then.
@@ -913,6 +933,8 @@ class AddressRecognizer(CustomRecognizer):
             if first in _NOT_CITY:
                 continue
             out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.7))
+        for m in _ZONE.finditer(text, timeout=2):
+            out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.7))
         for m in _COMPLEMENT.finditer(text, timeout=2):
             out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.75))
         for m in _ADDRESS_EN.finditer(text, timeout=2):
@@ -939,13 +961,62 @@ _ORG_KEYWORD = regex.compile(
 )
 
 
+#: Lower-case words linking the words of an organisation name.
+_NAME_LINKS = frozenset({"de", "du", "des", "la", "le", "les", "et", "d'", "l'", "&"})
+
+
+#: Job titles (normalized words) that open a signature line « Gérante | Société ».
+_JOB_WORDS = frozenset(
+    {
+        "gerant", "gerante", "directeur", "directrice", "comptable", "assistant", "assistante",
+        "responsable", "manager", "charge", "chargee", "conseiller", "conseillere", "president",
+        "presidente", "fondateur", "fondatrice", "associe", "associee", "secretaire",
+        "technicien", "technicienne", "ingenieur", "ingenieure", "commercial", "commerciale",
+        "daf", "drh", "dsi", "pdg", "dg", "ceo", "cfo", "cto", "coo", "chef", "cheffe",
+        "consultant", "consultante", "juriste", "avocat", "avocate", "office", "acheteur",
+        "acheteuse", "coordinateur", "coordinatrice", "administrateur", "administratrice",
+        "delegue", "deleguee", "attache", "attachee", "agent", "adjoint", "adjointe",
+        "pharmacien", "pharmacienne", "medecin", "infirmier", "infirmiere", "exploitant",
+        "exploitante", "proprietaire", "artisan", "co-gerant", "co-gerante", "gestionnaire",
+    }
+)  # fmt: skip
+#: « Gérante | Transports Vercors Logistique »: the organisation after a job title.
+_SIGNATURE_ORG = regex.compile(
+    rf"^[ \t>]*(?P<job>[^\r\n|]{{2,60}}?){SP}*[|•·]{SP}*"
+    rf"(?P<org>[{UPPER}0-9][^\r\n|•·]{{1,80}}?){SP}*\r?$",
+    regex.MULTILINE,
+)
+
+
+def _signature_orgs(text: str) -> list[tuple[int, int]]:
+    out: list[tuple[int, int]] = []
+    if "|" not in text and "•" not in text and "·" not in text:
+        return out
+    for m in _SIGNATURE_ORG.finditer(text, timeout=2):
+        job = [normalize(w) for w in regex.findall(r"[\w'’\-]+", m.group("job"))]
+        if not job or not any(w in _JOB_WORDS for w in job[:3]) or len(job) > 6:
+            continue
+        org = m.group("org").rstrip(" .,;")
+        words = org.split()
+        if not words or len(words) > 8 or sum(c.isdigit() for c in org) > 2:
+            continue
+        if "@" in org or ":" in org or regex.search(r"\d{2}[ .]\d{2}", org):
+            continue  # « Tél. : 01 … », an address list: not a name
+        out.append((m.start("org"), m.start("org") + len(org)))
+    return out
+
+
 def _trim_name(text: str, start: int, end: int) -> int:
     """Cut a name before the first stop word / bare number after its first word."""
     words = list(regex.finditer(r"\S+", text[start:end]))
     for i, w in enumerate(words[1:], start=1):
         bare = w.group().strip(".,;:")
+        # « Société Nouvelle des Carrières du Jura »: a particle followed by a
+        # capitalized word goes on with the name.
+        follows = words[i + 1].group() if i + 1 < len(words) else ""
+        inner = normalize(bare) in _NAME_LINKS and follows[:1].isupper()
         if (
-            normalize(bare) in STOP_WORDS
+            (normalize(bare) in STOP_WORDS and not inner)
             or bare.isdigit()
             or text[start + words[i - 1].end() - 1] == "."
         ):
@@ -987,6 +1058,8 @@ class OrganizationRecognizer(CustomRecognizer):
             else:
                 score = 0.7
             out.append(_result(EntityType.ORGANIZATION, m.start(), end, score))
+        for start, end in _signature_orgs(text):
+            out.append(_result(EntityType.ORGANIZATION, start, end, 0.7, rule="signature"))
         return out
 
 
