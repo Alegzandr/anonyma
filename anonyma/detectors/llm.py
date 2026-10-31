@@ -17,6 +17,7 @@ too slow and not deterministic enough for a second pass.
 
 from __future__ import annotations
 
+import json
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
@@ -292,12 +293,28 @@ class LlmDetector(Detector):
         for p in todo:
             if p.key not in memo and p.key not in pending:
                 pending[p.key] = p
-        for group, text in plan(list(pending.values()), runner.window_tokens, runner.count_tokens):
+        calls = plan(list(pending.values()), runner.window_tokens, runner.count_tokens)
+        for group, text in calls:
             mentions = runner.extract(text)
             for p in group:
                 memo.add(p.key, [m for m in mentions if next(llm.locate(p.text, m.text), None)])
             self.report(group[-1].position + 1, len(segments))
+        if calls:
+            record_throughput(runner)
         return _entities(todo, memo, document_id, self.name)
+
+    def workload(self, segments: Sequence[Segment], seen: set[str]) -> list[Passage]:
+        """Passages of ``segments`` the model would read, not counting those in ``seen``
+        (keys, updated): an upper bound, the other detectors' coverage is unknown."""
+        out: list[Passage] = []
+        for i, s in enumerate(segments):
+            if skip_segment(s):
+                continue
+            for p in passages(s, i):
+                if p.key not in seen and self.wanted(p):
+                    seen.add(p.key)
+                    out.append(p)
+        return out
 
 
 def _entities(todo: Sequence[Passage], memo: Memo, document_id: str, detector: str) -> list[Entity]:
@@ -369,6 +386,62 @@ class Memo:
             self._items.move_to_end(key)
             while len(self._items) > MEMO_SIZE:
                 self._items.popitem(last=False)
+
+
+#: Seconds per model call assumed before any was measured on this machine (Qwen3
+#: 4B Q4 on an 8-core desktop CPU: 1 s for an empty answer, 3 to 5 s with a few
+#: entities; a laptop is slower).
+DEFAULT_CALL_SECONDS = 4.0
+#: Measured throughput, per model file: ``{"<model>": {"appels": n, "secondes": s}}``.
+THROUGHPUT_FILE = "debit_modele_langue.json"
+
+
+def _throughput_path() -> Path:
+    from anonyma import paths
+
+    return paths.data_dir() / THROUGHPUT_FILE
+
+
+def record_throughput(runner: llm.LlmRunner) -> None:
+    """Remember this process's measured seconds per call for later estimates (best
+    effort: counts only)."""
+    if not runner.measured_calls:
+        return
+    path = _throughput_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        if not isinstance(data, dict):
+            data = {}
+        data[runner.key] = {
+            "appels": runner.measured_calls,
+            "secondes": round(runner.measured_seconds, 3),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    except (OSError, ValueError):
+        log.info("llm throughput not saved")
+
+
+def call_seconds(config: Config) -> float:
+    """Seconds per model call: measured on this machine for the selected model if a
+    run did so, :data:`DEFAULT_CALL_SECONDS` otherwise."""
+    selected = select_model(config)
+    if selected is None:
+        return DEFAULT_CALL_SECONDS
+    key = f"{selected[1].name}:v{llm.PROMPT_VERSION}"
+    try:
+        data = json.loads(_throughput_path().read_text(encoding="utf-8"))
+        item = data[key]
+        calls, seconds = int(item["appels"]), float(item["secondes"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return DEFAULT_CALL_SECONDS
+    return seconds / calls if calls >= 20 else DEFAULT_CALL_SECONDS
+
+
+def estimated_calls(todo: Sequence[Passage]) -> int:
+    """Model calls for ``todo`` without loading the model (about 3 characters per
+    token of French text)."""
+    return len(plan(todo, llm.WINDOW_TOKENS, lambda text: max(1, len(text) // 3)))
 
 
 MEMO_SIZE = 50_000
@@ -514,9 +587,12 @@ __all__ = [
     "LlmDetector",
     "Memo",
     "Passage",
+    "call_seconds",
+    "estimated_calls",
     "forget",
     "is_prose",
     "passages",
     "plan",
+    "record_throughput",
     "select_model",
 ]

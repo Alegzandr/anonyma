@@ -35,7 +35,7 @@ from anonyma import paths, registry
 from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.errors import failure_reason
-from anonyma.frenchtext import plural
+from anonyma.frenchtext import NBSP, grouped, plural
 from anonyma.logs import get_logger
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
@@ -1346,6 +1346,51 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
 # Pipeline
 # ---------------------------------------------------------------------------
 
+#: Beyond this, a FULL run is announced as long (CLI warning, GUI notice).
+LLM_WARNING_MINUTES = 15.0
+#: Files read (at most) and seconds of extraction spent to estimate a FULL run.
+ESTIMATE_SAMPLE_FILES = 12
+ESTIMATE_SAMPLE_SECONDS = 20.0
+
+
+@dataclass(frozen=True, slots=True)
+class LlmEstimate:
+    """Expected language-model work of a FULL run (:meth:`Pipeline.estimate_llm`)."""
+
+    minutes: float
+    #: Model calls expected (paragraphs pooled into windows), extrapolated.
+    calls: int
+    sampled_files: int
+    total_files: int
+
+    @property
+    def long(self) -> bool:
+        return self.minutes > LLM_WARNING_MINUTES
+
+    def warning(self, switch: str) -> str:
+        """The estimate in French, with ``switch`` (how to choose Standard here)."""
+        total = max(1, round(self.minutes))
+        hours, rest = divmod(total, 60)
+        duration = f"{hours} h {rest:02d} min" if hours else f"{rest} min"
+        sample = (
+            ""
+            if self.sampled_files >= self.total_files
+            else f", d'après {self.sampled_files} fichiers sur {self.total_files}"
+        )
+        noun = "passage" if self.calls < 2 else "passages"
+        return (
+            f"profil Complet : environ {duration} estimées pour le modèle de langue local "
+            f"({grouped(self.calls)}{NBSP}{noun} à analyser{sample}). Le profil Standard "
+            f"traite ce lot en quelques minutes : {switch}."
+        )
+
+
+def _size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
 
 class Pipeline:
     def __init__(self, config: Config, *, store: MappingStore | None = None) -> None:
@@ -1357,6 +1402,50 @@ class Pipeline:
         #: Profile the installed models actually serve (``complet`` without its
         #: language model runs as ``standard``): it sizes the worker pool.
         self.detection_profile = registry.usable_profile(self.config, profile)
+
+    def estimate_llm(
+        self, inputs: Sequence[Path], *, sample_seconds: float = ESTIMATE_SAMPLE_SECONDS
+    ) -> LlmEstimate | None:
+        """Language-model workload of a FULL run on ``inputs``, before it starts: a
+        sample of the files (spread over the batch, at most ``sample_seconds`` of
+        extraction) is read, its paragraphs the model would analyse counted (repeats
+        once) and extrapolated by size, times the measured seconds per call. None
+        outside FULL. An upper bound: the other detectors' coverage is not known yet."""
+        if self.detection_profile is not Profile.FULL:
+            return None
+        llm_detector = next((d for d in detectors_for(self.config) if d.uses_prior), None)
+        if llm_detector is None or not hasattr(llm_detector, "workload"):
+            return None
+        from anonyma.detectors import llm as llm_module
+
+        files, _ = walk_inputs(inputs)
+        if not files:
+            return None
+        sizes = [_size(path) for path, _ in files]
+        total = sum(sizes) or 1
+        step = max(1, len(files) // ESTIMATE_SAMPLE_FILES)
+        order = [*range(0, len(files), step), *(i for i in range(len(files)) if i % step)]
+        seen: set[str] = set()
+        todo: list[Any] = []
+        sampled = sampled_bytes = 0
+        started = time.monotonic()
+        work_dir = paths.tmp_dir() / f"estimation-{new_id()[:8]}"
+        try:
+            for i in order:
+                if sampled and time.monotonic() - started > sample_seconds:
+                    break
+                path, name = files[i]
+                doc = extract_file(path, name, self.config, work_dir / f"f{i}")
+                for item in doc.walk():
+                    todo += llm_detector.workload(item.segments, seen)
+                sampled += 1
+                sampled_bytes += sizes[i]
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        scale = total / max(1, sampled_bytes) if sampled < len(files) else 1.0
+        calls = round(llm_module.estimated_calls(todo) * scale)
+        minutes = calls * llm_module.call_seconds(self.config) / 60
+        return LlmEstimate(minutes, calls, sampled, len(files))
 
     # -- execution helpers --------------------------------------------------
 

@@ -215,6 +215,27 @@ def test_analyser_json(tmp_path: Path, corpus: Path, business_list: Path) -> Non
     assert not any((tmp_path / "home" / "data" / "tmp").iterdir())
 
 
+def test_long_full_run_is_announced(
+    monkeypatch: pytest.MonkeyPatch, corpus: Path, business_list: Path
+) -> None:
+    """Before a FULL run the language model's work is estimated: beyond 15 minutes a
+    warning gives the estimate and the faster profile, and --json carries it."""
+    from anonyma.pipeline import LlmEstimate, Pipeline
+
+    monkeypatch.setattr(
+        Pipeline, "estimate_llm", lambda self, inputs: LlmEstimate(130.4, 1950, 12, 205)
+    )
+    result = invoke(
+        "analyser", corpus, "-p", "leger", "--liste-metier", business_list, "-j", "1", "--json"
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["estimation_minutes"] == 130
+    warning = " ".join(result.stderr.split())
+    assert "environ 2 h 10 min estimées" in warning
+    assert "1 950 passages" in warning.replace("\u00a0", " ").replace("\u202f", " ")
+    assert "d'après 12 fichiers sur 205" in warning and "--profil standard" in warning
+
+
 def test_missing_models_are_announced(
     monkeypatch: pytest.MonkeyPatch, corpus: Path, business_list: Path
 ) -> None:

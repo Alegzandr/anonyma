@@ -45,6 +45,7 @@ from anonyma.pipeline import (
     BatchAnalysis,
     BatchResult,
     CancelToken,
+    LlmEstimate,
     OutputDirError,
     Pipeline,
     ProgressEvent,
@@ -146,6 +147,8 @@ class BatchController(QObject):
     queue_ready = Signal()
     phase_changed = Signal(str)
     progress = Signal(object)  # ProgressEvent
+    #: (French notice) — a FULL analysis is expected to be long (LlmEstimate).
+    long_run = Signal(str)
     analysis_ready = Signal()
     analysis_cleared = Signal()
     decisions_changed = Signal()
@@ -386,6 +389,8 @@ class BatchController(QObject):
         return task
 
     def _on_progress(self, payload: object) -> None:
+        if isinstance(payload, LlmEstimate):
+            self.long_run.emit(payload.warning("choisissez le profil Standard dans les réglages"))
         if isinstance(payload, ProgressEvent):
             if payload.index is not None:
                 self.done_items.add(payload.index)
@@ -418,6 +423,9 @@ class BatchController(QObject):
 
         def work(report: Report) -> tuple[Pipeline, BatchAnalysis, ReviewIndex]:
             pipeline = Pipeline(config)
+            estimate = pipeline.estimate_llm(inputs)
+            if estimate is not None and estimate.long:
+                report(estimate)
             analysis = pipeline.analyze(inputs, progress=report, cancel=token)
             return pipeline, analysis, build_index(analysis)
 

@@ -116,6 +116,31 @@ def test_full_review_flow(
     assert exported is not None and "Bérénice" not in exported.read_text(encoding="utf-8")
 
 
+def test_long_full_analysis_is_announced(
+    qtbot: Any,
+    window: MainWindow,
+    batch: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A FULL analysis estimated beyond 15 minutes shows the estimate and the faster
+    profile on the processing page, then runs as asked."""
+    from anonyma.pipeline import LlmEstimate, Pipeline
+
+    monkeypatch.setattr(
+        Pipeline, "estimate_llm", lambda self, inputs: LlmEstimate(42.0, 630, 12, 205)
+    )
+    prepare(qtbot, window, batch, tmp_path / "sortie")
+    window.show()
+    analyze(qtbot, window)
+    notice = window.processing.notice_label
+    assert not notice.isHidden()
+    text = " ".join(notice.text().split())
+    assert text.startswith("Profil Complet : environ 42 min estimées")
+    assert "profil Standard dans les réglages" in text
+    assert window.controller.analysis is not None
+
+
 def test_occurrences_retype_and_rejected_mention(
     qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path, recorder: DialogRecorder
 ) -> None:

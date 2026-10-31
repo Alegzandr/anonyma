@@ -390,9 +390,9 @@ class LlmRunner:
         self.n_ctx = n_ctx
         self.key = f"{Path(model_path).name}:v{PROMPT_VERSION}"
         #: Model calls made and their wall time (seconds): measured throughput.
-        self.calls = 0
-        self.seconds = 0.0
-        self.document_tokens = 0
+        self.measured_calls = 0
+        self.measured_seconds = 0.0
+        self.measured_tokens = 0
         self.grammar = LlamaGrammar.from_json_schema(json.dumps(SCHEMA), verbose=False)
         model = self.llm._model
         n_vocab = int(model.n_vocab())
@@ -467,9 +467,9 @@ class LlmRunner:
                 self._warm()
             self.llm.n_tokens = len(self._prefix)
             raw = self._generate(prompt, max_tokens)
-            self.calls += 1
-            self.document_tokens += len(body)
-            self.seconds += time.perf_counter() - started
+            self.measured_calls += 1
+            self.measured_tokens += len(body)
+            self.measured_seconds += time.perf_counter() - started
         return parse_answer(raw)
 
     def _generate(self, prompt: list[int], max_tokens: int) -> str:

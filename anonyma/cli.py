@@ -28,7 +28,13 @@ from anonyma.models import DocumentStatus, Profile, Regime, ReplacementMode, Sev
 
 if TYPE_CHECKING:
     from anonyma.config import Config
-    from anonyma.pipeline import BatchAnalysis, BatchResult, ProgressEvent
+    from anonyma.pipeline import (
+        BatchAnalysis,
+        BatchResult,
+        LlmEstimate,
+        Pipeline,
+        ProgressEvent,
+    )
     from anonyma.report import BatchReport
     from anonyma.store import EncryptedMappingStore
 
@@ -926,6 +932,18 @@ def _warn_profile(config: Config) -> None:
         err.print(f"[bold yellow]Attention :[/] {_markup_escape(warning)}", soft_wrap=True)
 
 
+def _estimate_llm(pipeline: Pipeline, inputs: Sequence[Path]) -> LlmEstimate | None:
+    """FULL only: estimate the language model's work before starting and warn (stderr)
+    when it should take more than ``LLM_WARNING_MINUTES``. Counts only."""
+    estimate = pipeline.estimate_llm(inputs)
+    if estimate is not None and estimate.long:
+        err.print(
+            f"[bold yellow]Attention :[/] {_markup_escape(estimate.warning('--profil standard'))}",
+            soft_wrap=True,
+        )
+    return estimate
+
+
 def _settings(config: Config) -> dict[str, str]:
     """Non-sensitive batch settings for the report, with the GUI's French labels."""
     from anonyma.gui.labels import MODE_LABELS, REGIME_LABELS
@@ -1357,6 +1375,7 @@ def run(
     previous = _prepare_output(output, replace_previous)
     try:
         pipeline = Pipeline(config, store=store)
+        estimate = _estimate_llm(pipeline, inputs)
         with progress_display(not quiet) as progress:
             result = pipeline.run(inputs, output, progress=progress)
     except OutputDirError as exc:
@@ -1376,6 +1395,8 @@ def run(
         except OSError:
             fail("Impossible d'enregistrer le rapport.", EXIT_PARTIAL)
     summary = run_summary(report, result, pipeline.config, report_path, previous=previous)
+    if estimate is not None:
+        summary["parametres"]["estimation_minutes"] = round(estimate.minutes)
     if as_json:
         _print_run_summary(err, report, summary)
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -1635,6 +1656,7 @@ def analyse(
     )
     _warn_profile(config)
     pipeline = Pipeline(config)
+    estimate = _estimate_llm(pipeline, inputs)
     try:
         with progress_display(not quiet and not as_json) as progress:
             analysis = pipeline.analyze(inputs, progress=progress)
@@ -1645,6 +1667,8 @@ def analyse(
     finally:
         pipeline.close(analysis)
     summary["profil"] = pipeline.config.effective_profile().value
+    if estimate is not None:
+        summary["estimation_minutes"] = round(estimate.minutes)
     if as_json:
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
     else:

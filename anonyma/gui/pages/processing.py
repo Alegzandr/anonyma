@@ -206,6 +206,11 @@ class ProcessingPage(QWidget):
         progress_row.addWidget(self.progress_bar, 1)
         progress_row.addWidget(self.time_label)
         layout.addWidget(self.progress_box)
+        #: A FULL analysis announced as long, and the faster alternative.
+        self.notice_label = muted("")
+        self.notice_label.setWordWrap(True)
+        self.notice_label.hide()
+        layout.addWidget(self.notice_label)
         self._clock = QTimer(self)
         self._clock.setInterval(1000)
         self._clock.timeout.connect(self._update_times)
@@ -239,6 +244,7 @@ class ProcessingPage(QWidget):
         c.queue_ready.connect(self.refresh)
         c.phase_changed.connect(self._phase_changed)
         c.progress.connect(self._on_progress)
+        c.long_run.connect(self._on_long_run)
         c.analysis_ready.connect(self._on_analysis)
         c.analysis_cleared.connect(self.refresh)
         c.decisions_changed.connect(self._update_buttons)
@@ -543,6 +549,8 @@ class ProcessingPage(QWidget):
         if phase != Phase.IDLE.value:
             self._started = time.monotonic()
             self._last_event = None
+            if phase == Phase.ANALYZING.value:
+                self.notice_label.hide()  # a new estimate comes with each analysis
             self.stage_label.setText(STAGE_LABELS.get(phase, "") + "…")
             self.time_label.setText("")
             self.progress_bar.setRange(0, 0)
@@ -552,6 +560,10 @@ class ProcessingPage(QWidget):
             self.stage_label.setText("")
             self.time_label.setText("")
         self.refresh()
+
+    def _on_long_run(self, message: str) -> None:
+        self.notice_label.setText(typo(message[:1].upper() + message[1:]))
+        self.notice_label.show()
 
     def _on_progress(self, event: ProgressEvent) -> None:
         self._last_event = event

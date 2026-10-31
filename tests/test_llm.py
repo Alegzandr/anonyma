@@ -215,7 +215,7 @@ def _runner(answers: Sequence[str]) -> llm.LlmRunner:
     runner._prefix = fake.tokenize(before.encode(), add_bos=False, special=True)
     runner._suffix = fake.tokenize(after.encode(), add_bos=False, special=True)
     runner._lock = threading.Lock()
-    runner.calls, runner.seconds, runner.document_tokens = 0, 0.0, 0
+    runner.measured_calls, runner.measured_seconds, runner.measured_tokens = 0, 0.0, 0
     runner._warm()
     return runner
 
@@ -263,6 +263,8 @@ def _fresh_memo() -> Iterator[None]:
 class FakeRunner:
     window_tokens = 40
     key = "faux:v0"
+    measured_calls = 0
+    measured_seconds = 0.0
 
     def __init__(self, answer: Sequence[tuple[str, str]]) -> None:
         self.answer = [llm.LlmMention(t, k) for t, k in answer]
@@ -597,6 +599,46 @@ def test_pipeline_runs_prior_detectors_last_with_item_progress(
     assert {e.item_step for e in inside} == {"Prior"}  # only detectors that report
     assert all(e.stage == "analyse" and e.done == 0 for e in inside)
     assert pipeline._item_progress is None
+
+
+def test_full_run_is_estimated_before_it_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Paragraphs the model would read are counted once (the same mail in two files),
+    then multiplied by the seconds per call; nothing outside FULL."""
+    folder = tmp_path / "lot"
+    folder.mkdir()
+    mail = "Bonjour,\n\nLe fils du maire de Plouha rappellera ce soir pour le dossier.\n"
+    (folder / "a.txt").write_text(mail, encoding="utf-8")
+    (folder / "b.txt").write_text("> " + mail.replace("\n", "\n> "), encoding="utf-8")
+    (folder / "c.txt").write_text("Kervella\nTotal : 12\n", encoding="utf-8")  # no prose
+    config = Config(profile=Profile.FULL, workers=1)
+    detector = LlmDetector(config)
+    monkeypatch.setattr(pipeline, "detectors_for", lambda config: [detector])
+    monkeypatch.setattr(llm_detector, "call_seconds", lambda config: 1200.0)
+    run = Pipeline(config)
+    run.detection_profile = Profile.FULL
+    estimate = run.estimate_llm([folder])
+    assert estimate is not None
+    assert (estimate.calls, estimate.minutes, estimate.total_files) == (1, 20.0, 3)
+    assert estimate.long
+    text = estimate.warning("--profil standard")
+    assert "environ 20 min" in text and "--profil standard" in text
+    assert "Plouha" not in text
+    run.detection_profile = Profile.STANDARD
+    assert run.estimate_llm([folder]) is None
+
+
+def test_throughput_is_measured_and_reused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    model = tmp_path / "Qwen3-4B-Q4_K_M.gguf"
+    monkeypatch.setattr(llm_detector, "select_model", lambda config: (object(), model))
+    config = Config(profile=Profile.FULL)
+    assert llm_detector.call_seconds(config) == llm_detector.DEFAULT_CALL_SECONDS
+    runner = _runner([])
+    runner.key = f"{model.name}:v{llm.PROMPT_VERSION}"
+    runner.measured_calls, runner.measured_seconds = 30, 75.0
+    llm_detector.record_throughput(runner)
+    assert llm_detector.call_seconds(config) == 2.5
 
 
 def test_no_model_means_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
