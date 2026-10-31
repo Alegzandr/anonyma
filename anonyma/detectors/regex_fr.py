@@ -35,7 +35,7 @@ from anonyma.detectors._rules import (
     RULES,
     Rule,
 )
-from anonyma.fieldhints import hint_of
+from anonyma.fieldhints import field_hint, hint_of
 from anonyma.logs import get_logger
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
 from anonyma.registry import register_detector
@@ -124,6 +124,33 @@ class _Compiled:
             return []
 
 
+#: A1-style reference at the start of a cell label (``feuille 2!B7``, ``C3``).
+_CELL_REF = regex.compile(r"^(?P<sheet>.*?!)?(?P<col>[A-Z]{1,3})(?P<row>\d+)(?![\w!])")
+
+
+def _column_number(letters: str) -> int:
+    n = 0
+    for c in letters:
+        n = n * 26 + ord(c) - 64
+    return n
+
+
+def _row_label_hint(segment: Segment, row_labels: dict[tuple[str, int, int], str]) -> str | None:
+    """Hint given by the cell just left of ``segment`` when it holds a field name
+    (vertical layout « Nom | Jean Dupont »), and record ``segment`` if it is one."""
+    if segment.context.kind is not SegmentKind.CELL:
+        return None
+    m = _CELL_REF.match(segment.context.label)
+    if m is None:
+        return None
+    sheet, row, col = m.group("sheet") or "", int(m.group("row")), _column_number(m.group("col"))
+    own = field_hint(segment.text)
+    if own is not None:
+        row_labels[(sheet, row, col)] = own
+        return None
+    return row_labels.get((sheet, row, col - 1))
+
+
 def _label_has(label: str, parts: Sequence[str]) -> bool:
     return any(p in label for p in parts)
 
@@ -199,15 +226,20 @@ class RegexDetector(Detector):
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         found: list[Entity] = []
         previous = ""
+        #: Field-name cells (« Nom » in A1): (sheet, row, column) -> hint.
+        row_labels: dict[tuple[str, int, int], str] = {}
         for segment in segments:
             if not segment.text.strip() or skip_segment(segment):
                 continue
-            found.extend(self._segment(segment, document_id, previous))
+            row_hint = _row_label_hint(segment, row_labels)
+            found.extend(self._segment(segment, document_id, previous, row_hint))
             # OCR lines and PDF blocks: a cue often sits on the line before the date.
             previous = segment.text[-SIGNATURE_WINDOW:]
         return found
 
-    def _segment(self, segment: Segment, document_id: str, previous: str = "") -> list[Entity]:
+    def _segment(
+        self, segment: Segment, document_id: str, previous: str = "", row_hint: str | None = None
+    ) -> list[Entity]:
         text = segment.text
         label = normalize(segment.context.label)
         raw: list[tuple[str, int, int, float, dict[str, str]]] = []
@@ -239,7 +271,7 @@ class RegexDetector(Detector):
                     if index is not None:
                         start, end = index[start], index[end - 1] + 1
                     raw.append((result.entity_type, start, end, result.score, attrs))
-        raw.extend(self._labels(segment, label))
+        raw.extend(self._labels(segment, label, row_hint))
         value = text.strip()
         if len(value) == 9 and value.isdigit() and value[0] in "67":
             # A whole cell/value 6xxxxxxxx: a mobile number stored as a number.
@@ -316,7 +348,7 @@ class RegexDetector(Detector):
         return rule.entity_type, start, end, score, {"rule": rule.name}
 
     def _labels(
-        self, segment: Segment, label: str
+        self, segment: Segment, label: str, row_hint: str | None = None
     ) -> list[tuple[str, int, int, float, dict[str, str]]]:
         """Entities implied by the segment label (mail headers, metadata fields)."""
         out: list[tuple[str, int, int, float, dict[str, str]]] = []
@@ -330,7 +362,7 @@ class RegexDetector(Detector):
                     s = len(text) - len(text.lstrip())
                     spans = [(s, len(text.rstrip()))]
                 out += [(entity_type, s, e, 0.95, {"rule": "label"}) for s, e in spans]
-        hint = hint_of(label)
+        hint = hint_of(label) or row_hint
         if hint in HINT_TYPES:
             entity_type = HINT_TYPES[hint]
             # Below the verifier's certainty level: a header can mislead, a residue
