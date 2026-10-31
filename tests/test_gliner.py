@@ -192,3 +192,16 @@ def test_onnx_telemetry_is_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setitem(sys.modules, "tokenizers", types.SimpleNamespace(Tokenizer=FakeTokenizer))
     GlinerOnnx(tmp_path)
     assert calls == ["telemetry off", "session"]
+
+
+def test_contentless_spans_are_not_plausible() -> None:
+    """GLiNER spans seen on contentless cells: « Bien à vous » (PERSONNE, 0.31) and
+    « Lundi » (LIEU, 0.71); a month that is a first name may still be a person."""
+    from anonyma.detectors._filters import plausible
+
+    assert not plausible("PERSONNE", "Bien à vous", 0.306)
+    assert not plausible("LIEU", "Lundi", 0.714)
+    assert not plausible("ORGANISATION", "Mars 2024", 0.9)
+    assert plausible("PERSONNE", "Avril Kervella", 0.6)
+    assert plausible("PERSONNE", "M. Berger", 0.5)
+    assert plausible("LIEU", "Quimper", 0.5)

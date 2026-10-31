@@ -269,8 +269,17 @@ def _function_word(word: str) -> bool:
 
 
 def _all_common(value: str) -> bool:
+    """Every word is a common word or a grammatical one (« Bien à vous »)."""
     words = _words(value)
-    return bool(words) and all(is_common_word(w) for w in words)
+    return bool(words) and all(is_common_word(w) or normalize(w) in FUNCTION_WORDS for w in words)
+
+
+#: Weekdays and months: never a name, a place or an organisation on their own.
+CALENDAR_WORDS = frozenset(
+    {"lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche", "janvier",
+     "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre",
+     "novembre", "decembre"}
+)  # fmt: skip
 
 
 @lru_cache(maxsize=1)
@@ -332,6 +341,13 @@ def plausible(
     words = _words(stripped)
     if key in TECHNICAL or (words and all(normalize(w) in TECHNICAL for w in words)):
         return False
+    if (
+        entity_type in NAME_LIKE
+        and words
+        and all(normalize(w) in CALENDAR_WORDS for w in words)
+        and not (entity_type == EntityType.PERSON and any(first_name(w) for w in words))
+    ):
+        return False  # « Lundi », « Mars 2024 » (« Avril » may still be a first name)
     if entity_type in NAME_LIKE or entity_type == EntityType.JOB_TITLE:
         if not words:
             return False
@@ -385,6 +401,7 @@ def plausible(
 
 
 __all__ = [
+    "CALENDAR_WORDS",
     "TECHNICAL",
     "filename_as_text",
     "is_pdf_operators",

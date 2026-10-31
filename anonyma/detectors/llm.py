@@ -20,7 +20,13 @@ import regex
 from anonyma import llm
 from anonyma.config import Config
 from anonyma.data import lexicon
-from anonyma.detectors._filters import COMMON_WORD_SCORE, mid_sentence, plausible, skip_segment
+from anonyma.detectors._filters import (
+    CALENDAR_WORDS,
+    COMMON_WORD_SCORE,
+    mid_sentence,
+    plausible,
+    skip_segment,
+)
 from anonyma.logs import get_logger
 from anonyma.model_catalog import LLM_PREFERENCE, ModelKind, ModelSpec, get_spec
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
@@ -66,11 +72,6 @@ CUES = regex.compile(
 #: An LLM date of birth needs a birth cue in its segment (other dates are left to
 #: the date rules, which mask them as DATE).
 BIRTH_CUES = regex.compile(r"(?<![a-z])(?:ne|nee|naissance|ddn|naitre|born|birth)(?![a-z])")
-_CALENDAR = frozenset(
-    {"lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche", "janvier",
-     "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre",
-     "novembre", "decembre"}
-)  # fmt: skip
 _TOKEN = regex.compile(r"[\p{L}\p{N}]+")
 _CAPITALIZED = regex.compile(r"(?<=[\p{Ll},;] )\p{Lu}\p{Ll}+")
 
@@ -222,7 +223,7 @@ def _keep(segment: Segment, entity_type: str, value: str, start: int) -> bool:
     """Type sanity on top of the plausibility rules shared with GLiNER: « Merci » is no
     name, « Lundi » no place, « Re: Réunion » no description of a person."""
     words = _TOKEN.findall(normalize(value))
-    if words and all(w in _CALENDAR or w.isdigit() for w in words):
+    if words and all(w in CALENDAR_WORDS or w.isdigit() for w in words):
         return entity_type == EntityType.DATE_OF_BIRTH and _born(segment.text)
     if entity_type == EntityType.DATE_OF_BIRTH:
         return any(c.isdigit() for c in value) and _born(segment.text)
