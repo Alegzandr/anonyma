@@ -737,7 +737,128 @@ def make_xml(path: Path) -> None:
     path.write_bytes(text.encode("iso-8859-1"))
 
 
+def rtf_escape(text: str) -> str:
+    return "".join(c if ord(c) < 128 else f"\\'{c.encode('cp1252')[0]:02x}" for c in text)
+
+
+def rtf_document(*, picture: bytes | None = None) -> bytes:
+    p, e = rtf_escape(P), E
+    pict = ""
+    if picture is not None:
+        pict = (
+            "{\\*\\shppict{\\pict{\\*\\picprop{\\sp{\\sn wzDescription}{\\sv "
+            f"{p}}}}}\\picw10\\pich10\\picwgoal150\\pichgoal150\\pngblip\r\n"
+            f"{picture.hex()}}}}}\\par\r\n"
+        )
+    text = (
+        "{\\rtf1\\ansi\\ansicpg1252\\deff0{\\fonttbl{\\f0\\fswiss\\fcharset0 Arial;}}\r\n"
+        "{\\*\\generator Anonyma-fixtures;}\r\n"
+        f"{{\\info{{\\title Dossier {p}}}{{\\subject Suivi {p}}}{{\\author {p}}}"
+        f"{{\\operator {p}}}{{\\company {p}}}{{\\manager {p}}}{{\\keywords {e}}}"
+        f"{{\\doccomm Contact {e}}}{{\\category {p}}}{{\\hlinkbase mailto:{e}}}"
+        "{\\creatim\\yr2024\\mo1\\dy1\\hr0\\min0}}\r\n"
+        f"{{\\*\\userprops {{\\propname Client}}\\proptype30{{\\staticval {p}}}}}\r\n"
+        f"{{\\*\\revtbl {{Unknown;}}{{{p};}}}}\r\n"
+        "{\\*\\rsidtbl \\rsid123\\rsid456}\r\n"
+        f"{{\\header \\pard\\plain Confidentiel {p}\\par}}\r\n"
+        f"{{\\footer \\pard\\plain Contact : {e}\\par}}\r\n"
+        f"\\pard\\plain\\insrsid123 Rapport r\\'e9dig\\'e9 par {{\\b Z\\u233?}}phyrin "
+        f"{LAST}.\\par\r\n"
+        f"Valid\\'e9 par {{\\revised\\revauth1\\revdttm123 {p}}}"
+        f"{{\\deleted\\revauthdel1 ancien contact {e}}}\\par\r\n"
+        f'{{\\field{{\\*\\fldinst {{HYPERLINK "mailto:{e}"}}}}{{\\fldrslt {{{e}}}}}}}\\par\r\n'
+        f"\\trowd\\cellx3000\\cellx6000\\pard\\intbl Courriel\\cell {e}\\cell\\row\r\n"
+        f"\\pard Note{{\\footnote \\pard Source : {p}\\par}}\\par\r\n"
+        f"{{\\*\\atnid ZQ}}{{\\*\\atnauthor {p}}}\\chatn{{\\*\\annotation{{\\*\\atndate 123}}"
+        f" Relu par {p}, {e}}}\\par\r\n"
+        f"{{\\*\\docvar {{client}}{{{p}}}}}\r\n"
+        f"{pict}"
+        f"M. {rtf_escape(P.upper())} a sign\\'e9.\\par\r\n"
+        "}"
+    )
+    return text.encode("ascii")
+
+
+def make_rtf(path: Path) -> None:
+    path.write_bytes(rtf_document())
+
+
+# ---------------------------------------------------------------------------
+# PDF
+# ---------------------------------------------------------------------------
+
+
+def pdf_document(*, image: bytes | None = None, attachment: bool = True) -> bytes:
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 80), f"Rapport rédigé par {P}.", fontsize=11)
+    # Canary split across two fonts on the same line.
+    x = 72 + pymupdf.get_text_length("Signé : ", fontsize=11)
+    page.insert_text((72, 100), "Signé : ", fontsize=11)
+    page.insert_text((x, 100), FIRST[:2], fontsize=11, fontname="hebo")
+    x += pymupdf.get_text_length(FIRST[:2], fontname="hebo", fontsize=11)
+    page.insert_text((x, 100), f"{FIRST[2:]} {LAST} ({E})", fontsize=11)
+    page.insert_text((72, 120), "Ligne voisine conservée.", fontsize=11)
+    # Canary wrapped across two lines of the same block.
+    page.insert_textbox(
+        pymupdf.Rect(72, 140, 190, 200), f"Dossier suivi par {FIRST} {LAST}.", fontsize=11
+    )
+    page.insert_link(
+        {"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(72, 205, 300, 220), "uri": f"mailto:{E}"}
+    )
+    page.insert_text((72, 215), f"Écrire à {E}", fontsize=11)
+    if image is not None:
+        page.insert_image(pymupdf.Rect(300, 300, 400, 400), stream=image)
+    annot = page.add_text_annot((400, 80), f"Relu par {P}")
+    annot.set_info(title=P, subject=f"Avis {E}")
+    annot.update()
+    widget = pymupdf.Widget()
+    widget.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+    widget.field_name = "client"
+    widget.field_value = P
+    widget.field_label = f"Contact {E}"
+    widget.rect = pymupdf.Rect(72, 300, 250, 320)
+    page.add_widget(widget)
+    page2 = doc.new_page()
+    page2.insert_text((72, 80), f"M. {P.upper()} a signé.", fontsize=11)
+    doc.set_metadata(
+        {
+            "title": f"Dossier {P}",
+            "author": P,
+            "subject": f"Suivi {P}",
+            "keywords": E,
+            "creator": P,
+            "producer": "Anonyma-fixtures",
+        }
+    )
+    doc.set_xml_metadata(
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/'
+        '22-rdf-syntax-ns#"><rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/">'
+        f"<dc:creator>{P}</dc:creator><dc:rights>{E}</dc:rights></rdf:Description></rdf:RDF>"
+        "</x:xmpmeta>"
+    )
+    doc.set_toc([[1, f"Dossier {P}", 1], [1, "Annexe", 2]])
+    if attachment:
+        doc.embfile_add(
+            "note.txt",
+            f"Pièce jointe de {P} ({E})\n".encode(),
+            filename="note.txt",
+            desc=f"Notes de {P}",
+        )
+    data = doc.tobytes(garbage=3, deflate=True)
+    doc.close()
+    return bytes(data)
+
+
+def make_pdf(path: Path) -> None:
+    path.write_bytes(pdf_document())
+
+
 GENERATORS = {
+    "rapport.pdf": make_pdf,
+    "lettre.rtf": make_rtf,
     "contacts.csv": make_csv,
     "export.tsv": make_tsv,
     "dossier.json": make_json,

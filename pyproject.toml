@@ -64,6 +64,11 @@ module = [
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# PyMuPDF ships partial, inaccurate inline annotations: treat it as untyped.
+module = ["pymupdf", "pymupdf.*", "fitz", "fitz.*"]
+follow_imports = "skip"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
