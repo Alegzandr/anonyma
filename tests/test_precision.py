@@ -339,3 +339,10 @@ def test_function_mailbox_keeps_its_local_part_in_realistic_mode(tmp_path: Path)
 )
 def test_css_at_rules_are_not_handles(css: str) -> None:
     assert not _values(_detect(Config(), css), "IDENTIFIANT")
+
+
+def test_initials_not_found_inside_identifiers() -> None:
+    matcher: MultiMatcher[str] = MultiMatcher()
+    matcher.add("A.B", "p")
+    found = [m.start for m in matcher.find("image004.png@01DBDC2A.B5B90004, signé A.B")]
+    assert found == [38]

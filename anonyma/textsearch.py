@@ -68,6 +68,18 @@ def in_identifier(text: str, start: int, end: int) -> bool:
     return False
 
 
+#: Needles with at most this many letters and digits (initials « A.B », « J-D »)...
+SHORT_NEEDLE = 3
+
+
+def short_glued(key: str, text: str, start: int, end: int) -> bool:
+    """...only match as a word of their own: « A.B » is no initials inside the
+    identifier ``01DBDC2A.B5B90004``."""
+    if sum(c.isalnum() for c in key) > SHORT_NEEDLE:
+        return False
+    return (start > 0 and text[start - 1].isalnum()) or (end < len(text) and text[end].isalnum())
+
+
 @dataclass(frozen=True, slots=True)
 class Match[T]:
     start: int
@@ -130,6 +142,8 @@ class MultiMatcher[T]:
                 end += 1
             if not boundary_ok(text, start, end):
                 continue
+            if short_glued(key, text, start, end):
+                continue
             entry = self._entries[key]
             payloads = list(entry.payloads)
             if entry.capital_only and (text[start].isupper() or in_identifier(text, start, end)):
@@ -156,4 +170,11 @@ def leftmost_longest[T](matches: Iterable[Match[T]]) -> list[Match[T]]:
     return kept
 
 
-__all__ = ["Match", "MultiMatcher", "boundary_ok", "in_identifier", "leftmost_longest"]
+__all__ = [
+    "Match",
+    "MultiMatcher",
+    "boundary_ok",
+    "in_identifier",
+    "leftmost_longest",
+    "short_glued",
+]
