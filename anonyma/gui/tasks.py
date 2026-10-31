@@ -90,7 +90,9 @@ class TaskRunner(QObject):
         task.deleteLater()
 
     def running(self) -> bool:
-        return any(t.isRunning() for t in self._tasks)
+        # A task counts until its ``finished`` slot has run: its result signal is
+        # delivered (queued) before that, whereas ``isRunning()`` turns false first.
+        return bool(self._tasks)
 
     def wait_all(self, msecs: int = 30_000) -> bool:
         return all(t.wait(msecs) for t in list(self._tasks))
