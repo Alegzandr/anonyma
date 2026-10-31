@@ -1,0 +1,263 @@
+{
+ "slug": "16_pdf_releve",
+ "format": "pdf",
+ "description": "Relevé PDF texte : deux pages, métadonnées, XMP, annotation, signets, nom coupé sur deux lignes et sur deux polices",
+ "files": [
+  "releve_identite.pdf"
+ ],
+ "entries": [
+  {
+   "id": "16-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Lucas Blanc",
+   "where": [
+    "corps (NOM Prénom), adresse, titre, sujet, signet, page 2"
+   ],
+   "surfaces": [
+    "BLANC Lucas",
+    "M. BLANC",
+    "Lucas Blanc",
+    "Lucas"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Lucas Blanc"
+    },
+    {
+     "mode": "text",
+     "text": "Blanc Lucas"
+    },
+    {
+     "mode": "word",
+     "text": "Blanc"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Lucas"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "16-002",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7694762577518283742967866",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "FR76 9476 2577 5182 8374 2967 866"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7694762577518283742967866"
+    },
+    {
+     "mode": "compact",
+     "text": "94762577518283742967866"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "16-003",
+   "type": "CARTE",
+   "direct": true,
+   "value": "5132199930974746",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "5132 1999 3097 4746"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "5132199930974746"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "16-004",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "8 quai des Mariniers-d'Antan, 33000 Bordeaux",
+   "where": [
+    "zone de texte sur deux lignes"
+   ],
+   "surfaces": [
+    "8 quai des Mariniers-d'Antan",
+    "33000 Bordeaux"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "8 quai des Mariniers-d'Antan"
+    },
+    {
+     "mode": "text",
+     "text": "quai des Mariniers-d'Antan"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "16-005",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1984-12-24",
+   "where": [
+    "page 2"
+   ],
+   "surfaces": [
+    "24/12/1984"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "12/24/1984"
+    },
+    {
+     "mode": "text",
+     "text": "1984-12-24"
+    },
+    {
+     "mode": "text",
+     "text": "24 December 1984"
+    },
+    {
+     "mode": "text",
+     "text": "24 décembre 1984"
+    },
+    {
+     "mode": "text",
+     "text": "24/12/1984"
+    },
+    {
+     "mode": "text",
+     "text": "24/12/84"
+    },
+    {
+     "mode": "text",
+     "text": "24121984"
+    },
+    {
+     "mode": "text",
+     "text": "December 24, 1984"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "16-006",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639987809",
+   "where": [
+    "page 2"
+   ],
+   "surfaces": [
+    "+33 6 39 98 78 09"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639987809"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "16-007",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "SM-244-QB",
+   "where": [
+    "page 2"
+   ],
+   "surfaces": [
+    "SM-244-QB"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "sm244qb"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "16-008",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Thi Lan Nguyen",
+   "where": [
+    "deux polices sur une ligne, annotation, auteur, XMP"
+   ],
+   "surfaces": [
+    "Thi Lan Nguyen",
+    "Thi Lan"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Thi Lan Nguyen"
+    },
+    {
+     "mode": "text",
+     "text": "Nguyen Thi Lan"
+    },
+    {
+     "mode": "text",
+     "text": "Nguyen"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Thi Lan"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "16-009",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "tl.nguyen@exemple.test",
+   "where": [
+    "corps, lien, mots-clés"
+   ],
+   "surfaces": [
+    "tl.nguyen@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "tl.nguyen@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "tl.nguyen@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [],
+ "images": {}
+}

@@ -1,0 +1,482 @@
+{
+ "slug": "08_mbox_boite",
+ "format": "mbox",
+ "description": "Boîte mbox de trois messages (QP, base64, pièce jointe CSV)",
+ "files": [
+  "boite.mbox"
+ ],
+ "entries": [
+  {
+   "id": "08-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Agathe Rousseau",
+   "where": [
+    "From, ligne From mbox, corps (« From the desk of », ligne échappée >From)"
+   ],
+   "surfaces": [
+    "Agathe Rousseau",
+    "Maître Rousseau",
+    "Agathe"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Agathe Rousseau"
+    },
+    {
+     "mode": "text",
+     "text": "Rousseau Agathe"
+    },
+    {
+     "mode": "text",
+     "text": "Rousseau"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Agathe"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "08-002",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "agathe.rousseau@exemple.test",
+   "where": [
+    "From, séparateur mbox"
+   ],
+   "surfaces": [
+    "agathe.rousseau@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "agathe.rousseau@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "agathe.rousseau@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-003",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7626774948594371797620829",
+   "where": [
+    "corps QP"
+   ],
+   "surfaces": [
+    "FR76 2677 4948 5943 7179 7620 829"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7626774948594371797620829"
+    },
+    {
+     "mode": "compact",
+     "text": "26774948594371797620829"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-004",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "avocate",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "avocate"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "avocate"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-005",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Quentin Morel",
+   "where": [
+    "To, From, signature initiale"
+   ],
+   "surfaces": [
+    "Quentin Morel",
+    "Q. Morel",
+    "Quentin"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Quentin Morel"
+    },
+    {
+     "mode": "text",
+     "text": "Morel Quentin"
+    },
+    {
+     "mode": "text",
+     "text": "Morel"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Quentin"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "08-006",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "quentin.morel@exemple.test",
+   "where": [
+    "To, From, séparateur mbox"
+   ],
+   "surfaces": [
+    "quentin.morel@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "quentin.morel@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "quentin.morel@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-007",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Noémie Faure",
+   "where": [
+    "To, From"
+   ],
+   "surfaces": [
+    "Noémie Faure",
+    "Noémie"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Noémie Faure"
+    },
+    {
+     "mode": "text",
+     "text": "Faure Noémie"
+    },
+    {
+     "mode": "text",
+     "text": "Faure"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Noémie"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "08-008",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "noemie.faure@exemple.test",
+   "where": [
+    "From, séparateur mbox"
+   ],
+   "surfaces": [
+    "noemie.faure@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "noemie.faure@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "noemie.faure@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-009",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639982412",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "+33 6 39 98 24 12"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639982412"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-010",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Mathis Lambert",
+   "where": [
+    "CSV joint (base64), objet, corps"
+   ],
+   "surfaces": [
+    "Lambert",
+    "Mathis",
+    "Mathis Lambert",
+    "Mathis LAMBERT"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Mathis Lambert"
+    },
+    {
+     "mode": "text",
+     "text": "Lambert Mathis"
+    },
+    {
+     "mode": "text",
+     "text": "Lambert"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Mathis"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "08-011",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "2001-04-04",
+   "where": [
+    "CSV joint"
+   ],
+   "surfaces": [
+    "04/04/2001"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "04/04/01"
+    },
+    {
+     "mode": "text",
+     "text": "04/04/2001"
+    },
+    {
+     "mode": "text",
+     "text": "04042001"
+    },
+    {
+     "mode": "text",
+     "text": "2001-04-04"
+    },
+    {
+     "mode": "text",
+     "text": "4 April 2001"
+    },
+    {
+     "mode": "text",
+     "text": "4 avril 2001"
+    },
+    {
+     "mode": "text",
+     "text": "4/4/2001"
+    },
+    {
+     "mode": "text",
+     "text": "April 4, 2001"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-012",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639981703",
+   "where": [
+    "CSV joint"
+   ],
+   "surfaces": [
+    "0639981703"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639981703"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-013",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "mlambert",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "mlambert"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "mlambert"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-014",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Gaëtan Mercier",
+   "where": [
+    "CSV joint"
+   ],
+   "surfaces": [
+    "Mercier",
+    "Gaëtan"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Gaëtan Mercier"
+    },
+    {
+     "mode": "text",
+     "text": "Mercier Gaëtan"
+    },
+    {
+     "mode": "word",
+     "text": "Mercier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Gaëtan"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "08-015",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1978-10-31",
+   "where": [
+    "CSV joint"
+   ],
+   "surfaces": [
+    "31/10/1978"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "10/31/1978"
+    },
+    {
+     "mode": "text",
+     "text": "1978-10-31"
+    },
+    {
+     "mode": "text",
+     "text": "31 October 1978"
+    },
+    {
+     "mode": "text",
+     "text": "31 octobre 1978"
+    },
+    {
+     "mode": "text",
+     "text": "31/10/1978"
+    },
+    {
+     "mode": "text",
+     "text": "31/10/78"
+    },
+    {
+     "mode": "text",
+     "text": "31101978"
+    },
+    {
+     "mode": "text",
+     "text": "October 31, 1978"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "08-016",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639988099",
+   "where": [
+    "CSV joint"
+   ],
+   "surfaces": [
+    "06 39 98 80 99"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639988099"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Le comité se réunira le 12 mars 2026 à 14 h 30 en salle Bleue."
+ ],
+ "images": {}
+}

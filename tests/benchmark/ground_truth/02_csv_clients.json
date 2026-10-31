@@ -1,0 +1,2650 @@
+{
+ "slug": "02_csv_clients",
+ "format": "csv",
+ "description": "Export clients (CSV ; UTF-8 BOM, champs multilignes)",
+ "files": [
+  "clients.csv"
+ ],
+ "entries": [
+  {
+   "id": "02-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Éloïse Ravier",
+   "where": [
+    "ligne 1"
+   ],
+   "surfaces": [
+    "RAVIER",
+    "Eloise",
+    "Mme Ravier",
+    "Éloïse"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Éloïse Ravier"
+    },
+    {
+     "mode": "text",
+     "text": "Ravier Éloïse"
+    },
+    {
+     "mode": "text",
+     "text": "Ravier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Éloïse"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-002",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1958-09-02",
+   "where": [
+    "ligne 1"
+   ],
+   "surfaces": [
+    "1958-09-02"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "02/09/1958"
+    },
+    {
+     "mode": "text",
+     "text": "02/09/58"
+    },
+    {
+     "mode": "text",
+     "text": "02091958"
+    },
+    {
+     "mode": "text",
+     "text": "09/02/1958"
+    },
+    {
+     "mode": "text",
+     "text": "1958-09-02"
+    },
+    {
+     "mode": "text",
+     "text": "2 September 1958"
+    },
+    {
+     "mode": "text",
+     "text": "2 septembre 1958"
+    },
+    {
+     "mode": "text",
+     "text": "2/9/1958"
+    },
+    {
+     "mode": "text",
+     "text": "September 2, 1958"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-003",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "eloise.ravier@exemple.test",
+   "where": [
+    "ligne 1"
+   ],
+   "surfaces": [
+    "eloise.ravier@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "eloise.ravier@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "eloise.ravier@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-004",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639980726",
+   "where": [
+    "ligne 1"
+   ],
+   "surfaces": [
+    "06 39 98 07 26"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639980726"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-005",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7667404759089541723112639",
+   "where": [
+    "ligne 1"
+   ],
+   "surfaces": [
+    "FR76 6740 4759 0895 4172 3112 639"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7667404759089541723112639"
+    },
+    {
+     "mode": "compact",
+     "text": "67404759089541723112639"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-006",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "98 rue des Tilleuls-Argentés, 72000 Le Mans",
+   "where": [
+    "ligne 1"
+   ],
+   "surfaces": [
+    "98 rue des Tilleuls-Argentés"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "98 rue des Tilleuls-Argentés"
+    },
+    {
+     "mode": "text",
+     "text": "rue des Tilleuls-Argentés"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-007",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Le Mans",
+   "where": [
+    "ligne 1"
+   ],
+   "surfaces": [
+    "Le Mans"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Le Mans"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-008",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "VF-208-CD",
+   "where": [
+    "ligne 1"
+   ],
+   "surfaces": [
+    "VF-208-CD"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "vf208cd"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-009",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Bastien Tessier",
+   "where": [
+    "ligne 2"
+   ],
+   "surfaces": [
+    "TESSIER",
+    "Bastien",
+    "M. Tessier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Bastien Tessier"
+    },
+    {
+     "mode": "text",
+     "text": "Tessier Bastien"
+    },
+    {
+     "mode": "text",
+     "text": "Tessier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Bastien"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-010",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1975-03-10",
+   "where": [
+    "ligne 2"
+   ],
+   "surfaces": [
+    "10/03/1975"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "03/10/1975"
+    },
+    {
+     "mode": "text",
+     "text": "10 March 1975"
+    },
+    {
+     "mode": "text",
+     "text": "10 mars 1975"
+    },
+    {
+     "mode": "text",
+     "text": "10/03/1975"
+    },
+    {
+     "mode": "text",
+     "text": "10/03/75"
+    },
+    {
+     "mode": "text",
+     "text": "10/3/1975"
+    },
+    {
+     "mode": "text",
+     "text": "10031975"
+    },
+    {
+     "mode": "text",
+     "text": "1975-03-10"
+    },
+    {
+     "mode": "text",
+     "text": "March 10, 1975"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-011",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "bastien.tessier@exemple.test",
+   "where": [
+    "ligne 2"
+   ],
+   "surfaces": [
+    "bastien.tessier@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "bastien.tessier@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "bastien.tessier@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-012",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639983589",
+   "where": [
+    "ligne 2"
+   ],
+   "surfaces": [
+    "06.39.98.35.89"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639983589"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-013",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7661574610181435949692323",
+   "where": [
+    "ligne 2"
+   ],
+   "surfaces": [
+    "FR7661574610181435949692323"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7661574610181435949692323"
+    },
+    {
+     "mode": "compact",
+     "text": "61574610181435949692323"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-014",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "28 allée des Sorbiers, 17000 La Rochelle",
+   "where": [
+    "ligne 2"
+   ],
+   "surfaces": [
+    "28 allée des Sorbiers"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "28 allée des Sorbiers"
+    },
+    {
+     "mode": "text",
+     "text": "allée des Sorbiers"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-015",
+   "type": "LIEU",
+   "direct": false,
+   "value": "La Rochelle",
+   "where": [
+    "ligne 2"
+   ],
+   "surfaces": [
+    "La Rochelle"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "La Rochelle"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-016",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "JG-390-QD",
+   "where": [
+    "ligne 2"
+   ],
+   "surfaces": [
+    "JG-390-QD"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "jg390qd"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-017",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Margaux Lebrun",
+   "where": [
+    "ligne 3"
+   ],
+   "surfaces": [
+    "LEBRUN",
+    "Margaux",
+    "Mme Lebrun"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Margaux Lebrun"
+    },
+    {
+     "mode": "text",
+     "text": "Lebrun Margaux"
+    },
+    {
+     "mode": "word",
+     "text": "Lebrun"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Margaux"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-018",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1956-02-05",
+   "where": [
+    "ligne 3"
+   ],
+   "surfaces": [
+    "1956-02-05"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "02/05/1956"
+    },
+    {
+     "mode": "text",
+     "text": "05/02/1956"
+    },
+    {
+     "mode": "text",
+     "text": "05/02/56"
+    },
+    {
+     "mode": "text",
+     "text": "05021956"
+    },
+    {
+     "mode": "text",
+     "text": "1956-02-05"
+    },
+    {
+     "mode": "text",
+     "text": "5 February 1956"
+    },
+    {
+     "mode": "text",
+     "text": "5 février 1956"
+    },
+    {
+     "mode": "text",
+     "text": "5/2/1956"
+    },
+    {
+     "mode": "text",
+     "text": "February 5, 1956"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-019",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "margaux.lebrun@exemple.test",
+   "where": [
+    "ligne 3"
+   ],
+   "surfaces": [
+    "margaux.lebrun@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "margaux.lebrun@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "margaux.lebrun@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-020",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639981871",
+   "where": [
+    "ligne 3"
+   ],
+   "surfaces": [
+    "0639981871"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639981871"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-021",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7646582336560570485616579",
+   "where": [
+    "ligne 3"
+   ],
+   "surfaces": [
+    "FR76-4658-2336-5605-7048-5616-579"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7646582336560570485616579"
+    },
+    {
+     "mode": "compact",
+     "text": "46582336560570485616579"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-022",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "9 rue du Pont-Levis, 56100 Lorient",
+   "where": [
+    "ligne 3"
+   ],
+   "surfaces": [
+    "9 rue du Pont-Levis"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "9 rue du Pont-Levis"
+    },
+    {
+     "mode": "text",
+     "text": "rue du Pont-Levis"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-023",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Lorient",
+   "where": [
+    "ligne 3"
+   ],
+   "surfaces": [
+    "Lorient"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Lorient"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-024",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "EB-609-YP",
+   "where": [
+    "ligne 3"
+   ],
+   "surfaces": [
+    "EB-609-YP"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "eb609yp"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-025",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Thibault Charpentier",
+   "where": [
+    "ligne 4"
+   ],
+   "surfaces": [
+    "CHARPENTIER",
+    "Thibault",
+    "M. Charpentier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Thibault Charpentier"
+    },
+    {
+     "mode": "text",
+     "text": "Charpentier Thibault"
+    },
+    {
+     "mode": "text",
+     "text": "Charpentier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Thibault"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-026",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1951-07-01",
+   "where": [
+    "ligne 4"
+   ],
+   "surfaces": [
+    "01/07/1951"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "01/07/1951"
+    },
+    {
+     "mode": "text",
+     "text": "01/07/51"
+    },
+    {
+     "mode": "text",
+     "text": "01071951"
+    },
+    {
+     "mode": "text",
+     "text": "07/01/1951"
+    },
+    {
+     "mode": "text",
+     "text": "1 July 1951"
+    },
+    {
+     "mode": "text",
+     "text": "1 juillet 1951"
+    },
+    {
+     "mode": "text",
+     "text": "1/7/1951"
+    },
+    {
+     "mode": "text",
+     "text": "1951-07-01"
+    },
+    {
+     "mode": "text",
+     "text": "1er juillet 1951"
+    },
+    {
+     "mode": "text",
+     "text": "July 1, 1951"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-027",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "thibault.charpentier@exemple.test",
+   "where": [
+    "ligne 4"
+   ],
+   "surfaces": [
+    "thibault.charpentier@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "thibault.charpentier@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "thibault.charpentier@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-028",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639981165",
+   "where": [
+    "ligne 4"
+   ],
+   "surfaces": [
+    "+33 6 39 98 11 65"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639981165"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-029",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7663662185709049044217354",
+   "where": [
+    "ligne 4"
+   ],
+   "surfaces": [
+    "fr76 6366 2185 7090 4904 4217 354"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7663662185709049044217354"
+    },
+    {
+     "mode": "compact",
+     "text": "63662185709049044217354"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-030",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "115 avenue des Acacias, 64000 Pau",
+   "where": [
+    "ligne 4"
+   ],
+   "surfaces": [
+    "115 avenue des Acacias"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "115 avenue des Acacias"
+    },
+    {
+     "mode": "text",
+     "text": "avenue des Acacias"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-031",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Pau",
+   "where": [
+    "ligne 4"
+   ],
+   "surfaces": [
+    "Pau"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Pau"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-032",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "XH-643-YW",
+   "where": [
+    "ligne 4"
+   ],
+   "surfaces": [
+    "XH-643-YW"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "xh643yw"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-033",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Léonie Guillot",
+   "where": [
+    "ligne 5"
+   ],
+   "surfaces": [
+    "GUILLOT",
+    "Léonie",
+    "Mme Guillot"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Léonie Guillot"
+    },
+    {
+     "mode": "text",
+     "text": "Guillot Léonie"
+    },
+    {
+     "mode": "text",
+     "text": "Guillot"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Léonie"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-034",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1975-09-12",
+   "where": [
+    "ligne 5"
+   ],
+   "surfaces": [
+    "1975-09-12"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "09/12/1975"
+    },
+    {
+     "mode": "text",
+     "text": "12 September 1975"
+    },
+    {
+     "mode": "text",
+     "text": "12 septembre 1975"
+    },
+    {
+     "mode": "text",
+     "text": "12/09/1975"
+    },
+    {
+     "mode": "text",
+     "text": "12/09/75"
+    },
+    {
+     "mode": "text",
+     "text": "12/9/1975"
+    },
+    {
+     "mode": "text",
+     "text": "12091975"
+    },
+    {
+     "mode": "text",
+     "text": "1975-09-12"
+    },
+    {
+     "mode": "text",
+     "text": "September 12, 1975"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-035",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "leonie.guillot@exemple.test",
+   "where": [
+    "ligne 5"
+   ],
+   "surfaces": [
+    "leonie.guillot@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "leonie.guillot@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "leonie.guillot@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-036",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639984800",
+   "where": [
+    "ligne 5"
+   ],
+   "surfaces": [
+    "06-39-98-48-00"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639984800"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-037",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7619631901405427723107028",
+   "where": [
+    "ligne 5"
+   ],
+   "surfaces": [
+    "FR76 19631 90140 54277231070 28"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7619631901405427723107028"
+    },
+    {
+     "mode": "compact",
+     "text": "19631901405427723107028"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-038",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "16 impasse des Ajoncs, 66000 Perpignan",
+   "where": [
+    "ligne 5"
+   ],
+   "surfaces": [
+    "16 impasse des Ajoncs"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "16 impasse des Ajoncs"
+    },
+    {
+     "mode": "text",
+     "text": "impasse des Ajoncs"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-039",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Perpignan",
+   "where": [
+    "ligne 5"
+   ],
+   "surfaces": [
+    "Perpignan"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Perpignan"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-040",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "TA-466-DY",
+   "where": [
+    "ligne 5"
+   ],
+   "surfaces": [
+    "TA-466-DY"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "ta466dy"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-041",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Corentin Poirier",
+   "where": [
+    "ligne 6"
+   ],
+   "surfaces": [
+    "POIRIER",
+    "Corentin",
+    "M. Poirier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Corentin Poirier"
+    },
+    {
+     "mode": "text",
+     "text": "Poirier Corentin"
+    },
+    {
+     "mode": "text",
+     "text": "Poirier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Corentin"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-042",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1969-09-14",
+   "where": [
+    "ligne 6"
+   ],
+   "surfaces": [
+    "14/09/1969"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "09/14/1969"
+    },
+    {
+     "mode": "text",
+     "text": "14 September 1969"
+    },
+    {
+     "mode": "text",
+     "text": "14 septembre 1969"
+    },
+    {
+     "mode": "text",
+     "text": "14/09/1969"
+    },
+    {
+     "mode": "text",
+     "text": "14/09/69"
+    },
+    {
+     "mode": "text",
+     "text": "14/9/1969"
+    },
+    {
+     "mode": "text",
+     "text": "14091969"
+    },
+    {
+     "mode": "text",
+     "text": "1969-09-14"
+    },
+    {
+     "mode": "text",
+     "text": "September 14, 1969"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-043",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "corentin.poirier@exemple.test",
+   "where": [
+    "ligne 6"
+   ],
+   "surfaces": [
+    "corentin.poirier@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "corentin.poirier@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "corentin.poirier@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-044",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639982070",
+   "where": [
+    "ligne 6"
+   ],
+   "surfaces": [
+    "0033 6 39 98 20 70"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639982070"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-045",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7601661181926675888847967",
+   "where": [
+    "ligne 6"
+   ],
+   "surfaces": [
+    "FR76  0166  1181  9266  7588  8847  967"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7601661181926675888847967"
+    },
+    {
+     "mode": "compact",
+     "text": "01661181926675888847967"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-046",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "17 rue de la Forge-Neuve, 68100 Mulhouse",
+   "where": [
+    "ligne 6"
+   ],
+   "surfaces": [
+    "17 rue de la Forge-Neuve"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "17 rue de la Forge-Neuve"
+    },
+    {
+     "mode": "text",
+     "text": "rue de la Forge-Neuve"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-047",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Mulhouse",
+   "where": [
+    "ligne 6"
+   ],
+   "surfaces": [
+    "Mulhouse"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Mulhouse"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-048",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "QZ-738-VR",
+   "where": [
+    "ligne 6"
+   ],
+   "surfaces": [
+    "QZ-738-VR"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "qz738vr"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-049",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Apolline Barbier",
+   "where": [
+    "ligne 7"
+   ],
+   "surfaces": [
+    "BARBIER",
+    "Apolline",
+    "Mme Barbier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Apolline Barbier"
+    },
+    {
+     "mode": "text",
+     "text": "Barbier Apolline"
+    },
+    {
+     "mode": "text",
+     "text": "Barbier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Apolline"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-050",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1985-09-01",
+   "where": [
+    "ligne 7"
+   ],
+   "surfaces": [
+    "1985-09-01"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "01/09/1985"
+    },
+    {
+     "mode": "text",
+     "text": "01/09/85"
+    },
+    {
+     "mode": "text",
+     "text": "01091985"
+    },
+    {
+     "mode": "text",
+     "text": "09/01/1985"
+    },
+    {
+     "mode": "text",
+     "text": "1 September 1985"
+    },
+    {
+     "mode": "text",
+     "text": "1 septembre 1985"
+    },
+    {
+     "mode": "text",
+     "text": "1/9/1985"
+    },
+    {
+     "mode": "text",
+     "text": "1985-09-01"
+    },
+    {
+     "mode": "text",
+     "text": "1er septembre 1985"
+    },
+    {
+     "mode": "text",
+     "text": "September 1, 1985"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-051",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "apolline.barbier@exemple.test",
+   "where": [
+    "ligne 7"
+   ],
+   "surfaces": [
+    "apolline.barbier@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "apolline.barbier@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "apolline.barbier@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-052",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639982946",
+   "where": [
+    "ligne 7"
+   ],
+   "surfaces": [
+    "06 3998 2946"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639982946"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-053",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7609657682624235143226130",
+   "where": [
+    "ligne 7"
+   ],
+   "surfaces": [
+    "FR76 0965 7682 6242 3514 3226 130"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7609657682624235143226130"
+    },
+    {
+     "mode": "compact",
+     "text": "09657682624235143226130"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-054",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "25 chemin du Bois-Joli, 03100 Montluçon",
+   "where": [
+    "ligne 7"
+   ],
+   "surfaces": [
+    "25 chemin du Bois-Joli"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "25 chemin du Bois-Joli"
+    },
+    {
+     "mode": "text",
+     "text": "chemin du Bois-Joli"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-055",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Montluçon",
+   "where": [
+    "ligne 7"
+   ],
+   "surfaces": [
+    "Montluçon"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Montluçon"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-056",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "BN-435-DP",
+   "where": [
+    "ligne 7"
+   ],
+   "surfaces": [
+    "BN-435-DP"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "bn435dp"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-057",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Maxence Leclerc",
+   "where": [
+    "ligne 8"
+   ],
+   "surfaces": [
+    "LECLERC",
+    "Maxence",
+    "M. Leclerc"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Maxence Leclerc"
+    },
+    {
+     "mode": "text",
+     "text": "Leclerc Maxence"
+    },
+    {
+     "mode": "text",
+     "text": "Leclerc"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Maxence"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-058",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1999-01-10",
+   "where": [
+    "ligne 8"
+   ],
+   "surfaces": [
+    "10/01/1999"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "01/10/1999"
+    },
+    {
+     "mode": "text",
+     "text": "10 January 1999"
+    },
+    {
+     "mode": "text",
+     "text": "10 janvier 1999"
+    },
+    {
+     "mode": "text",
+     "text": "10/01/1999"
+    },
+    {
+     "mode": "text",
+     "text": "10/01/99"
+    },
+    {
+     "mode": "text",
+     "text": "10/1/1999"
+    },
+    {
+     "mode": "text",
+     "text": "10011999"
+    },
+    {
+     "mode": "text",
+     "text": "1999-01-10"
+    },
+    {
+     "mode": "text",
+     "text": "January 10, 1999"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-059",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "maxence.leclerc@exemple.test",
+   "where": [
+    "ligne 8"
+   ],
+   "surfaces": [
+    "maxence.leclerc@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "maxence.leclerc@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "maxence.leclerc@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-060",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639985508",
+   "where": [
+    "ligne 8"
+   ],
+   "surfaces": [
+    "06/39/98/55/08"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639985508"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-061",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7612998920352637355040901",
+   "where": [
+    "ligne 8"
+   ],
+   "surfaces": [
+    "FR7612998920352637355040901"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7612998920352637355040901"
+    },
+    {
+     "mode": "compact",
+     "text": "12998920352637355040901"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-062",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "83 rue des Halles-Basses, 41000 Blois",
+   "where": [
+    "ligne 8"
+   ],
+   "surfaces": [
+    "83 rue des Halles-Basses"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "83 rue des Halles-Basses"
+    },
+    {
+     "mode": "text",
+     "text": "rue des Halles-Basses"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-063",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Blois",
+   "where": [
+    "ligne 8"
+   ],
+   "surfaces": [
+    "Blois"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Blois"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-064",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "KM-325-BS",
+   "where": [
+    "ligne 8"
+   ],
+   "surfaces": [
+    "KM-325-BS"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "km325bs"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-065",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Clémence Hamelin",
+   "where": [
+    "ligne 9"
+   ],
+   "surfaces": [
+    "HAMELIN",
+    "Clémence",
+    "Mme Hamelin"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Clémence Hamelin"
+    },
+    {
+     "mode": "text",
+     "text": "Hamelin Clémence"
+    },
+    {
+     "mode": "text",
+     "text": "Hamelin"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Clémence"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-066",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1979-05-07",
+   "where": [
+    "ligne 9"
+   ],
+   "surfaces": [
+    "1979-05-07"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "05/07/1979"
+    },
+    {
+     "mode": "text",
+     "text": "07/05/1979"
+    },
+    {
+     "mode": "text",
+     "text": "07/05/79"
+    },
+    {
+     "mode": "text",
+     "text": "07051979"
+    },
+    {
+     "mode": "text",
+     "text": "1979-05-07"
+    },
+    {
+     "mode": "text",
+     "text": "7 May 1979"
+    },
+    {
+     "mode": "text",
+     "text": "7 mai 1979"
+    },
+    {
+     "mode": "text",
+     "text": "7/5/1979"
+    },
+    {
+     "mode": "text",
+     "text": "May 7, 1979"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-067",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "clemence.hamelin@exemple.test",
+   "where": [
+    "ligne 9"
+   ],
+   "surfaces": [
+    "clemence.hamelin@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "clemence.hamelin@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "clemence.hamelin@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-068",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639989348",
+   "where": [
+    "ligne 9"
+   ],
+   "surfaces": [
+    "06 39 98 93 48"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639989348"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-069",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7637831748521431842211370",
+   "where": [
+    "ligne 9"
+   ],
+   "surfaces": [
+    "FR76-3783-1748-5214-3184-2211-370"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7637831748521431842211370"
+    },
+    {
+     "mode": "compact",
+     "text": "37831748521431842211370"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-070",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "63 place de la Halle-aux-Grains, 62000 Arras",
+   "where": [
+    "ligne 9"
+   ],
+   "surfaces": [
+    "63 place de la Halle-aux-Grains"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "63 place de la Halle-aux-Grains"
+    },
+    {
+     "mode": "text",
+     "text": "place de la Halle-aux-Grains"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-071",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Arras",
+   "where": [
+    "ligne 9"
+   ],
+   "surfaces": [
+    "Arras"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Arras"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-072",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "QE-244-CM",
+   "where": [
+    "ligne 9"
+   ],
+   "surfaces": [
+    "QE-244-CM"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "qe244cm"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-073",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Hugo Joubert",
+   "where": [
+    "ligne 10"
+   ],
+   "surfaces": [
+    "JOUBERT",
+    "Hugo",
+    "M. Joubert"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Hugo Joubert"
+    },
+    {
+     "mode": "text",
+     "text": "Joubert Hugo"
+    },
+    {
+     "mode": "text",
+     "text": "Joubert"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Hugo"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-074",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1953-05-14",
+   "where": [
+    "ligne 10"
+   ],
+   "surfaces": [
+    "14/05/1953"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "05/14/1953"
+    },
+    {
+     "mode": "text",
+     "text": "14 May 1953"
+    },
+    {
+     "mode": "text",
+     "text": "14 mai 1953"
+    },
+    {
+     "mode": "text",
+     "text": "14/05/1953"
+    },
+    {
+     "mode": "text",
+     "text": "14/05/53"
+    },
+    {
+     "mode": "text",
+     "text": "14/5/1953"
+    },
+    {
+     "mode": "text",
+     "text": "14051953"
+    },
+    {
+     "mode": "text",
+     "text": "1953-05-14"
+    },
+    {
+     "mode": "text",
+     "text": "May 14, 1953"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-075",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "hugo.joubert@exemple.test",
+   "where": [
+    "ligne 10"
+   ],
+   "surfaces": [
+    "hugo.joubert@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "hugo.joubert@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "hugo.joubert@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-076",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639982915",
+   "where": [
+    "ligne 10"
+   ],
+   "surfaces": [
+    "06.39.98.29.15"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639982915"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-077",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7676830162674521404592170",
+   "where": [
+    "ligne 10"
+   ],
+   "surfaces": [
+    "fr76 7683 0162 6745 2140 4592 170"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7676830162674521404592170"
+    },
+    {
+     "mode": "compact",
+     "text": "76830162674521404592170"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-078",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "75 rue des Lavandières, 16000 Angoulême",
+   "where": [
+    "ligne 10"
+   ],
+   "surfaces": [
+    "75 rue des Lavandières"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "75 rue des Lavandières"
+    },
+    {
+     "mode": "text",
+     "text": "rue des Lavandières"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-079",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Angoulême",
+   "where": [
+    "ligne 10"
+   ],
+   "surfaces": [
+    "Angoulême"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Angoulême"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-080",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "HE-460-BH",
+   "where": [
+    "ligne 10"
+   ],
+   "surfaces": [
+    "HE-460-BH"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "he460bh"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-081",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Jeanne Royer",
+   "where": [
+    "ligne 11"
+   ],
+   "surfaces": [
+    "ROYER",
+    "Jeanne",
+    "Mme Royer"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Jeanne Royer"
+    },
+    {
+     "mode": "text",
+     "text": "Royer Jeanne"
+    },
+    {
+     "mode": "text",
+     "text": "Royer"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Jeanne"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-082",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1967-10-14",
+   "where": [
+    "ligne 11"
+   ],
+   "surfaces": [
+    "1967-10-14"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "10/14/1967"
+    },
+    {
+     "mode": "text",
+     "text": "14 October 1967"
+    },
+    {
+     "mode": "text",
+     "text": "14 octobre 1967"
+    },
+    {
+     "mode": "text",
+     "text": "14/10/1967"
+    },
+    {
+     "mode": "text",
+     "text": "14/10/67"
+    },
+    {
+     "mode": "text",
+     "text": "14101967"
+    },
+    {
+     "mode": "text",
+     "text": "1967-10-14"
+    },
+    {
+     "mode": "text",
+     "text": "October 14, 1967"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-083",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "jeanne.royer@exemple.test",
+   "where": [
+    "ligne 11"
+   ],
+   "surfaces": [
+    "jeanne.royer@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "jeanne.royer@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "jeanne.royer@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-084",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639987664",
+   "where": [
+    "ligne 11"
+   ],
+   "surfaces": [
+    "0639987664"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639987664"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-085",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7697836437037575871881551",
+   "where": [
+    "ligne 11"
+   ],
+   "surfaces": [
+    "FR76 97836 43703 75758718815 51"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7697836437037575871881551"
+    },
+    {
+     "mode": "compact",
+     "text": "97836437037575871881551"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-086",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "114 boulevard des Platanes, 71100 Chalon-sur-Saône",
+   "where": [
+    "ligne 11"
+   ],
+   "surfaces": [
+    "114 boulevard des Platanes"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "114 boulevard des Platanes"
+    },
+    {
+     "mode": "text",
+     "text": "boulevard des Platanes"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-087",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Chalon-sur-Saône",
+   "where": [
+    "ligne 11"
+   ],
+   "surfaces": [
+    "Chalon-sur-Saône"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Chalon-sur-Saône"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-088",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "AG-846-MT",
+   "where": [
+    "ligne 11"
+   ],
+   "surfaces": [
+    "AG-846-MT"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "ag846mt"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-089",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Valentin Lemaire",
+   "where": [
+    "ligne 12"
+   ],
+   "surfaces": [
+    "LEMAIRE",
+    "Valentin",
+    "M. Lemaire"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Valentin Lemaire"
+    },
+    {
+     "mode": "text",
+     "text": "Lemaire Valentin"
+    },
+    {
+     "mode": "text",
+     "text": "Lemaire"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Valentin"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "02-090",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1984-02-14",
+   "where": [
+    "ligne 12"
+   ],
+   "surfaces": [
+    "14/02/1984"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "02/14/1984"
+    },
+    {
+     "mode": "text",
+     "text": "14 February 1984"
+    },
+    {
+     "mode": "text",
+     "text": "14 février 1984"
+    },
+    {
+     "mode": "text",
+     "text": "14/02/1984"
+    },
+    {
+     "mode": "text",
+     "text": "14/02/84"
+    },
+    {
+     "mode": "text",
+     "text": "14/2/1984"
+    },
+    {
+     "mode": "text",
+     "text": "14021984"
+    },
+    {
+     "mode": "text",
+     "text": "1984-02-14"
+    },
+    {
+     "mode": "text",
+     "text": "February 14, 1984"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-091",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "valentin.lemaire@exemple.test",
+   "where": [
+    "ligne 12"
+   ],
+   "surfaces": [
+    "valentin.lemaire@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "valentin.lemaire@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "valentin.lemaire@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-092",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639981472",
+   "where": [
+    "ligne 12"
+   ],
+   "surfaces": [
+    "+33 6 39 98 14 72"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639981472"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-093",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7671641130216729155719955",
+   "where": [
+    "ligne 12"
+   ],
+   "surfaces": [
+    "FR76  7164  1130  2167  2915  5719  955"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7671641130216729155719955"
+    },
+    {
+     "mode": "compact",
+     "text": "71641130216729155719955"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-094",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "12 rue Saint-Roch-des-Champs, 18000 Bourges",
+   "where": [
+    "ligne 12"
+   ],
+   "surfaces": [
+    "12 rue Saint-Roch-des-Champs"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "12 rue Saint-Roch-des-Champs"
+    },
+    {
+     "mode": "text",
+     "text": "rue Saint-Roch-des-Champs"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-095",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Bourges",
+   "where": [
+    "ligne 12"
+   ],
+   "surfaces": [
+    "Bourges"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Bourges"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "02-096",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "NV-565-DM",
+   "where": [
+    "ligne 12"
+   ],
+   "surfaces": [
+    "NV-565-DM"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "nv565dm"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Un martin-pêcheur a été aperçu près de la fontaine du parc municipal.",
+  "Le montant total s'élève à 1 250,00 euros hors taxes pour l'ensemble des prestations.",
+  "Le marchand de journaux ferme le dimanche après-midi.",
+  "Le petit-déjeuner sera servi à partir de sept heures dans la salle du rez-de-chaussée."
+ ],
+ "images": {}
+}

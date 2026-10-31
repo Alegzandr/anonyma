@@ -1,0 +1,106 @@
+{
+ "slug": "23_txt_temoins",
+ "format": "txt",
+ "description": "Témoin négatif : texte ordinaire avec mots courants homonymes de noms (petit, boucher, martin-pêcheur...), villes, dates de réunion",
+ "files": [
+  "notes_internes.txt"
+ ],
+ "entries": [
+  {
+   "id": "23-001",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Lyon",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Lyon"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Lyon"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "23-002",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Vienne",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Vienne"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Vienne"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "23-003",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Paris",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Paris"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Paris"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "23-004",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Isère",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Isère"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Isère"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "La réunion budgétaire du comité de direction est reportée au trimestre prochain.",
+  "Le petit-déjeuner sera servi à partir de sept heures dans la salle du rez-de-chaussée.",
+  "Un martin-pêcheur a été aperçu près de la fontaine du parc municipal.",
+  "Le boucher du marché couvert propose désormais des produits bio.",
+  "Merci de noter que le chevalier blanc reste une figure de style dans ce rapport.",
+  "Le montant total s'élève à 1 250,00 euros hors taxes pour l'ensemble des prestations.",
+  "Conformément à l'article L. 1234-5 du Code du travail, le préavis est de deux mois.",
+  "La version 2.3.1 du logiciel corrige le problème signalé à la page 12 du manuel.",
+  "Le marchand de journaux ferme le dimanche après-midi.",
+  "Le comité se réunira le 12 mars 2026 à 14 h 30 en salle Bleue.",
+  "Prévoir un petit budget pour le traiteur",
+  "Le blanc d'œuf et le vin blanc sont commandés chez le marchand habituel.",
+  "Le chevalier servant de la pièce de théâtre sera joué par un comédien amateur."
+ ],
+ "images": {}
+}

@@ -1,0 +1,261 @@
+{
+ "slug": "18_png_capture",
+ "format": "png",
+ "description": "Capture d'écran d'un formulaire (PNG, métadonnées tEXt)",
+ "files": [
+  "capture_formulaire.png"
+ ],
+ "entries": [
+  {
+   "id": "18-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Firmin Delacroix-Vasseur",
+   "where": [
+    "image, métadonnées PNG"
+   ],
+   "surfaces": [
+    "Firmin Delacroix-Vasseur",
+    "Firmin"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Firmin Delacroix-Vasseur"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix-Vasseur Firmin"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix-Vasseur"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix"
+    },
+    {
+     "mode": "text",
+     "text": "Vasseur"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Firmin"
+    }
+   ],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.2164,
+      0.2214,
+      0.4454,
+      0.2679
+     ]
+    }
+   ]
+  },
+  {
+   "id": "18-002",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "firmin.dv@exemple.test",
+   "where": [
+    "image"
+   ],
+   "surfaces": [
+    "firmin.dv@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "firmin.dv@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "firmin.dv@"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.1718,
+      0.3375,
+      0.4618,
+      0.3946
+     ]
+    }
+   ]
+  },
+  {
+   "id": "18-003",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639985526",
+   "where": [
+    "image"
+   ],
+   "surfaces": [
+    "06.39.98.55.26"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639985526"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.2055,
+      0.4536,
+      0.3927,
+      0.5107
+     ]
+    }
+   ]
+  },
+  {
+   "id": "18-004",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7687573018181263165969491",
+   "where": [
+    "image"
+   ],
+   "surfaces": [
+    "FR76 8757 3018 1812 6316 5969 491"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7687573018181263165969491"
+    },
+    {
+     "mode": "compact",
+     "text": "87573018181263165969491"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.1382,
+      0.5696,
+      0.6082,
+      0.6161
+     ]
+    }
+   ]
+  },
+  {
+   "id": "18-005",
+   "type": "IP",
+   "direct": true,
+   "value": "198.51.100.47",
+   "where": [
+    "image"
+   ],
+   "surfaces": [
+    "198.51.100.47"
+   ],
+   "renderings": [
+    {
+     "mode": "ip",
+     "text": "198.51.100.47"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.2082,
+      0.6857,
+      0.3882,
+      0.7321
+     ]
+    }
+   ]
+  },
+  {
+   "id": "18-006",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "fdelacroixv",
+   "where": [
+    "image"
+   ],
+   "surfaces": [
+    "fdelacroixv"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "fdelacroixv"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.1936,
+      0.8018,
+      0.3291,
+      0.8482
+     ]
+    }
+   ]
+  },
+  {
+   "id": "18-007",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Océane Marchand",
+   "where": [
+    "métadonnées PNG (tEXt, iTXt)"
+   ],
+   "surfaces": [
+    "Océane Marchand",
+    "Océane"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Océane Marchand"
+    },
+    {
+     "mode": "text",
+     "text": "Marchand Océane"
+    },
+    {
+     "mode": "word",
+     "text": "Marchand"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Océane"
+    }
+   ],
+   "regions": []
+  }
+ ],
+ "keep": [],
+ "images": {
+  "img": {
+   "kind": "file",
+   "file": "capture_formulaire.png"
+  }
+ }
+}

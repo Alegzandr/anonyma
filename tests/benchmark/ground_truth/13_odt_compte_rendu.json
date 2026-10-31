@@ -1,0 +1,315 @@
+{
+ "slug": "13_odt_compte_rendu",
+ "format": "odt",
+ "description": "Compte rendu OpenDocument : métadonnées, annotation, modification suivie, en-tête/pied, nom coupé par un span, adresse avec saut de ligne",
+ "files": [
+  "compte_rendu_ag.odt"
+ ],
+ "entries": [
+  {
+   "id": "13-001",
+   "type": "ORGANISATION",
+   "direct": false,
+   "value": "Association des Riverains du Val-Fleuri",
+   "where": [
+    "titre, métadonnées"
+   ],
+   "surfaces": [
+    "Association des Riverains du Val-Fleuri"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Association des Riverains du Val-Fleuri"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "13-002",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Eléonore Vidal",
+   "where": [
+    "corps (span), en-tête, créatrice initiale"
+   ],
+   "surfaces": [
+    "Eléonore VIDAL",
+    "Eléonore Vidal",
+    "Eléonore"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Eléonore Vidal"
+    },
+    {
+     "mode": "text",
+     "text": "Vidal Eléonore"
+    },
+    {
+     "mode": "text",
+     "text": "Vidal"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Eléonore"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "13-003",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "présidente",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "présidente"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "présidente"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "13-004",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "eleonore.vidal@exemple.test",
+   "where": [
+    "pied de page"
+   ],
+   "surfaces": [
+    "eleonore.vidal@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "eleonore.vidal@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "eleonore.vidal@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "13-005",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639986206",
+   "where": [
+    "pied de page"
+   ],
+   "surfaces": [
+    "06.39.98.62.06"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639986206"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "13-006",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Marc Durand",
+   "where": [
+    "corps, annotation, modification suivie, créateur"
+   ],
+   "surfaces": [
+    "Marc Durand",
+    "M. Marc Durand",
+    "M. Durand",
+    "Marc"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Marc Durand"
+    },
+    {
+     "mode": "text",
+     "text": "Durand Marc"
+    },
+    {
+     "mode": "text",
+     "text": "Durand"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Marc"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "13-007",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "marc.durand@exemple.test",
+   "where": [
+    "annotation, mots-clés"
+   ],
+   "surfaces": [
+    "marc.durand@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "marc.durand@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "marc.durand@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "13-008",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639986784",
+   "where": [
+    "modification suivie (suppression)"
+   ],
+   "surfaces": [
+    "06 39 98 67 84"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639986784"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "13-009",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1966-09-14",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "14 septembre 1966"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "09/14/1966"
+    },
+    {
+     "mode": "text",
+     "text": "14 September 1966"
+    },
+    {
+     "mode": "text",
+     "text": "14 septembre 1966"
+    },
+    {
+     "mode": "text",
+     "text": "14/09/1966"
+    },
+    {
+     "mode": "text",
+     "text": "14/09/66"
+    },
+    {
+     "mode": "text",
+     "text": "14/9/1966"
+    },
+    {
+     "mode": "text",
+     "text": "14091966"
+    },
+    {
+     "mode": "text",
+     "text": "1966-09-14"
+    },
+    {
+     "mode": "text",
+     "text": "September 14, 1966"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "13-010",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "55 rue de la Poterne, 54000 Nancy",
+   "where": [
+    "corps (saut de ligne)"
+   ],
+   "surfaces": [
+    "55 rue de la Poterne",
+    "54000 Nancy"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "55 rue de la Poterne"
+    },
+    {
+     "mode": "text",
+     "text": "rue de la Poterne"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "13-011",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7653236403886119690426816",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "FR76 5323 6403 8861 1969 0426 816"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7653236403886119690426816"
+    },
+    {
+     "mode": "compact",
+     "text": "53236403886119690426816"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Un martin-pêcheur a été aperçu près de la fontaine du parc municipal.",
+  "Le comité se réunira le 12 mars 2026 à 14 h 30 en salle Bleue."
+ ],
+ "images": {}
+}

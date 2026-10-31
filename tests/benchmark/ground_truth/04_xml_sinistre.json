@@ -1,0 +1,309 @@
+{
+ "slug": "04_xml_sinistre",
+ "format": "xml",
+ "description": "Déclaration de sinistre XML ISO-8859-1 (attributs, CDATA)",
+ "files": [
+  "declaration_sinistre.xml"
+ ],
+ "entries": [
+  {
+   "id": "04-001",
+   "type": "ORGANISATION",
+   "direct": false,
+   "value": "Assurances Bellerive",
+   "where": [
+    "élément assureur"
+   ],
+   "surfaces": [
+    "Assurances Bellerive"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Assurances Bellerive"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "04-002",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Maëlle Le Goff",
+   "where": [
+    "commentaire, attributs, instruction de traitement"
+   ],
+   "surfaces": [
+    "Maëlle Le Goff",
+    "LE GOFF",
+    "Maëlle",
+    "Le Goff"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Maëlle Le Goff"
+    },
+    {
+     "mode": "text",
+     "text": "Le Goff Maëlle"
+    },
+    {
+     "mode": "text",
+     "text": "Le Goff"
+    },
+    {
+     "mode": "text",
+     "text": "Goff"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Maëlle"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "04-003",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "mlegoff",
+   "where": [
+    "commentaire XML"
+   ],
+   "surfaces": [
+    "mlegoff"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "mlegoff"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "04-004",
+   "type": "NUMERO_DOSSIER",
+   "direct": false,
+   "value": "RG 23/04567",
+   "where": [
+    "attribut"
+   ],
+   "surfaces": [
+    "RG 23/04567"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "rg2304567"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "04-005",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1992-03-05",
+   "where": [
+    "élément"
+   ],
+   "surfaces": [
+    "05.03.1992"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "03/05/1992"
+    },
+    {
+     "mode": "text",
+     "text": "05/03/1992"
+    },
+    {
+     "mode": "text",
+     "text": "05/03/92"
+    },
+    {
+     "mode": "text",
+     "text": "05031992"
+    },
+    {
+     "mode": "text",
+     "text": "1992-03-05"
+    },
+    {
+     "mode": "text",
+     "text": "5 March 1992"
+    },
+    {
+     "mode": "text",
+     "text": "5 mars 1992"
+    },
+    {
+     "mode": "text",
+     "text": "5/3/1992"
+    },
+    {
+     "mode": "text",
+     "text": "March 5, 1992"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "04-006",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "9 venelle de Kerbriant, 29200 Brest",
+   "where": [
+    "élément (saut de ligne)"
+   ],
+   "surfaces": [
+    "9 venelle de Kerbriant",
+    "29200 Brest"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "9 venelle de Kerbriant"
+    },
+    {
+     "mode": "text",
+     "text": "venelle de Kerbriant"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "04-007",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639980805",
+   "where": [
+    "élément"
+   ],
+   "surfaces": [
+    "06-39-98-08-05"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639980805"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "04-008",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "maelle.legoff@exemple.test",
+   "where": [
+    "élément"
+   ],
+   "surfaces": [
+    "maelle.legoff@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "maelle.legoff@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "maelle.legoff@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "04-009",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Jean-Baptiste Kowalczyk",
+   "where": [
+    "attribut, CDATA"
+   ],
+   "surfaces": [
+    "Jean-Baptiste Kowalczyk",
+    "Jean-Baptiste"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Jean-Baptiste Kowalczyk"
+    },
+    {
+     "mode": "text",
+     "text": "Kowalczyk Jean-Baptiste"
+    },
+    {
+     "mode": "text",
+     "text": "Kowalczyk"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Jean-Baptiste"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "04-010",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "GE-319-LQ",
+   "where": [
+    "attribut"
+   ],
+   "surfaces": [
+    "GE 319 LQ"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "ge319lq"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "04-011",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Brest",
+   "where": [
+    "élément"
+   ],
+   "surfaces": [
+    "Brest"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Brest"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Le boucher du marché couvert propose désormais des produits bio."
+ ],
+ "images": {}
+}

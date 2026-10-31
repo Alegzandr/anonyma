@@ -1,0 +1,524 @@
+{
+ "slug": "03_json_crm",
+ "format": "json",
+ "description": "Export CRM imbriqué (clés nominatives, échappements \\u)",
+ "files": [
+  "crm_export.json"
+ ],
+ "entries": [
+  {
+   "id": "03-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Jean-Baptiste Kowalczyk",
+   "where": [
+    "valeur, clé"
+   ],
+   "surfaces": [
+    "Jean-Baptiste Kowalczyk",
+    "Kowalczyk Jean-Baptiste",
+    "Jean-Baptiste"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Jean-Baptiste Kowalczyk"
+    },
+    {
+     "mode": "text",
+     "text": "Kowalczyk Jean-Baptiste"
+    },
+    {
+     "mode": "text",
+     "text": "Kowalczyk"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Jean-Baptiste"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "03-002",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "jbkowal88",
+   "where": [
+    "valeur login"
+   ],
+   "surfaces": [
+    "jbkowal88"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "jbkowal88"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-003",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "jb.kowalczyk@exemple.test",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "jb.kowalczyk@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "jb.kowalczyk@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "jb.kowalczyk@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-004",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639984155",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "+33 6 39 98 41 55"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639984155"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-005",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1988-07-23",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "1988-07-23"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "07/23/1988"
+    },
+    {
+     "mode": "text",
+     "text": "1988-07-23"
+    },
+    {
+     "mode": "text",
+     "text": "23 July 1988"
+    },
+    {
+     "mode": "text",
+     "text": "23 juillet 1988"
+    },
+    {
+     "mode": "text",
+     "text": "23/07/1988"
+    },
+    {
+     "mode": "text",
+     "text": "23/07/88"
+    },
+    {
+     "mode": "text",
+     "text": "23/7/1988"
+    },
+    {
+     "mode": "text",
+     "text": "23071988"
+    },
+    {
+     "mode": "text",
+     "text": "July 23, 1988"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-006",
+   "type": "IP",
+   "direct": true,
+   "value": "192.0.2.240",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "192.0.2.240"
+   ],
+   "renderings": [
+    {
+     "mode": "ip",
+     "text": "192.0.2.240"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-007",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7639222612779401990820835",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "FR7639222612779401990820835"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7639222612779401990820835"
+    },
+    {
+     "mode": "compact",
+     "text": "39222612779401990820835"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-008",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "27 rue Jules-Ferry-Prolongée, 57000 Metz",
+   "where": [
+    "objet adresse"
+   ],
+   "surfaces": [
+    "27 rue Jules-Ferry-Prolongée"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "27 rue Jules-Ferry-Prolongée"
+    },
+    {
+     "mode": "text",
+     "text": "rue Jules-Ferry-Prolongée"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-009",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "Résidence Les Mésanges",
+   "where": [
+    "objet adresse"
+   ],
+   "surfaces": [
+    "Résidence Les Mésanges"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Résidence Les Mésanges"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-010",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Metz",
+   "where": [
+    "objet adresse"
+   ],
+   "surfaces": [
+    "Metz"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Metz"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-011",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "GE-319-LQ",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "GE-319-LQ"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "ge319lq"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-012",
+   "type": "NIR",
+   "direct": true,
+   "value": "188075703030092",
+   "where": [
+    "valeur sous clé nominative"
+   ],
+   "surfaces": [
+    "188075703030092"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "188075703030092"
+    },
+    {
+     "mode": "compact",
+     "text": "1880757030300"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-013",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Thi Lan Nguyen",
+   "where": [
+    "valeur, note échappée \\u"
+   ],
+   "surfaces": [
+    "Thi Lan Nguyen",
+    "NGUYEN Thi Lan",
+    "Thi Lan"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Thi Lan Nguyen"
+    },
+    {
+     "mode": "text",
+     "text": "Nguyen Thi Lan"
+    },
+    {
+     "mode": "text",
+     "text": "Nguyen"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Thi Lan"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "03-014",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "tnguyen",
+   "where": [
+    "valeur login"
+   ],
+   "surfaces": [
+    "tnguyen"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "tnguyen"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-015",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "tl.nguyen@exemple.test",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "tl.nguyen@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "tl.nguyen@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "tl.nguyen@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-016",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639984697",
+   "where": [
+    "nombre JSON"
+   ],
+   "surfaces": [
+    "33639984697"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639984697"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-017",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1981-10-12",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "12/10/1981"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "10/12/1981"
+    },
+    {
+     "mode": "text",
+     "text": "12 October 1981"
+    },
+    {
+     "mode": "text",
+     "text": "12 octobre 1981"
+    },
+    {
+     "mode": "text",
+     "text": "12/10/1981"
+    },
+    {
+     "mode": "text",
+     "text": "12/10/81"
+    },
+    {
+     "mode": "text",
+     "text": "12101981"
+    },
+    {
+     "mode": "text",
+     "text": "1981-10-12"
+    },
+    {
+     "mode": "text",
+     "text": "October 12, 1981"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-018",
+   "type": "CARTE",
+   "direct": true,
+   "value": "4970126776498843",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "4970126776498843"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "4970126776498843"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-019",
+   "type": "IP",
+   "direct": true,
+   "value": "2001:db8::4a:1f",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "2001:db8::4a:1f"
+   ],
+   "renderings": [
+    {
+     "mode": "ip",
+     "text": "2001:db8::4a:1f"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "03-020",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "pharmacienne",
+   "where": [
+    "valeur"
+   ],
+   "surfaces": [
+    "pharmacienne"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "pharmacienne"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "La version 2.3.1 du logiciel corrige le problème signalé à la page 12 du manuel."
+ ],
+ "images": {}
+}

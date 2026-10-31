@@ -1,0 +1,312 @@
+{
+ "slug": "15_rtf_attestation",
+ "format": "rtf",
+ "description": "Attestation RTF : \\info, en-tête/pied, échappements \\'e9 et \\u, nom coupé par un groupe gras",
+ "files": [
+  "attestation.rtf"
+ ],
+ "entries": [
+  {
+   "id": "15-001",
+   "type": "ORGANISATION",
+   "direct": false,
+   "value": "Clinique de l'Orme-Rond",
+   "where": [
+    "\\info company"
+   ],
+   "surfaces": [
+    "Clinique de l'Orme-Rond"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Clinique de l'Orme-Rond"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "15-002",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Thi Lan Nguyen",
+   "where": [
+    "titre, en-tête, corps (italique)"
+   ],
+   "surfaces": [
+    "Thi Lan Nguyen",
+    "Thi Lan"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Thi Lan Nguyen"
+    },
+    {
+     "mode": "text",
+     "text": "Nguyen Thi Lan"
+    },
+    {
+     "mode": "text",
+     "text": "Nguyen"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Thi Lan"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "15-003",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1981-10-12",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "12 octobre 1981"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "10/12/1981"
+    },
+    {
+     "mode": "text",
+     "text": "12 October 1981"
+    },
+    {
+     "mode": "text",
+     "text": "12 octobre 1981"
+    },
+    {
+     "mode": "text",
+     "text": "12/10/1981"
+    },
+    {
+     "mode": "text",
+     "text": "12/10/81"
+    },
+    {
+     "mode": "text",
+     "text": "12101981"
+    },
+    {
+     "mode": "text",
+     "text": "1981-10-12"
+    },
+    {
+     "mode": "text",
+     "text": "October 12, 1981"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "15-004",
+   "type": "NIR",
+   "direct": true,
+   "value": "281101374236779",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "2.81.10.13.742.367.79"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "281101374236779"
+    },
+    {
+     "mode": "compact",
+     "text": "2811013742367"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "15-005",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "66 avenue des Cerisiers-du-Japon, 13008 Marseille",
+   "where": [
+    "corps (\\line)"
+   ],
+   "surfaces": [
+    "66 avenue des Cerisiers-du-Japon",
+    "13008 Marseille"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "66 avenue des Cerisiers-du-Japon"
+    },
+    {
+     "mode": "text",
+     "text": "avenue des Cerisiers-du-Japon"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "15-006",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Firmin Delacroix-Vasseur",
+   "where": [
+    "auteur, corps (gras coupé), signature"
+   ],
+   "surfaces": [
+    "Firmin DELACROIX-VASSEUR",
+    "Firmin Delacroix-Vasseur",
+    "Firmin"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Firmin Delacroix-Vasseur"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix-Vasseur Firmin"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix-Vasseur"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix"
+    },
+    {
+     "mode": "text",
+     "text": "Vasseur"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Firmin"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "15-007",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "F.D.V.",
+   "where": [
+    "signature (initiales)"
+   ],
+   "surfaces": [
+    "F.D.V."
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "F.D.V."
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "15-008",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "firmin.dv@exemple.test",
+   "where": [
+    "pied de page"
+   ],
+   "surfaces": [
+    "firmin.dv@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "firmin.dv@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "firmin.dv@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "15-009",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639985526",
+   "where": [
+    "pied de page"
+   ],
+   "surfaces": [
+    "06.39.98.55.26"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639985526"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "15-010",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "ingénieur méthodes",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "ingénieur méthodes"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "ingénieur méthodes"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "15-011",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Rouen",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Rouen"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Rouen"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Le petit-déjeuner sera servi à partir de sept heures dans la salle du rez-de-chaussée."
+ ],
+ "images": {}
+}

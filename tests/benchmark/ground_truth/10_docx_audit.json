@@ -1,0 +1,608 @@
+{
+ "slug": "10_docx_audit",
+ "format": "docx",
+ "description": "Rapport d'audit Word : en-tête/pied, commentaires, révisions, noms coupés par la mise en forme, lien sur plusieurs runs, note de bas de page, métadonnées, image contenant du texte",
+ "files": [
+  "rapport_audit.docx"
+ ],
+ "entries": [
+  {
+   "id": "10-001",
+   "type": "ORGANISATION",
+   "direct": false,
+   "value": "Cabinet Lerouge & Associés",
+   "where": [
+    "pied de page, métadonnées"
+   ],
+   "surfaces": [
+    "Cabinet Lerouge & Associés"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Cabinet Lerouge & Associés"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-002",
+   "type": "SIREN",
+   "direct": false,
+   "value": "832199046",
+   "where": [
+    "pied de page, métadonnées"
+   ],
+   "surfaces": [
+    "832 199 046"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "832199046"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-003",
+   "type": "SIRET",
+   "direct": false,
+   "value": "83219904654882",
+   "where": [
+    "pied de page, métadonnées"
+   ],
+   "surfaces": [
+    "832 199 046 54882"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "83219904654882"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-004",
+   "type": "TVA",
+   "direct": false,
+   "value": "FR92832199046",
+   "where": [
+    "pied de page, métadonnées"
+   ],
+   "surfaces": [
+    "FR92832199046"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr92832199046"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-005",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Yannick Brunet",
+   "where": [
+    "corps (gras/italique coupé), tableau, descr image, mots-clés, titre, image"
+   ],
+   "surfaces": [
+    "Yannick BRUNET",
+    "BRUNET Yannick",
+    "Yannick Brunet",
+    "Yannick"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Yannick Brunet"
+    },
+    {
+     "mode": "text",
+     "text": "Brunet Yannick"
+    },
+    {
+     "mode": "text",
+     "text": "Brunet"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Yannick"
+    }
+   ],
+   "regions": [
+    {
+     "image": "badge",
+     "bbox": [
+      0.2229,
+      0.3091,
+      0.4249,
+      0.4273
+     ]
+    }
+   ]
+  },
+  {
+   "id": "10-006",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1970-03-03",
+   "where": [
+    "corps, tableau, image"
+   ],
+   "surfaces": [
+    "3 mars 1970",
+    "03/03/1970"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "03/03/1970"
+    },
+    {
+     "mode": "text",
+     "text": "03/03/70"
+    },
+    {
+     "mode": "text",
+     "text": "03031970"
+    },
+    {
+     "mode": "text",
+     "text": "1970-03-03"
+    },
+    {
+     "mode": "text",
+     "text": "3 March 1970"
+    },
+    {
+     "mode": "text",
+     "text": "3 mars 1970"
+    },
+    {
+     "mode": "text",
+     "text": "3/3/1970"
+    },
+    {
+     "mode": "text",
+     "text": "March 3, 1970"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "badge",
+     "bbox": [
+      0.122,
+      0.5424,
+      0.288,
+      0.6242
+     ]
+    }
+   ]
+  },
+  {
+   "id": "10-007",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "auditeur",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "auditeur"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "auditeur"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-008",
+   "type": "NIR",
+   "direct": true,
+   "value": "170036382736553",
+   "where": [
+    "tableau"
+   ],
+   "surfaces": [
+    "170036382736553"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "170036382736553"
+    },
+    {
+     "mode": "compact",
+     "text": "1700363827365"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-009",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639981265",
+   "where": [
+    "tableau"
+   ],
+   "surfaces": [
+    "06 39 98 12 65"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639981265"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-010",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "HH-804-DY",
+   "where": [
+    "image"
+   ],
+   "surfaces": [
+    "HH-804-DY"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "hh804dy"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "badge",
+     "bbox": [
+      0.188,
+      0.7394,
+      0.358,
+      0.8212
+     ]
+    }
+   ]
+  },
+  {
+   "id": "10-011",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Solène Chevalier",
+   "where": [
+    "lien sur deux runs, info-bulle"
+   ],
+   "surfaces": [
+    "Solène Chevalier",
+    "Solène"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Solène Chevalier"
+    },
+    {
+     "mode": "text",
+     "text": "Chevalier Solène"
+    },
+    {
+     "mode": "word",
+     "text": "Chevalier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Solène"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "10-012",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "solene.chevalier@exemple.test",
+   "where": [
+    "corps, cible du lien, mots-clés"
+   ],
+   "surfaces": [
+    "solene.chevalier@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "solene.chevalier@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "solene.chevalier@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-013",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Lorraine Vienne",
+   "where": [
+    "corps, commentaire (personne au nom de ville)"
+   ],
+   "surfaces": [
+    "Mme Lorraine Vienne",
+    "Mme Vienne",
+    "Lorraine Vienne",
+    "Lorraine"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Lorraine Vienne"
+    },
+    {
+     "mode": "text",
+     "text": "Vienne Lorraine"
+    },
+    {
+     "mode": "word",
+     "text": "Vienne"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Lorraine"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "10-014",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7679094396346529953210535",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "FR76 7909 4396 3465 2995 3210 535"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7679094396346529953210535"
+    },
+    {
+     "mode": "compact",
+     "text": "79094396346529953210535"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-015",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639989541",
+   "where": [
+    "commentaire"
+   ],
+   "surfaces": [
+    "06 39 98 95 41"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639989541"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-016",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Quentin Morel",
+   "where": [
+    "révision insérée, auteur du commentaire, dernier modificateur"
+   ],
+   "surfaces": [
+    "Quentin Morel",
+    "Quentin"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Quentin Morel"
+    },
+    {
+     "mode": "text",
+     "text": "Morel Quentin"
+    },
+    {
+     "mode": "text",
+     "text": "Morel"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Quentin"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "10-017",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Capucine Girard",
+   "where": [
+    "auteur des révisions, propriété personnalisée"
+   ],
+   "surfaces": [
+    "Capucine Girard",
+    "Capucine"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Capucine Girard"
+    },
+    {
+     "mode": "text",
+     "text": "Girard Capucine"
+    },
+    {
+     "mode": "text",
+     "text": "Girard"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Capucine"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "10-018",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Anaïs Perrin",
+   "where": [
+    "révision supprimée, en-tête, note de bas de page, auteur, responsable"
+   ],
+   "surfaces": [
+    "Anaïs Perrin",
+    "Anaïs"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Anaïs Perrin"
+    },
+    {
+     "mode": "text",
+     "text": "Perrin Anaïs"
+    },
+    {
+     "mode": "text",
+     "text": "Perrin"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Anaïs"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "10-019",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7630884574967118848637871",
+   "where": [
+    "révision supprimée"
+   ],
+   "surfaces": [
+    "FR7630884574967118848637871"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7630884574967118848637871"
+    },
+    {
+     "mode": "compact",
+     "text": "30884574967118848637871"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-020",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "anais.perrin@exemple.test",
+   "where": [
+    "pied de page"
+   ],
+   "surfaces": [
+    "anais.perrin@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "anais.perrin@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "anais.perrin@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "10-021",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639982949",
+   "where": [
+    "pied de page"
+   ],
+   "surfaces": [
+    "+33 6 39 98 29 49"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639982949"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Conformément à l'article L. 1234-5 du Code du travail, le préavis est de deux mois.",
+  "Le boucher du marché couvert propose désormais des produits bio."
+ ],
+ "images": {
+  "badge": {
+   "kind": "zip_member",
+   "file": "rapport_audit.docx",
+   "member": "word/media/image1.png"
+  }
+ }
+}

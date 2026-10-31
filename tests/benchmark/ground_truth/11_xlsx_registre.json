@@ -1,0 +1,575 @@
+{
+ "slug": "11_xlsx_registre",
+ "format": "xlsx",
+ "description": "Registre du personnel Excel : nom de feuille, commentaires de cellule, en-tête/pied, formules, métadonnées",
+ "files": [
+  "registre_personnel.xlsx"
+ ],
+ "entries": [
+  {
+   "id": "11-001",
+   "type": "ORGANISATION",
+   "direct": false,
+   "value": "Mutuelle des Hauts-Plateaux",
+   "where": [
+    "métadonnées (société)"
+   ],
+   "surfaces": [
+    "Mutuelle des Hauts-Plateaux"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Mutuelle des Hauts-Plateaux"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-002",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Mathis Lambert",
+   "where": [
+    "nom de feuille, nom défini, formule, cellules"
+   ],
+   "surfaces": [
+    "Mathis Lambert",
+    "LAMBERT",
+    "Mathis"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Mathis Lambert"
+    },
+    {
+     "mode": "text",
+     "text": "Lambert Mathis"
+    },
+    {
+     "mode": "text",
+     "text": "Lambert"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Mathis"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "11-003",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "2001-04-04",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "04/04/2001"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "04/04/01"
+    },
+    {
+     "mode": "text",
+     "text": "04/04/2001"
+    },
+    {
+     "mode": "text",
+     "text": "04042001"
+    },
+    {
+     "mode": "text",
+     "text": "2001-04-04"
+    },
+    {
+     "mode": "text",
+     "text": "4 April 2001"
+    },
+    {
+     "mode": "text",
+     "text": "4 avril 2001"
+    },
+    {
+     "mode": "text",
+     "text": "4/4/2001"
+    },
+    {
+     "mode": "text",
+     "text": "April 4, 2001"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-004",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639981703",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "06.39.98.17.03"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639981703"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-005",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7633794677577299956109875",
+   "where": [
+    "cellule (doubles espaces)"
+   ],
+   "surfaces": [
+    "FR76  3379  4677  5772  9995  6109  875"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7633794677577299956109875"
+    },
+    {
+     "mode": "compact",
+     "text": "33794677577299956109875"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-006",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "mlambert",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "mlambert"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "mlambert"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-007",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Gaëtan Mercier",
+   "where": [
+    "cellules, commentaire de cellule, note VML"
+   ],
+   "surfaces": [
+    "Mercier",
+    "Gaëtan",
+    "Gaëtan Mercier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Gaëtan Mercier"
+    },
+    {
+     "mode": "text",
+     "text": "Mercier Gaëtan"
+    },
+    {
+     "mode": "word",
+     "text": "Mercier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Gaëtan"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "11-008",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1978-10-31",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "1978-10-31"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "10/31/1978"
+    },
+    {
+     "mode": "text",
+     "text": "1978-10-31"
+    },
+    {
+     "mode": "text",
+     "text": "31 October 1978"
+    },
+    {
+     "mode": "text",
+     "text": "31 octobre 1978"
+    },
+    {
+     "mode": "text",
+     "text": "31/10/1978"
+    },
+    {
+     "mode": "text",
+     "text": "31/10/78"
+    },
+    {
+     "mode": "text",
+     "text": "31101978"
+    },
+    {
+     "mode": "text",
+     "text": "October 31, 1978"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-009",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639988099",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "+33 6 39 98 80 99"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639988099"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-010",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7623830326595947124391780",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "FR76 2383 0326 5959 4712 4391 780"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7623830326595947124391780"
+    },
+    {
+     "mode": "compact",
+     "text": "23830326595947124391780"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-011",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "gmercier",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "gmercier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "gmercier"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-012",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "25 rue du Moulin-Tourneur, 49000 Angers",
+   "where": [
+    "commentaire de cellule"
+   ],
+   "surfaces": [
+    "25 rue du Moulin-Tourneur",
+    "49000 Angers"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "25 rue du Moulin-Tourneur"
+    },
+    {
+     "mode": "text",
+     "text": "rue du Moulin-Tourneur"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-013",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Ophélie Gauthier",
+   "where": [
+    "cellules, dernier modificateur"
+   ],
+   "surfaces": [
+    "GAUTHIER",
+    "Ophélie",
+    "Ophélie Gauthier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Ophélie Gauthier"
+    },
+    {
+     "mode": "text",
+     "text": "Gauthier Ophélie"
+    },
+    {
+     "mode": "text",
+     "text": "Gauthier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Ophélie"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "11-014",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1989-12-12",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "12.12.1989"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "12 December 1989"
+    },
+    {
+     "mode": "text",
+     "text": "12 décembre 1989"
+    },
+    {
+     "mode": "text",
+     "text": "12/12/1989"
+    },
+    {
+     "mode": "text",
+     "text": "12/12/89"
+    },
+    {
+     "mode": "text",
+     "text": "12121989"
+    },
+    {
+     "mode": "text",
+     "text": "1989-12-12"
+    },
+    {
+     "mode": "text",
+     "text": "December 12, 1989"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-015",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639985259",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "0639985259"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639985259"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-016",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7693837924126264025618475",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "FR7693837924126264025618475"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7693837924126264025618475"
+    },
+    {
+     "mode": "compact",
+     "text": "93837924126264025618475"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-017",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "ogauthier",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "ogauthier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "ogauthier"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-018",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Noémie Faure",
+   "where": [
+    "chaîne en ligne, en-tête, auteur du commentaire, créateur, responsable"
+   ],
+   "surfaces": [
+    "Noémie Faure",
+    "Noémie"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Noémie Faure"
+    },
+    {
+     "mode": "text",
+     "text": "Faure Noémie"
+    },
+    {
+     "mode": "text",
+     "text": "Faure"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Noémie"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "11-019",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639982412",
+   "where": [
+    "cellule numérique"
+   ],
+   "surfaces": [
+    "33639982412"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639982412"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "11-020",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "noemie.faure@exemple.test",
+   "where": [
+    "pied de page, propriété personnalisée"
+   ],
+   "surfaces": [
+    "noemie.faure@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "noemie.faure@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "noemie.faure@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Le montant total s'élève à 1 250,00 euros hors taxes pour l'ensemble des prestations.",
+  "Le marchand de journaux ferme le dimanche après-midi."
+ ],
+ "images": {}
+}
