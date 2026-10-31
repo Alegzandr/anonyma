@@ -921,7 +921,7 @@ def test_messages_hold_no_internal_code_or_english(tmp_path: Path, business_list
     report = tmp_path / "r.json"
     result = invoke(*_run_args(folder, tmp_path / "s", business_list, "--rapport", report))
     text = result.output + report.read_text(encoding="utf-8").split('"echecs"')[1]
-    assert "vide.docx : Échec de la lecture du fichier : fichier vide." in result.output
+    assert "vide.docx : Fichier vide (0 octet)" in result.output
     assert "fichier endommagé ou tronqué" in result.output
     for internal in ("BadZipFile", "format.unknown", "extract.error :", "Error"):
         assert internal not in result.output, internal
