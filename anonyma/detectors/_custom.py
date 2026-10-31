@@ -577,7 +577,10 @@ class PersonRecognizer(CustomRecognizer):
                 k -= 1
             if not surname:
                 if j > i:  # two given names: the last one may be a surname
-                    out.append(_result(EntityType.PERSON, tok.start, tokens[j].end, 0.5))
+                    last = tokens[j]
+                    # "Gauthier." of "Gauthier.txt": the dot is not part of the name.
+                    end = last.start + len(last.bare) if not last.is_initial else last.end
+                    out.append(_result(EntityType.PERSON, tok.start, end, 0.5))
                 elif self._lone_given(text, tok):
                     end = tok.start + len(tok.bare)
                     out.append(_result(EntityType.PERSON, tok.start, end, 0.65))
@@ -607,11 +610,15 @@ _STREET_NAME_WORD = (
     r"gare|[ée]glise|mairie|poste|march[ée]|moulin|ch[âa]teau|pont|bois|lac|port|fontaine|"
     r"croix|puits|four|ville|plaine|vigne|vignes|prairie|forge|halle|halles)(?![\w'’\-]))"
 )
+#: Gap between address words: spaces, or one line break (text wrapped in a PDF block
+#: or a narrow column). A wrapped street name never continues with a number.
+_WRAP = rf"(?:{SP}+|{SP}*\r?\n{SP}*)"
+_NAME_GAP = rf"(?:{SP}+|{SP}*\r?\n{SP}*(?=[^\d\s]))"
 _ADDRESS_STRICT = regex.compile(
-    rf"(?<![\w,])(?P<num>{_NUM}){SP}*,?{SP}+(?i:{STREET_TYPES})\.?{SP}+"
-    rf"(?P<name>{_STREET_NAME_WORD}(?:{SP}+{_STREET_NAME_WORD}){{0,7}})"
+    rf"(?<![\w,])(?P<num>{_NUM}){SP}*,?{_WRAP}(?i:{STREET_TYPES})\.?{_WRAP}"
+    rf"(?P<name>{_STREET_NAME_WORD}(?:{_NAME_GAP}{_STREET_NAME_WORD}){{0,7}})"
     rf"(?P<tail>(?:{SP}*,?{SP}*(?:\r?\n{SP}*)?(?:(?i:BP|CS|TSA){SP}?\d{{1,5}}{SP}*,?{SP}*"
-    rf"(?:\r?\n{SP}*)?)?{_CP}{SP}+{_CITY}))?",
+    rf"(?:\r?\n{SP}*)?)?{_CP}{_WRAP}{_CITY}))?",
     regex.MULTILINE,
 )
 _ADDRESS_LOOSE = regex.compile(
@@ -625,7 +632,28 @@ _STREET_NO_NUMBER = regex.compile(
     rf"[{UPPER}][\w'’\-]+(?:{SP}+(?:(?i:de|du|des|la|le|les|l'|d'){SP}*)*[{UPPER}][\w'’\-]+){{0,3}}",
     regex.MULTILINE,
 )
-_CP_CITY = regex.compile(rf"(?<![\w])(?P<cp>{_CP}){SP}+(?P<city>{_CITY})", regex.MULTILINE)
+#: Postcode then city; OCR may glue them (``37000Tours``): a capitalised word then.
+_CP_CITY = regex.compile(
+    rf"(?<![\w])(?P<cp>{_CP})(?:{SP}+|(?=[{UPPER}][{LOWER}]))(?P<city>{_CITY})", regex.MULTILINE
+)
+#: Address complements (« Bât. C, appartement 34 », « esc. 2, 3e étage »).
+_COMPLEMENT_ITEM = (
+    rf"(?:(?i:b[âa]t(?:iment)?\.?){SP}*[A-Z0-9]{{1,3}}(?![\w])"
+    rf"|(?i:appartement|appart\.?|appt\.?|apt\.?){SP}*(?i:n[°ºo]\.?{SP}*)?\d{{1,4}}(?![\w])"
+    rf"|(?i:escalier|esc\.?){SP}*[A-Z0-9]{{1,3}}(?![\w])"
+    rf"|\d{{1,2}}(?i:e|er|ème|eme|è){SP}+(?i:[ée]tage)(?![\w])"
+    rf"|(?i:[ée]tage){SP}+\d{{1,2}}(?![\w]))"
+)
+_COMPLEMENT = regex.compile(
+    rf"(?<![\w]){_COMPLEMENT_ITEM}(?:{SP}*[,/\-–]?{SP}*{_COMPLEMENT_ITEM})*", regex.MULTILINE
+)
+#: English order: number, name, street type (« 221 Larkspur Crescent »).
+_ADDRESS_EN = regex.compile(
+    rf"(?<![\w,])\d{{1,5}}{SP}+(?:[{UPPER}][{LOWER}'’\-]+{SP}+){{1,3}}"
+    r"(?:Street|St\.|Road|Rd\.|Lane|Drive|Avenue|Ave\.|Crescent|Close|Way|Court|Place|"
+    r"Terrace|Gardens|Grove|Row|Mews|Hill|Boulevard|Blvd\.|Parkway|Square|Walk)(?![\w])",
+    regex.MULTILINE,
+)
 #: Words that follow a 5-digit number without being a city.
 _NOT_CITY = frozenset(
     normalize(w)
@@ -692,6 +720,10 @@ class AddressRecognizer(CustomRecognizer):
             if first in _NOT_CITY:
                 continue
             out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.7))
+        for m in _COMPLEMENT.finditer(text, timeout=2):
+            out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.75))
+        for m in _ADDRESS_EN.finditer(text, timeout=2):
+            out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.8))
         return out
 
 

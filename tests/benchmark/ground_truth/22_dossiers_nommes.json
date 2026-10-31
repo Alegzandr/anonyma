@@ -1,0 +1,155 @@
+{
+ "slug": "22_dossiers_nommes",
+ "format": "txt",
+ "description": "Arborescence de fichiers : dossier et fichiers portant le nom de la personne, casse mixte et accents manquants",
+ "files": [
+  "Salariés/Ophélie GAUTHIER/CV Ophélie Gauthier.txt",
+  "Salariés/Ophélie GAUTHIER/gauthier_o_entretien.csv"
+ ],
+ "entries": [
+  {
+   "id": "22-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Ophélie Gauthier",
+   "where": [
+    "noms de dossier et de fichiers, minuscules et majuscules sans accent"
+   ],
+   "surfaces": [
+    "Ophélie GAUTHIER",
+    "ophelie gauthier",
+    "OPHELIE GAUTHIER",
+    "Mme Gauthier",
+    "Ophélie"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Ophélie Gauthier"
+    },
+    {
+     "mode": "text",
+     "text": "Gauthier Ophélie"
+    },
+    {
+     "mode": "text",
+     "text": "Gauthier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Ophélie"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "22-002",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "1 square des Hortensias-Bleus, 06000 Nice",
+   "where": [
+    "CV"
+   ],
+   "surfaces": [
+    "1 square des Hortensias-Bleus",
+    "06000 Nice"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "1 square des Hortensias-Bleus"
+    },
+    {
+     "mode": "text",
+     "text": "square des Hortensias-Bleus"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "22-003",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1989-12-12",
+   "where": [
+    "CV"
+   ],
+   "surfaces": [
+    "1989-12-12"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "12 December 1989"
+    },
+    {
+     "mode": "text",
+     "text": "12 décembre 1989"
+    },
+    {
+     "mode": "text",
+     "text": "12/12/1989"
+    },
+    {
+     "mode": "text",
+     "text": "12/12/89"
+    },
+    {
+     "mode": "text",
+     "text": "12121989"
+    },
+    {
+     "mode": "text",
+     "text": "1989-12-12"
+    },
+    {
+     "mode": "text",
+     "text": "December 12, 1989"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "22-004",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Capucine Girard",
+   "where": [
+    "CSV"
+   ],
+   "surfaces": [
+    "Capucine Girard",
+    "Capucine"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Capucine Girard"
+    },
+    {
+     "mode": "text",
+     "text": "Girard Capucine"
+    },
+    {
+     "mode": "text",
+     "text": "Girard"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Capucine"
+    }
+   ],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Le boucher du marché couvert propose désormais des produits bio."
+ ],
+ "images": {}
+}

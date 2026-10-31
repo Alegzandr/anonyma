@@ -1,0 +1,174 @@
+{
+ "slug": "19_jpg_badge",
+ "format": "jpg",
+ "description": "Photo de badge JPEG : texte dans l'image, EXIF Artist, XPAuthor, propriétaire, GPS",
+ "files": [
+  "photo_badge.jpg"
+ ],
+ "entries": [
+  {
+   "id": "19-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Océane Marchand",
+   "where": [
+    "image, EXIF (Artist, XPAuthor, CameraOwnerName, description)"
+   ],
+   "surfaces": [
+    "Océane MARCHAND",
+    "Océane Marchand",
+    "Océane"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Océane Marchand"
+    },
+    {
+     "mode": "text",
+     "text": "Marchand Océane"
+    },
+    {
+     "mode": "word",
+     "text": "Marchand"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Océane"
+    }
+   ],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.22,
+      0.3061,
+      0.503,
+      0.4273
+     ]
+    }
+   ]
+  },
+  {
+   "id": "19-002",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1999-02-27",
+   "where": [
+    "image"
+   ],
+   "surfaces": [
+    "27/02/1999"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "02/27/1999"
+    },
+    {
+     "mode": "text",
+     "text": "1999-02-27"
+    },
+    {
+     "mode": "text",
+     "text": "27 February 1999"
+    },
+    {
+     "mode": "text",
+     "text": "27 février 1999"
+    },
+    {
+     "mode": "text",
+     "text": "27/02/1999"
+    },
+    {
+     "mode": "text",
+     "text": "27/02/99"
+    },
+    {
+     "mode": "text",
+     "text": "27/2/1999"
+    },
+    {
+     "mode": "text",
+     "text": "27021999"
+    },
+    {
+     "mode": "text",
+     "text": "February 27, 1999"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.162,
+      0.5424,
+      0.328,
+      0.6424
+     ]
+    }
+   ]
+  },
+  {
+   "id": "19-003",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "omarchand",
+   "where": [
+    "image"
+   ],
+   "surfaces": [
+    "omarchand"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "omarchand"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "img",
+     "bbox": [
+      0.196,
+      0.7394,
+      0.362,
+      0.8212
+     ]
+    }
+   ]
+  },
+  {
+   "id": "19-004",
+   "type": "GPS",
+   "direct": false,
+   "value": "47.22,-1.55",
+   "where": [
+    "EXIF GPS"
+   ],
+   "surfaces": [
+    "47.22,-1.55"
+   ],
+   "renderings": [
+    {
+     "mode": "gps",
+     "text": "47.22,-1.55"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [],
+ "images": {
+  "img": {
+   "kind": "file",
+   "file": "photo_badge.jpg"
+  }
+ }
+}

@@ -1,0 +1,181 @@
+{
+ "slug": "14_ods_planning",
+ "format": "ods",
+ "description": "Planning OpenDocument tableur : nom de feuille, annotation, cellules",
+ "files": [
+  "planning_astreintes.ods"
+ ],
+ "entries": [
+  {
+   "id": "14-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Lucas Blanc",
+   "where": [
+    "nom de feuille, cellule, formule"
+   ],
+   "surfaces": [
+    "BLANC Lucas",
+    "Blanc",
+    "Lucas"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Lucas Blanc"
+    },
+    {
+     "mode": "text",
+     "text": "Blanc Lucas"
+    },
+    {
+     "mode": "word",
+     "text": "Blanc"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Lucas"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "14-002",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639987809",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "06 39 98 78 09"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639987809"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "14-003",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Solène Chevalier",
+   "where": [
+    "cellule, annotation, en-tête"
+   ],
+   "surfaces": [
+    "Solène Chevalier",
+    "Solène"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Solène Chevalier"
+    },
+    {
+     "mode": "text",
+     "text": "Chevalier Solène"
+    },
+    {
+     "mode": "word",
+     "text": "Chevalier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Solène"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "14-004",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639987507",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "+33639987507"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639987507"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "14-005",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Océane Marchand",
+   "where": [
+    "cellule, auteur d'annotation, créatrice"
+   ],
+   "surfaces": [
+    "Océane Marchand",
+    "Océane"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Océane Marchand"
+    },
+    {
+     "mode": "text",
+     "text": "Marchand Océane"
+    },
+    {
+     "mode": "word",
+     "text": "Marchand"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Océane"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "14-006",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "oceane.marchand@exemple.test",
+   "where": [
+    "cellule"
+   ],
+   "surfaces": [
+    "oceane.marchand@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "oceane.marchand@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "oceane.marchand@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Merci de noter que le chevalier blanc reste une figure de style dans ce rapport."
+ ],
+ "images": {}
+}

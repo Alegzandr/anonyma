@@ -1,0 +1,16 @@
+﻿id;civilite;nom;prenom;naissance;courriel;telephone;iban;adresse;cp;ville;immatriculation;commentaire
+1;Mme;RAVIER;Eloise;1958-09-02;eloise.ravier@exemple.test;06 39 98 07 26;FR76 6740 4759 0895 4172 3112 639;98 rue des Tilleuls-Argentés;72000;Le Mans;VF-208-CD;"Rappeler Mme Ravier"
+2;M.;TESSIER;Bastien;10/03/1975;bastien.tessier@exemple.test;06.39.98.35.89;FR7661574610181435949692323;"28 allée des Sorbiers
+Résidence du Parc";17000;La Rochelle;JG-390-QD;"Rappeler M. Tessier"
+3;Mme;LEBRUN;Margaux;1956-02-05;margaux.lebrun@exemple.test;0639981871;FR76-4658-2336-5605-7048-5616-579;9 rue du Pont-Levis;56100;Lorient;EB-609-YP;"Un martin-pêcheur a été aperçu près de la fontaine du parc municipal."
+4;M.;CHARPENTIER;Thibault;01/07/1951;thibault.charpentier@exemple.test;+33 6 39 98 11 65;fr76 6366 2185 7090 4904 4217 354;115 avenue des Acacias;64000;Pau;XH-643-YW;"Rappeler M. Charpentier"
+5;Mme;GUILLOT;Léonie;1975-09-12;leonie.guillot@exemple.test;06-39-98-48-00;FR76 19631 90140 54277231070 28;16 impasse des Ajoncs;66000;Perpignan;TA-466-DY;"Rappeler Mme Guillot"
+6;M.;POIRIER;Corentin;14/09/1969;corentin.poirier@exemple.test;0033 6 39 98 20 70;FR76  0166  1181  9266  7588  8847  967;"17 rue de la Forge-Neuve
+Résidence du Parc";68100;Mulhouse;QZ-738-VR;"Le montant total s'élève à 1 250,00 euros hors taxes pour l'ensemble des prestations."
+7;Mme;BARBIER;Apolline;1985-09-01;apolline.barbier@exemple.test;06 3998 2946;FR76 0965 7682 6242 3514 3226 130;25 chemin du Bois-Joli;03100;Montluçon;BN-435-DP;"Rappeler Mme Barbier"
+8;M.;LECLERC;Maxence;10/01/1999;maxence.leclerc@exemple.test;06/39/98/55/08;FR7612998920352637355040901;83 rue des Halles-Basses;41000;Blois;KM-325-BS;"Rappeler M. Leclerc"
+9;Mme;HAMELIN;Clémence;1979-05-07;clemence.hamelin@exemple.test;06 39 98 93 48;FR76-3783-1748-5214-3184-2211-370;63 place de la Halle-aux-Grains;62000;Arras;QE-244-CM;"Le marchand de journaux ferme le dimanche après-midi."
+10;M.;JOUBERT;Hugo;14/05/1953;hugo.joubert@exemple.test;06.39.98.29.15;fr76 7683 0162 6745 2140 4592 170;"75 rue des Lavandières
+Résidence du Parc";16000;Angoulême;HE-460-BH;"Rappeler M. Joubert"
+11;Mme;ROYER;Jeanne;1967-10-14;jeanne.royer@exemple.test;0639987664;FR76 97836 43703 75758718815 51;114 boulevard des Platanes;71100;Chalon-sur-Saône;AG-846-MT;"Rappeler Mme Royer"
+12;M.;LEMAIRE;Valentin;14/02/1984;valentin.lemaire@exemple.test;+33 6 39 98 14 72;FR76  7164  1130  2167  2915  5719  955;12 rue Saint-Roch-des-Champs;18000;Bourges;NV-565-DM;"Le petit-déjeuner sera servi à partir de sept heures dans la salle du rez-de-chaussée."

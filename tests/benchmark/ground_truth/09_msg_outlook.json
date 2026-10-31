@@ -1,0 +1,265 @@
+{
+ "slug": "09_msg_outlook",
+ "format": "msg",
+ "description": "Message Outlook .msg (propriétés MAPI, RTF compressé, destinataires, pièce jointe texte)",
+ "files": [
+  "coordonnees.msg"
+ ],
+ "entries": [
+  {
+   "id": "09-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Agathe Rousseau",
+   "where": [
+    "sujet, destinataire, corps texte/HTML/RTF, pièce jointe et son nom"
+   ],
+   "surfaces": [
+    "Agathe Rousseau",
+    "Mme Agathe Rousseau",
+    "Rousseau",
+    "Agathe"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Agathe Rousseau"
+    },
+    {
+     "mode": "text",
+     "text": "Rousseau Agathe"
+    },
+    {
+     "mode": "text",
+     "text": "Rousseau"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Agathe"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "09-002",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "agathe.rousseau@exemple.test",
+   "where": [
+    "destinataire, en-têtes"
+   ],
+   "surfaces": [
+    "agathe.rousseau@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "agathe.rousseau@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "agathe.rousseau@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "09-003",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639984898",
+   "where": [
+    "corps texte/HTML/RTF"
+   ],
+   "surfaces": [
+    "06.39.98.48.98"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639984898"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "09-004",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1977-07-07",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "7 juillet 1977"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "07/07/1977"
+    },
+    {
+     "mode": "text",
+     "text": "07/07/77"
+    },
+    {
+     "mode": "text",
+     "text": "07071977"
+    },
+    {
+     "mode": "text",
+     "text": "1977-07-07"
+    },
+    {
+     "mode": "text",
+     "text": "7 July 1977"
+    },
+    {
+     "mode": "text",
+     "text": "7 juillet 1977"
+    },
+    {
+     "mode": "text",
+     "text": "7/7/1977"
+    },
+    {
+     "mode": "text",
+     "text": "July 7, 1977"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "09-005",
+   "type": "CARTE",
+   "direct": true,
+   "value": "5132253506383343",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "5132-2535-0638-3343"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "5132253506383343"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "09-006",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7626774948594371797620829",
+   "where": [
+    "pièce jointe"
+   ],
+   "surfaces": [
+    "FR76 2677 4948 5943 7179 7620 829"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7626774948594371797620829"
+    },
+    {
+     "mode": "compact",
+     "text": "26774948594371797620829"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "09-007",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Baptiste Dumoulin",
+   "where": [
+    "expéditeur, en-têtes"
+   ],
+   "surfaces": [
+    "Baptiste Dumoulin",
+    "Baptiste"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Baptiste Dumoulin"
+    },
+    {
+     "mode": "text",
+     "text": "Dumoulin Baptiste"
+    },
+    {
+     "mode": "text",
+     "text": "Dumoulin"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Baptiste"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "09-008",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "baptiste.dumoulin@exemple.test",
+   "where": [
+    "expéditeur"
+   ],
+   "surfaces": [
+    "baptiste.dumoulin@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "baptiste.dumoulin@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "baptiste.dumoulin@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "09-009",
+   "type": "IP",
+   "direct": true,
+   "value": "203.0.113.36",
+   "where": [
+    "en-tête Received"
+   ],
+   "surfaces": [
+    "203.0.113.36"
+   ],
+   "renderings": [
+    {
+     "mode": "ip",
+     "text": "203.0.113.36"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "La réunion budgétaire du comité de direction est reportée au trimestre prochain."
+ ],
+ "images": {}
+}

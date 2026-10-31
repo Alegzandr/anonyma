@@ -98,6 +98,10 @@ TYPE_PRIORITY: dict[str, int] = {
     EntityType.PROPER_NOUN: 10,
     EntityType.SUSPICIOUS_TOKEN: 5,
 }
+#: Types that only identify someone in their own context (« présidente » next to
+#: « Mme Durand »): propagated and verified within their top-level file only, never
+#: batch-wide (the same job title elsewhere is ordinary text).
+DOCUMENT_LOCAL_TYPES = frozenset({EntityType.JOB_TITLE})
 #: Local parts that never identify a person.
 GENERIC_LOCAL_PARTS = frozenset(
     [
@@ -449,6 +453,9 @@ def cluster_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
             continue
         cap = entity_type in NAME_TYPES and needs_capital(variant)
         yield variant, cap
+        glued = _glued(entity_type, variant)
+        if glued:
+            yield glued, False
     if entity_type == EntityType.PERSON:
         yield from _person_forms(cluster)
     elif entity_type == EntityType.EMAIL:
@@ -468,6 +475,22 @@ def cluster_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
                 yield _grouped(compact), False
             elif entity_type == EntityType.SIREN and len(compact) == 9:
                 yield _grouped(compact, 3), False
+
+
+#: Multi-word names also searched without their spaces: OCR often glues the words of
+#: a line (``TransportsValmontSAS``), and so do hashtags, identifiers and file names.
+GLUED_TYPES = frozenset({*NAME_TYPES, EntityType.ADDRESS})
+MIN_GLUED_LENGTH = 8
+
+
+def _glued(entity_type: str, variant: str) -> str | None:
+    if entity_type not in GLUED_TYPES:
+        return None
+    words = variant.split()
+    glued = "".join(words)
+    if len(words) < 2 or len(glued) < MIN_GLUED_LENGTH:
+        return None
+    return glued
 
 
 def _person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
@@ -520,7 +543,8 @@ def propagate(
 ) -> list[Entity]:
     """Find every other occurrence of each cluster variant in the whole batch.
 
-    Returns only *new* entities never overlapping ``existing``. Entities whose
+    Returns only *new* entities never contained in an ``existing`` mention (they may
+    overlap one and extend it: the replacer replaces the union). Entities whose
     ``cluster_id`` is None belong to a new cluster that the next :func:`resolve`
     call creates (persons derived from e-mail addresses).
     """
@@ -554,6 +578,11 @@ def propagate(
     taken: dict[tuple[str, str], list[tuple[int, int]]] = {}
     for e in existing:
         taken.setdefault((e.document_id, e.segment_id), []).append((e.start, e.end))
+    root_of = {doc.id: root.id for root in documents for doc in root.walk()}
+    local_roots: dict[str, set[str]] = {}
+    for e in existing:
+        if e.entity_type in DOCUMENT_LOCAL_TYPES and e.cluster_id:
+            local_roots.setdefault(e.cluster_id, set()).add(root_of.get(e.document_id, ""))
     found: list[Entity] = []
     for root in documents:
         for doc in root.walk():
@@ -566,9 +595,20 @@ def propagate(
             for segment in segments:
                 spans = taken.get((doc.id, segment.id), [])
                 for match in leftmost_longest(matcher.find(segment.text)):
-                    if any(s < match.end and match.start < e for s, e in spans):
+                    # A form inside an existing mention adds nothing; a longer one
+                    # (``Kowalczyk Jean-Baptiste`` around a detected ``Jean-Baptiste``)
+                    # is kept: the replacer merges overlapping spans into their union.
+                    if any(s <= match.start and match.end <= e for s, e in spans):
                         continue
-                    target = _pick(match.payloads)
+                    targets = [
+                        t
+                        for t in match.payloads
+                        if t.entity_type not in DOCUMENT_LOCAL_TYPES
+                        or root.id in local_roots.get(t.cluster_id or "", set())
+                    ]
+                    if not targets:
+                        continue
+                    target = _pick(targets)
                     found.append(
                         Entity(
                             entity_type=target.entity_type,
@@ -603,6 +643,7 @@ def _pick(targets: Sequence[_Target]) -> _Target:
 
 
 __all__ = [
+    "DOCUMENT_LOCAL_TYPES",
     "MIN_PROPAGATION_LENGTH",
     "PROPAGATION_DETECTOR",
     "cluster_forms",

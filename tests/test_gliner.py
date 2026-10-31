@@ -11,9 +11,22 @@ import pytest
 
 from anonyma import paths
 from anonyma.config import Config
-from anonyma.detectors.gliner import GlinerDetector, model_dir, model_spec
+from anonyma.detectors.gliner import (
+    GlinerDetector,
+    _job_titles_near_people,
+    _skip_leading_words,
+    model_dir,
+    model_spec,
+)
 from anonyma.gliner_onnx import GlinerOnnx, default_threads, split_words
-from anonyma.models import DocumentStatus, Profile, Segment, SegmentContext, SegmentKind
+from anonyma.models import (
+    DocumentStatus,
+    Entity,
+    Profile,
+    Segment,
+    SegmentContext,
+    SegmentKind,
+)
 from anonyma.pipeline import Pipeline
 
 REPO_MODELS = Path(os.environ.get("ANONYMA_TEST_MODELS", Path(__file__).parents[1] / "models"))
@@ -34,6 +47,39 @@ def test_split_words_matches_gliner_splitter() -> None:
     words = [text[s:e] for s, e in split_words(text)]
     assert words[:4] == ["Jean-Pierre", "(", "DRH", ")"]
     assert "j" in words and "12h30" in words
+
+
+def _span(entity_type: str, text: str, value: str) -> Entity:
+    start = text.index(value)
+    return Entity(entity_type, value, "d", "s", start, start + len(value), 0.8, "gliner")
+
+
+def test_job_titles_need_a_person_nearby() -> None:
+    text = (
+        "Séance présidée par Eléonore VIDAL, présidente de l'association.\n\n"
+        "Le boucher du marché couvert propose désormais des produits bio, comme chaque été."
+    )
+    found = _job_titles_near_people(
+        text,
+        [
+            _span("PERSONNE", text, "Eléonore VIDAL"),
+            _span("FONCTION", text, "présidente"),
+            _span("FONCTION", text, "boucher du marché couvert"),
+        ],
+    )
+    assert [e.value for e in found] == ["Eléonore VIDAL", "présidente"]
+    # A cell or a signature line made of the title is kept as it is.
+    cell = "Responsable RH"
+    assert _job_titles_near_people(cell, [_span("FONCTION", cell, cell)])
+
+
+def test_person_spans_drop_greetings_and_verbs() -> None:
+    text = "Bonjour Rémi, Rappeler M. Joubert"
+    assert text[_skip_leading_words(text, 0, 12) : 12] == "Rémi"
+    start = text.index("Rappeler")
+    assert text[_skip_leading_words(text, start, len(text)) :] == "M. Joubert"
+    other = "Martin Dupont"
+    assert _skip_leading_words(other, 0, len(other)) == 0
 
 
 def test_windows_overlap_and_respect_budget() -> None:

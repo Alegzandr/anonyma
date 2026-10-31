@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!-- Saisie effectuée par Maëlle Le Goff (mlegoff) -->
+<sinistre reference="RG 23/04567" gestionnaire="Maëlle Le Goff" assureur="Assurances Bellerive">
+  <declarant civilite="Mme" nom="LE GOFF" prenom="Maëlle">
+    <naissance>05.03.1992</naissance>
+    <adresse>9 venelle de Kerbriant
+      29200 Brest</adresse>
+    <contact type="mobile">06-39-98-08-05</contact>
+    <contact type="courriel">maelle.legoff@exemple.test</contact>
+  </declarant>
+  <tiers nom="Jean-Baptiste Kowalczyk" immatriculation="GE 319 LQ"/>
+  <circonstances><![CDATA[Le véhicule de <b>Jean-Baptiste Kowalczyk</b> a heurté le portail. Le boucher du marché couvert propose désormais des produits bio.]]></circonstances>
+  <?validation par="Le Goff"?>
+  <lieu>Brest</lieu>
+</sinistre>

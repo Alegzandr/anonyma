@@ -254,6 +254,33 @@ def match_login_template(local: str, person: PersonName) -> str | None:
     return None
 
 
+def _dotted(token: str, *, spaced_parts: bool) -> str:
+    """``Jean-Baptiste`` -> ``J.-B.``; ``Delacroix-Vasseur`` -> ``D.-V.`` (or ``D.V.``)."""
+    parts = [p for p in token.replace("'", "-").split("-") if p and p[0].isalpha()]
+    return ("-" if spaced_parts else "").join(f"{p[0].upper()}." for p in parts)
+
+
+def initials_forms(person: PersonName) -> list[str]:
+    """Initials-only signatures: ``J.D.``, ``J. D.``, ``J.-B. K.``, ``F.D.V.``.
+
+    Only dotted forms with at least two letters: they cannot be ordinary words.
+    """
+    if not person.is_full:
+        return []
+    surname = [s for s in person.surname if normalize(s) not in PARTICLES]
+    if not surname:
+        return []
+    forms: set[str] = set()
+    for hyphen in (True, False):
+        given = "".join(_dotted(g, spaced_parts=hyphen) for g in person.given)
+        family = "".join(_dotted(s, spaced_parts=hyphen) for s in surname)
+        if len([c for c in given + family if c.isalpha()]) < 2:
+            continue
+        forms.add(given + family)
+        forms.add(f"{given} {family}")
+    return sorted(forms)
+
+
 def text_forms(person: PersonName) -> list[str]:
     """Readable forms worth propagating: full name in both orders, initial forms."""
     forms: list[str] = []
@@ -265,7 +292,13 @@ def text_forms(person: PersonName) -> list[str]:
         initial = initials_of(first)[:1].upper()
         if initial:
             forms += [f"{initial}. {surname}", f"{surname} {initial}."]
-    return forms
+        # Every given name as initials: ``J.-B. Kowalczyk``, ``J.B. Kowalczyk``.
+        for hyphen in (True, False):
+            dotted = "".join(_dotted(g, spaced_parts=hyphen) for g in person.given)
+            if len([c for c in dotted if c.isalpha()]) >= 2:
+                forms += [f"{dotted} {surname}", f"{surname} {dotted}"]
+        forms += initials_forms(person)
+    return list(dict.fromkeys(forms))
 
 
 def needs_capital(word: str) -> bool:
@@ -279,6 +312,7 @@ __all__ = [
     "PARTICLES",
     "PersonName",
     "civility_of",
+    "initials_forms",
     "initials_of",
     "is_initial",
     "login_forms",

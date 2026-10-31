@@ -23,6 +23,13 @@ from anonyma.models import EntityType, SegmentKind
 #: Separators allowed inside numbers (space, tab, dot, hyphen, no-break spaces).
 SEP = r"[ \t.\-\u00a0\u202f]"
 SP = r"[ \t\u00a0\u202f]"
+#: Separators seen inside IBANs (also inside RIB-style groupings).
+IBAN_SEP = r"[ \t.\-\u00a0\u202f]"
+#: Classic IBAN layout (groups of four): bounds a checksum-invalid IBAN candidate.
+IBAN_STRICT = regex.compile(
+    r"[A-Z]{2}\d{2}(?:" + SP + r"?[A-Z0-9]{4}){2,7}(?:" + SP + r"?[A-Z0-9]{1,4})?(?![A-Za-z0-9])",
+    regex.IGNORECASE,
+)
 
 Validator = Callable[[str], bool]
 
@@ -64,17 +71,32 @@ def _fr_phone(value: str) -> bool:
     return len(d) == 10 and d[0] == "0" and d[1] != "0"
 
 
-def _intl_phone(value: str) -> bool:
+def _intl_number(value: str) -> phonenumbers.PhoneNumber | None:
     d = checksums.digits(value.replace("(0)", ""))
     if value.lstrip().startswith("00"):
         d = d[2:]
     if d.startswith("33"):
-        return False  # handled by the French rule
+        return None  # handled by the French rule
     try:
-        number = phonenumbers.parse("+" + d, None)
+        return phonenumbers.parse("+" + d, None)
     except phonenumbers.NumberParseException:
-        return False
-    return bool(phonenumbers.is_valid_number(number))
+        return None
+
+
+def _intl_phone(value: str) -> bool:
+    number = _intl_number(value)
+    return number is not None and bool(phonenumbers.is_valid_number(number))
+
+
+def _intl_phone_possible(value: str) -> bool:
+    """Right length for its country but outside allocated ranges (reserved, fiction...)."""
+    number = _intl_number(value)
+    return (
+        number is not None
+        and not phonenumbers.is_valid_number(number)
+        and bool(phonenumbers.is_possible_number(number))
+        and len(str(number.national_number)) >= 8
+    )
 
 
 def _card(value: str) -> bool:
@@ -245,10 +267,20 @@ RULES: tuple[Rule, ...] = (
         validator=_fr_phone,
     ),
     Rule(
-        # Phone stored as a number (spreadsheets, JSON): the leading 0 is lost.
+        # Pairs separated by slashes (``06/12/34/56/78``), the same separator throughout.
+        "telephone_fr_barres",
+        EntityType.PHONE,
+        r"(?<![\w/])0[1-9](?:/\d{2}){4}(?![\w/])",
+        0.85,
+        context=("tel", "telephone", "portable", "mobile", "fixe", "fax", "gsm", "phone"),
+        context_score=1.0,
+    ),
+    Rule(
+        # Phone stored as a number (spreadsheets, JSON): the leading 0 is lost, the
+        # country code may remain (``33612345678``).
         "telephone_sans_zero",
         EntityType.PHONE,
-        r"(?<![\d+.,])[1-9](?:" + SEP + r"?\d){8}(?![\d.,]\d|\d)",
+        r"(?<![\d+.,])(?:33)?[1-9](?:" + SEP + r"?\d){8}(?![\d.,]\d|\d)",
         0.3,
         context=("tel", "telephone", "portable", "mobile", "fixe", "fax", "gsm", "phone"),
         context_score=0.85,
@@ -285,15 +317,31 @@ RULES: tuple[Rule, ...] = (
         context_score=1.0,
         validator=_intl_phone,
     ),
+    Rule(
+        # ``+44 7700 900123``: a possible but unallocated number (reserved or fiction
+        # ranges, recently opened blocks): still written as a phone number.
+        "telephone_international_possible",
+        EntityType.PHONE,
+        _NUM_START
+        + r"(?:\+|00)"
+        + SP
+        + r"?[1-9]\d{0,2}(?:"
+        + SEP
+        + r"{0,2}(?:\(\d{1,4}\)|\d)){6,13}"
+        + _NUM_END,
+        0.6,
+        context=("tel", "telephone", "portable", "mobile", "fax", "phone", "whatsapp", "gsm"),
+        context_score=0.9,
+        validator=_intl_phone_possible,
+    ),
     # Banking.
     Rule(
+        # Any grouping (4 by 4, RIB-like 5/5/11/2, glued) and separator (spaces, tabs,
+        # hyphens, dots, doubled spaces): the checksum decides, the detector shrinks
+        # the match to the longest valid prefix (see ``IBAN_STRICT`` for invalid ones).
         "iban",
         EntityType.IBAN,
-        r"(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:"
-        + SP
-        + r"?[A-Z0-9]{4}){2,7}(?:"
-        + SP
-        + r"?[A-Z0-9]{1,4})?(?![A-Za-z0-9])",
+        r"(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:" + IBAN_SEP + r"{0,2}[A-Z0-9]){10,30}(?![A-Za-z0-9])",
         1.0,
         context=("iban", "rib", "compte", "bancaire", "virement", "banque", "bank", "account"),
         validator=checksums.iban_valid,
@@ -345,21 +393,27 @@ RULES: tuple[Rule, ...] = (
     ),
     # French identifiers.
     Rule(
+        # Separators: spaces, dots or hyphens. The key makes the match safe, so a word
+        # glued on the left (OCR: ``sociale185...``) does not prevent it.
         "nir",
         EntityType.NIR,
-        r"(?<![\dA-Za-z])[1-478]"
-        + SP
+        r"(?<!\d)(?<!\d"
+        + SEP
+        + r")[1-478]"
+        + SEP
         + r"?\d{2}"
-        + SP
+        + SEP
         + r"?(?:0[1-9]|1[0-2]|[2-9]\d)"
-        + SP
+        + SEP
         + r"?(?:\d{2}|2[AaBb])"
-        + SP
+        + SEP
         + r"?\d{3}"
-        + SP
+        + SEP
         + r"?\d{3}"
-        + SP
-        + r"?\d{2}(?![\dA-Za-z])",
+        + SEP
+        + r"?\d{2}(?![\dA-Za-z])(?!"
+        + SEP
+        + r"\d)",
         1.0,
         context=(
             "securite sociale",
@@ -382,17 +436,17 @@ RULES: tuple[Rule, ...] = (
         "nir_sans_cle",
         EntityType.NIR,
         r"(?<![\dA-Za-z])[1-478]"
-        + SP
+        + SEP
         + r"?\d{2}"
-        + SP
+        + SEP
         + r"?(?:0[1-9]|1[0-2]|[2-9]\d)"
-        + SP
+        + SEP
         + r"?(?:\d{2}|2[AaBb])"
-        + SP
+        + SEP
         + r"?\d{3}"
-        + SP
+        + SEP
         + r"?\d{3}(?!"
-        + SP
+        + SEP
         + r"?\d)(?![A-Za-z])",
         0.45,
         context=(
@@ -669,6 +723,13 @@ DATE_RULES: tuple[Rule, ...] = (
         EntityType.DATE,
         r"(?<![\d/.\-])(?:0?[1-9]|[12]\d|3[01])([/.\-])(?:0?[1-9]|1[0-2])\1(?:19|20)?\d{2}"
         r"(?![\d/\-]|\.\d)",
+        0.65,
+    ),
+    Rule(
+        # US order with an unambiguous day (``03/14/1985``): the French rule rejects it.
+        "date_us",
+        EntityType.DATE,
+        r"(?<![\d/.\-])(?:0?[1-9]|1[0-2])/(?:1[3-9]|2\d|3[01])/(?:19|20)\d{2}(?![\d/\-]|\.\d)",
         0.65,
     ),
     Rule(

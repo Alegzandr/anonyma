@@ -1,0 +1,49 @@
+{
+  "export": {
+    "date": "2026-02-01",
+    "source": "crm",
+    "version": "4.2"
+  },
+  "utilisateurs": [
+    {
+      "login": "jbkowal88",
+      "nom_complet": "Jean-Baptiste Kowalczyk",
+      "courriel": "jb.kowalczyk@exemple.test",
+      "telephone": "+33 6 39 98 41 55",
+      "naissance": "1988-07-23",
+      "ip_derniere_connexion": "192.0.2.240",
+      "iban": "FR7639222612779401990820835",
+      "adresse": {
+        "rue": "27 rue Jules-Ferry-Prolongée",
+        "complement": "Résidence Les Mésanges",
+        "cp": "57000",
+        "ville": "Metz"
+      },
+      "vehicule": {
+        "immatriculation": "GE-319-LQ",
+        "type": "porteur 19 t"
+      },
+      "notes": [
+        "Appel\u00e9 par Thi Lan Nguyen le 3 f\u00e9vrier",
+        null,
+        true,
+        3.5
+      ]
+    },
+    {
+      "login": "tnguyen",
+      "nom_complet": "NGUYEN Thi Lan",
+      "courriel": "tl.nguyen@exemple.test",
+      "telephone": 33639984697,
+      "naissance": "12/10/1981",
+      "carte": "4970126776498843",
+      "ip_derniere_connexion": "2001:db8::4a:1f",
+      "fonction": "pharmacienne"
+    }
+  ],
+  "Kowalczyk Jean-Baptiste": {
+    "commentaire": "fiche nominative",
+    "nir": "188075703030092"
+  },
+  "remarque": "La version 2.3.1 du logiciel corrige le problème signalé à la page 12 du manuel."
+}

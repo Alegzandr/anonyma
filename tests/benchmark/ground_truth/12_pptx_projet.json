@@ -1,0 +1,323 @@
+{
+ "slug": "12_pptx_projet",
+ "format": "pptx",
+ "description": "Présentation PowerPoint : titre coupé en runs, notes de l'orateur, commentaires, auteurs, masque et disposition, métadonnées",
+ "files": [
+  "projet_hermine.pptx"
+ ],
+ "entries": [
+  {
+   "id": "12-001",
+   "type": "ORGANISATION",
+   "direct": false,
+   "value": "Clinique de l'Orme-Rond",
+   "where": [
+    "métadonnées"
+   ],
+   "surfaces": [
+    "Clinique de l'Orme-Rond"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Clinique de l'Orme-Rond"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "12-002",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Ophélie Gauthier",
+   "where": [
+    "titre coupé en deux runs, descr, disposition, créateur"
+   ],
+   "surfaces": [
+    "Ophélie Gauthier",
+    "Ophélie"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Ophélie Gauthier"
+    },
+    {
+     "mode": "text",
+     "text": "Gauthier Ophélie"
+    },
+    {
+     "mode": "text",
+     "text": "Gauthier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Ophélie"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "12-003",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "ophelie.gauthier@exemple.test",
+   "where": [
+    "masque"
+   ],
+   "surfaces": [
+    "ophelie.gauthier@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "ophelie.gauthier@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "ophelie.gauthier@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "12-004",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Baptiste Dumoulin",
+   "where": [
+    "corps, notes, commentaire"
+   ],
+   "surfaces": [
+    "Baptiste Dumoulin",
+    "Baptiste"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Baptiste Dumoulin"
+    },
+    {
+     "mode": "text",
+     "text": "Dumoulin Baptiste"
+    },
+    {
+     "mode": "text",
+     "text": "Dumoulin"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Baptiste"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "12-005",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "baptiste.dumoulin@exemple.test",
+   "where": [
+    "corps, propriété personnalisée"
+   ],
+   "surfaces": [
+    "baptiste.dumoulin@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "baptiste.dumoulin@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "baptiste.dumoulin@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "12-006",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639987080",
+   "where": [
+    "notes de l'orateur"
+   ],
+   "surfaces": [
+    "06 39 98 70 80"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639987080"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "12-007",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "90 avenue du Haut-Fourneau, 42000 Saint-Étienne",
+   "where": [
+    "notes de l'orateur"
+   ],
+   "surfaces": [
+    "90 avenue du Haut-Fourneau",
+    "42000 Saint-Étienne"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "90 avenue du Haut-Fourneau"
+    },
+    {
+     "mode": "text",
+     "text": "avenue du Haut-Fourneau"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "12-008",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "bdumoulin",
+   "where": [
+    "commentaire"
+   ],
+   "surfaces": [
+    "bdumoulin"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "bdumoulin"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "12-009",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Eléonore Vidal",
+   "where": [
+    "corps (civilité + NOM), notes, auteur de commentaire, modificateur"
+   ],
+   "surfaces": [
+    "Mme VIDAL",
+    "Eléonore Vidal",
+    "Eléonore"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Eléonore Vidal"
+    },
+    {
+     "mode": "text",
+     "text": "Vidal Eléonore"
+    },
+    {
+     "mode": "text",
+     "text": "Vidal"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Eléonore"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "12-010",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "présidente",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "présidente"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "présidente"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "12-011",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1974-06-21",
+   "where": [
+    "notes"
+   ],
+   "surfaces": [
+    "21/06/1974"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "06/21/1974"
+    },
+    {
+     "mode": "text",
+     "text": "1974-06-21"
+    },
+    {
+     "mode": "text",
+     "text": "21 June 1974"
+    },
+    {
+     "mode": "text",
+     "text": "21 juin 1974"
+    },
+    {
+     "mode": "text",
+     "text": "21/06/1974"
+    },
+    {
+     "mode": "text",
+     "text": "21/06/74"
+    },
+    {
+     "mode": "text",
+     "text": "21/6/1974"
+    },
+    {
+     "mode": "text",
+     "text": "21061974"
+    },
+    {
+     "mode": "text",
+     "text": "June 21, 1974"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "La version 2.3.1 du logiciel corrige le problème signalé à la page 12 du manuel."
+ ],
+ "images": {}
+}

@@ -1,0 +1,625 @@
+{
+ "slug": "01_txt_lettre",
+ "format": "txt",
+ "description": "Lettre de réclamation (texte brut UTF-8)",
+ "files": [
+  "lettre_reclamation.txt"
+ ],
+ "entries": [
+  {
+   "id": "01-001",
+   "type": "ORGANISATION",
+   "direct": false,
+   "value": "Transports Valmont SAS",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Transports Valmont SAS"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Transports Valmont SAS"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-002",
+   "type": "SIREN",
+   "direct": false,
+   "value": "536180334",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "536 180 334"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "536180334"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-003",
+   "type": "SIRET",
+   "direct": false,
+   "value": "53618033413415",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "536 180 334 13415"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "53618033413415"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-004",
+   "type": "TVA",
+   "direct": false,
+   "value": "FR05536180334",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "FR05536180334"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr05536180334"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-005",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Hélène Garnier",
+   "where": [
+    "corps, signature"
+   ],
+   "surfaces": [
+    "Hélène GARNIER",
+    "Hélène Garnier",
+    "H. Garnier",
+    "Hélène"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Hélène Garnier"
+    },
+    {
+     "mode": "text",
+     "text": "Garnier Hélène"
+    },
+    {
+     "mode": "text",
+     "text": "Garnier"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Hélène"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "01-006",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "12 rue des Glycines, 44000 Nantes",
+   "where": [
+    "en-tête (sur trois lignes)"
+   ],
+   "surfaces": [
+    "12 rue des Glycines",
+    "44000 Nantes"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "12 rue des Glycines"
+    },
+    {
+     "mode": "text",
+     "text": "rue des Glycines"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-007",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "Bât. C, appartement 34",
+   "where": [
+    "en-tête"
+   ],
+   "surfaces": [
+    "Bât. C, appartement 34"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Bât. C, appartement 34"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-008",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639982061",
+   "where": [
+    "en-tête, post-scriptum"
+   ],
+   "surfaces": [
+    "06 39 98 20 61",
+    "06 39 98 20 61"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639982061"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-009",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639981234",
+   "where": [
+    "en-tête"
+   ],
+   "surfaces": [
+    "+33 (0)6 39 98 12 34"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639981234"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-010",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "helene.garnier@exemple.test",
+   "where": [
+    "en-tête"
+   ],
+   "surfaces": [
+    "helene.garnier@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "helene.garnier@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "helene.garnier@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-011",
+   "type": "NUMERO_DOSSIER",
+   "direct": false,
+   "value": "SIN-2024-008812",
+   "where": [
+    "objet"
+   ],
+   "surfaces": [
+    "SIN-2024-008812"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "sin2024008812"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-012",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1979-02-14",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "14/02/1979"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "02/14/1979"
+    },
+    {
+     "mode": "text",
+     "text": "14 February 1979"
+    },
+    {
+     "mode": "text",
+     "text": "14 février 1979"
+    },
+    {
+     "mode": "text",
+     "text": "14/02/1979"
+    },
+    {
+     "mode": "text",
+     "text": "14/02/79"
+    },
+    {
+     "mode": "text",
+     "text": "14/2/1979"
+    },
+    {
+     "mode": "text",
+     "text": "14021979"
+    },
+    {
+     "mode": "text",
+     "text": "1979-02-14"
+    },
+    {
+     "mode": "text",
+     "text": "February 14, 1979"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-013",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Rennes",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Rennes"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Rennes"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-014",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Nantes",
+   "where": [
+    "date"
+   ],
+   "surfaces": [
+    "Nantes"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Nantes"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-015",
+   "type": "NIR",
+   "direct": true,
+   "value": "279024446193392",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "2 79 02 44 461 933 92"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "279024446193392"
+    },
+    {
+     "mode": "compact",
+     "text": "2790244461933"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-016",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "directrice administrative et financière",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "directrice administrative et financière"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "directrice administrative et financière"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-017",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7621831283103568831598365",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "FR76 2183 1283 1035 6883 1598 365"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7621831283103568831598365"
+    },
+    {
+     "mode": "compact",
+     "text": "21831283103568831598365"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-018",
+   "type": "CARTE",
+   "direct": true,
+   "value": "4970778289906207",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "4970 7782 8990 6207"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "4970778289906207"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-019",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "JB-158-ZD",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "JB-158-ZD"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "jb158zd"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-020",
+   "type": "IP",
+   "direct": true,
+   "value": "192.0.2.188",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "192.0.2.188"
+   ],
+   "renderings": [
+    {
+     "mode": "ip",
+     "text": "192.0.2.188"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-021",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "hgarnier",
+   "where": [
+    "corps, URL"
+   ],
+   "surfaces": [
+    "hgarnier"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "hgarnier"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-022",
+   "type": "URL",
+   "direct": false,
+   "value": "https://www.transports-valmont.example/suivi?client=hgarnier",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "https://www.transports-valmont.example/suivi?client=hgarnier"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "www.transports-valmont.example/suivi?client=hgarnier"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-023",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Benoît Lefebvre",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "M. Benoît Lefebvre",
+    "M. Lefebvre",
+    "Benoît LEFEBVRE",
+    "Benoît"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Benoît Lefebvre"
+    },
+    {
+     "mode": "text",
+     "text": "Lefebvre Benoît"
+    },
+    {
+     "mode": "text",
+     "text": "Lefebvre"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Benoît"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "01-024",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639984353",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "06.39.98.43.53"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639984353"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-025",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "benoit.lefebvre@exemple.test",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "benoit.lefebvre@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "benoit.lefebvre@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "benoit.lefebvre@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "01-026",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7685952778000487894129335",
+   "where": [
+    "post-scriptum"
+   ],
+   "surfaces": [
+    "FR76 85952 77800 04878941293 35"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7685952778000487894129335"
+    },
+    {
+     "mode": "compact",
+     "text": "85952778000487894129335"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "La réunion budgétaire du comité de direction est reportée au trimestre prochain.",
+  "Le montant total s'élève à 1 250,00 euros hors taxes pour l'ensemble des prestations."
+ ],
+ "images": {}
+}

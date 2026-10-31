@@ -386,3 +386,83 @@ def test_detection_never_uses_the_network() -> None:
     assert {e.entity_type for e in detect(detector, text)} >= {"URL", "EMAIL"}
     with pytest.raises(netguard.NetworkBlockedError):
         socket.create_connection(("192.0.2.1", 80), timeout=0.1)
+
+
+# -- leak classes found by the benchmark (tests/benchmark) ------------------------
+
+
+IBAN_LAYOUTS = {
+    "rib": lambda i: f"{i[:4]} {i[4:9]} {i[9:14]} {i[14:25]} {i[25:]}",
+    "tirets": lambda i: "-".join(i[k : k + 4] for k in range(0, len(i), 4)),
+    "doubles espaces": lambda i: "  ".join(i[k : k + 4] for k in range(0, len(i), 4)),
+    "points": lambda i: ".".join(i[k : k + 4] for k in range(0, len(i), 4)),
+}
+
+
+@pytest.mark.parametrize("layout", list(IBAN_LAYOUTS))
+def test_iban_any_grouping(detector: RegexDetector, layout: str) -> None:
+    written = IBAN_LAYOUTS[layout](make_iban_fr("12345678901"))
+    assert found(detector, f"Compte {written} et sa date", "IBAN") == [written]
+
+
+def test_iban_invalid_candidate_stays_bounded(detector: RegexDetector) -> None:
+    iban = make_iban_fr("12345678901")
+    broken = iban[:-1] + ("0" if iban[-1] != "0" else "1")
+    grouped = " ".join(broken[k : k + 4] for k in range(0, len(broken), 4))
+    values = found(detector, f"virement sur le compte {grouped} et sa date", "IBAN")
+    assert values == [grouped]
+
+
+def test_nir_with_dots_and_glued_word(detector: RegexDetector) -> None:
+    nir = make_nir("2811013742367")
+    dotted = ".".join([nir[0], nir[1:3], nir[3:5], nir[5:7], nir[7:10], nir[10:13], nir[13:]])
+    assert found(detector, f"NIR {dotted}", "NIR") == [dotted]
+    # OCR glues words: the key makes the match safe even after letters.
+    glued = f"numérodesécuritésociale{nir[:10]} {nir[10:]},"
+    assert found(detector, glued, "NIR") == [f"{nir[:10]} {nir[10:]}"]
+
+
+def test_phone_variants(detector: RegexDetector) -> None:
+    assert found(detector, "tél 06/39/98/55/08", "TELEPHONE") == ["06/39/98/55/08"]
+    # Ofcom fiction range: a possible number, not an allocated one.
+    assert found(detector, "mobile +44 7700 900456", "TELEPHONE") == ["+44 7700 900456"]
+    assert found(detector, "33639984697", "TELEPHONE", kind=SegmentKind.CELL) == ["33639984697"]
+    assert found(detector, "telephone 33639984697", "TELEPHONE") == ["33639984697"]
+    assert found(detector, "le lot 33639984697 du dossier", "TELEPHONE") == []
+
+
+def test_us_date_of_birth(detector: RegexDetector) -> None:
+    assert found(detector, "date of birth 03/14/1985", "DATE_NAISSANCE") == ["03/14/1985"]
+
+
+def test_address_complement_and_english_order(detector: RegexDetector) -> None:
+    assert found(detector, "Bât. C, appartement 34", "ADRESSE") == ["Bât. C, appartement 34"]
+    assert found(detector, "esc. 2, 3e étage", "ADRESSE") == ["esc. 2, 3e étage"]
+    assert found(detector, "Le bâtiment est neuf.", "ADRESSE") == []
+    text = "Home address: 221 Larkspur Crescent, BS1 4XE Bristol"
+    assert found(detector, text, "ADRESSE") == ["221 Larkspur Crescent"]
+
+
+def test_address_wrapped_in_a_pdf_block(detector: RegexDetector) -> None:
+    text = "Adresse : 8\nquai des\nMariniers-d'Antan, 33000\nBordeaux"
+    assert found(detector, text, "ADRESSE") == ["8\nquai des\nMariniers-d'Antan, 33000\nBordeaux"]
+    # OCR glues the postcode and the city.
+    assert found(detector, "37000Tours", "ADRESSE", kind=SegmentKind.OCR) == ["37000Tours"]
+    assert found(detector, "Total 25000Euros", "ADRESSE") == []
+
+
+def test_person_in_file_name_leaves_extension_dot(detector: RegexDetector) -> None:
+    values = found(detector, "CV Ophélie Gauthier.txt", "PERSONNE", kind=SegmentKind.FILENAME)
+    assert values == ["Ophélie Gauthier"]
+
+
+def test_column_and_key_hints(detector: RegexDetector) -> None:
+    cell = {"kind": SegmentKind.CELL, "label": "C4 (colonne nom)"}
+    assert found(detector, "LEBRUN", "PERSONNE", **cell) == ["LEBRUN"]
+    login = found(detector, "jbkowal88", "IDENTIFIANT", label="$.*[0].* (champ identifiant)")
+    assert login == ["jbkowal88"]
+    assert found(detector, "Metz", "LIEU", label="$.*.* (champ ville)") == ["Metz"]
+    # The hint word elsewhere in a label means nothing.
+    assert not found(detector, "Synthèse", "PERSONNE", label="nom de feuille")
+    # Below the verifier's certainty: a misleading header sends to review, not quarantine.
+    assert all(e.score < 0.8 for e in detect(detector, "LEBRUN", **cell))  # type: ignore[arg-type]

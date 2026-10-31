@@ -1,0 +1,221 @@
+{
+ "slug": "07_eml_encode",
+ "format": "eml",
+ "description": "Courriel HTML seul, en-têtes RFC 2047 (Q et B), noms d'affichage inversés, archive zip jointe",
+ "files": [
+  "coordonnees.eml"
+ ],
+ "entries": [
+  {
+   "id": "07-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Maëlle Le Goff",
+   "where": [
+    "From (RFC 2047 Q), Subject (RFC 2047 B), corps HTML coupé, zip joint"
+   ],
+   "surfaces": [
+    "Maëlle Le Goff",
+    "Maëlle",
+    "Le Goff"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Maëlle Le Goff"
+    },
+    {
+     "mode": "text",
+     "text": "Le Goff Maëlle"
+    },
+    {
+     "mode": "text",
+     "text": "Le Goff"
+    },
+    {
+     "mode": "text",
+     "text": "Goff"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Maëlle"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "07-002",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "maelle.legoff@exemple.test",
+   "where": [
+    "From"
+   ],
+   "surfaces": [
+    "maelle.legoff@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "maelle.legoff@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "maelle.legoff@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "07-003",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "9 venelle de Kerbriant, 29200 Brest",
+   "where": [
+    "corps HTML"
+   ],
+   "surfaces": [
+    "9 venelle de Kerbriant",
+    "29200 Brest"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "9 venelle de Kerbriant"
+    },
+    {
+     "mode": "text",
+     "text": "venelle de Kerbriant"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "07-004",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639980805",
+   "where": [
+    "corps HTML"
+   ],
+   "surfaces": [
+    "0033 6 39 98 08 05"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639980805"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "07-005",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "mlegoff",
+   "where": [
+    "URL du pixel"
+   ],
+   "surfaces": [
+    "mlegoff"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "mlegoff"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "07-006",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Capucine Girard",
+   "where": [
+    "To (NOM Prénom), salutation"
+   ],
+   "surfaces": [
+    "GIRARD Capucine",
+    "Capucine"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Capucine Girard"
+    },
+    {
+     "mode": "text",
+     "text": "Girard Capucine"
+    },
+    {
+     "mode": "text",
+     "text": "Girard"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Capucine"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "07-007",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "capucine.girard@exemple.test",
+   "where": [
+    "To"
+   ],
+   "surfaces": [
+    "capucine.girard@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "capucine.girard@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "capucine.girard@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "07-008",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "GE-319-LQ",
+   "where": [
+    "zip joint"
+   ],
+   "surfaces": [
+    "GE-319-LQ"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "ge319lq"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Conformément à l'article L. 1234-5 du Code du travail, le préavis est de deux mois."
+ ],
+ "images": {}
+}

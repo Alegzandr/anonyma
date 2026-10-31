@@ -1,0 +1,236 @@
+{
+ "slug": "21_7z_sauvegarde",
+ "format": "7z",
+ "description": "Archive 7z contenant un zip contenant un courriel avec une pièce jointe CSV",
+ "files": [
+  "sauvegarde.7z"
+ ],
+ "entries": [
+  {
+   "id": "21-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Marc Durand",
+   "where": [
+    "courriel dans zip dans 7z, nom de fichier 7z, CSV"
+   ],
+   "surfaces": [
+    "Marc Durand",
+    "DURAND Marc",
+    "Durand",
+    "Marc"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Marc Durand"
+    },
+    {
+     "mode": "text",
+     "text": "Durand Marc"
+    },
+    {
+     "mode": "text",
+     "text": "Durand"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Marc"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "21-002",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "marc.durand@exemple.test",
+   "where": [
+    "courriel"
+   ],
+   "surfaces": [
+    "marc.durand@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "marc.durand@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "marc.durand@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "21-003",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639986784",
+   "where": [
+    "courriel"
+   ],
+   "surfaces": [
+    "+33 6 39 98 67 84"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639986784"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "21-004",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7653236403886119690426816",
+   "where": [
+    "CSV joint"
+   ],
+   "surfaces": [
+    "FR76 5323 6403 8861 1969 0426 816"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7653236403886119690426816"
+    },
+    {
+     "mode": "compact",
+     "text": "53236403886119690426816"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "21-005",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Eléonore Vidal",
+   "where": [
+    "courriel, CSV joint"
+   ],
+   "surfaces": [
+    "Eléonore Vidal",
+    "VIDAL Eléonore",
+    "Eléonore"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Eléonore Vidal"
+    },
+    {
+     "mode": "text",
+     "text": "Vidal Eléonore"
+    },
+    {
+     "mode": "text",
+     "text": "Vidal"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Eléonore"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "21-006",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "eleonore.vidal@exemple.test",
+   "where": [
+    "courriel"
+   ],
+   "surfaces": [
+    "eleonore.vidal@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "eleonore.vidal@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "eleonore.vidal@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "21-007",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7645069266599252712395018",
+   "where": [
+    "CSV joint"
+   ],
+   "surfaces": [
+    "FR76 4506 9266 5992 5271 2395 018"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7645069266599252712395018"
+    },
+    {
+     "mode": "compact",
+     "text": "45069266599252712395018"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "21-008",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Mathis Lambert",
+   "where": [
+    "courriel"
+   ],
+   "surfaces": [
+    "Mathis Lambert",
+    "Mathis"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Mathis Lambert"
+    },
+    {
+     "mode": "text",
+     "text": "Lambert Mathis"
+    },
+    {
+     "mode": "text",
+     "text": "Lambert"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Mathis"
+    }
+   ],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "La réunion budgétaire du comité de direction est reportée au trimestre prochain."
+ ],
+ "images": {}
+}

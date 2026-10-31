@@ -24,6 +24,7 @@ from anonyma.extractors._xml import (
     unwrap,
 )
 from anonyma.extractors._xmlscan import ScanSpec, Unit, redistribute
+from anonyma.fieldhints import header_hints, with_column_hint
 from anonyma.models import (
     Issue,
     Replacement,
@@ -321,6 +322,70 @@ def purge_revisions(root: Element) -> None:
 
 FORMULA_TAGS = frozenset({"f", "formula", "formula1", "formula2", "definedName"})
 _DIGITS = re.compile(r"\d")
+_CELL_REF = re.compile(r"^([A-Z]{1,3})(\d+)$")
+
+
+def _si_text(si: Element) -> str:
+    """Visible text of a shared string (runs joined, phonetic hints left out)."""
+    return "".join(
+        t.text or ""
+        for t in si.iter()
+        if is_element(t) and local_name(t.tag) == "t" and ancestor(t, "rPh") is None
+    )
+
+
+def _column_hints(root: Element, shared: Sequence[str]) -> tuple[int, dict[str, str]]:
+    """(header row number, column letters -> field hint) of a worksheet."""
+    rows: dict[int, dict[int, str]] = {}
+    letters: dict[int, str] = {}
+    for c in root.iter():
+        if not is_element(c) or local_name(c.tag) != "c":
+            continue
+        m = _CELL_REF.match(c.get("r", ""))
+        if m is None:
+            continue
+        row = int(m.group(2))
+        if rows and row > min(rows):
+            break  # only the first non-empty row is a header candidate
+        text = ""
+        cell_type = c.get("t", "n")
+        for child in c.iter():
+            if not is_element(child):
+                continue
+            local = local_name(child.tag)
+            if local == "v" and child.text:
+                if cell_type == "s" and child.text.strip().isdigit():
+                    index = int(child.text)
+                    text = shared[index] if index < len(shared) else ""
+                elif cell_type in ("str", "inlineStr"):
+                    text = child.text
+            elif local == "t" and cell_type == "inlineStr" and child.text:
+                text += child.text
+        if text.strip():
+            col = _column_index(m.group(1))
+            letters[col] = m.group(1)
+            rows.setdefault(row, {})[col] = text
+    if not rows:
+        return 0, {}
+    hints = header_hints(rows)
+    return min(rows), {letters[c]: h for c, h in hints.items()}
+
+
+def _column_index(letters: str) -> int:
+    n = 0
+    for ch in letters:
+        n = n * 26 + ord(ch) - 64
+    return n
+
+
+def _cell_label(sheet: int, ref: str, hints: tuple[int, dict[str, str]] | None) -> str:
+    label = f"feuille {sheet}!{ref}"
+    m = _CELL_REF.match(ref)
+    if hints is None or m is None or int(m.group(2)) <= hints[0]:
+        return label
+    return with_column_hint(label, hints[1].get(m.group(1)))
+
+
 _INVALID_SHEET = re.compile(r"[:\\/?*]")
 _INVALID_NAME = re.compile(r"[^\w.]")
 MIN_NUMBER_DIGITS = 6
@@ -371,6 +436,17 @@ class XlsxFlavor(Flavor):
                         sheets[rels[rid]] = n
         comments: dict[str, int] = {}
         shared_labels: dict[int, str] = {}
+        shared_index: dict[Element, int] = {}
+        shared_texts: list[str] = []
+        for target in _related(pkg, workbook, "/sharedStrings"):
+            if target in pkg.zip.entries:
+                items = [el for el in pkg.root(target) if local_name(el.tag) == "si"]
+                shared_index = {el: i for i, el in enumerate(items)}
+                shared_texts = [_si_text(el) for el in items]
+        column_hints: dict[str, tuple[int, dict[str, str]]] = {}
+        for sheet in sheets:
+            if sheet in pkg.zip.entries:
+                column_hints[sheet] = _column_hints(pkg.root(sheet), shared_texts)
         for sheet, n in sheets.items():
             for target in _related(pkg, sheet, "/comments") + _related(
                 pkg, sheet, "/threadedComment"
@@ -383,18 +459,16 @@ class XlsxFlavor(Flavor):
                     continue
                 for v in c:
                     if local_name(v.tag) == "v" and v.text and v.text.strip().isdigit():
-                        shared_labels.setdefault(int(v.text), f"feuille {n}!{c.get('r', '')}")
-        shared_index: dict[Element, int] = {}
-        for target in _related(pkg, workbook, "/sharedStrings"):
-            if target in pkg.zip.entries:
-                items = [el for el in pkg.root(target) if local_name(el.tag) == "si"]
-                shared_index = {el: i for i, el in enumerate(items)}
+                        ref = c.get("r", "")
+                        label = _cell_label(n, ref, column_hints.get(sheet))
+                        shared_labels.setdefault(int(v.text), label)
         return {
             "workbook": workbook,
             "sheets": sheets,
             "comments": comments,
             "shared_labels": shared_labels,
             "shared_index": shared_index,
+            "column_hints": column_hints,
         }
 
     def spec(self, part: str) -> ScanSpec:
@@ -441,18 +515,22 @@ class XlsxFlavor(Flavor):
         sheets: Mapping[str, int] = info["sheets"]
         if part in sheets:
             sheet = sheets[part]
+            hints = info["column_hints"].get(part)
             if isinstance(unit.payload, tuple):
                 ref = unit.payload[1]
-                suffix_ = " (formule)" if unit.payload[0] == "f" else ""
-                return SegmentContext(
-                    SegmentKind.CELL, label=f"feuille {sheet}!{ref}{suffix_}", page=sheet - 1
-                )
+                if unit.payload[0] == "f":
+                    label = f"feuille {sheet}!{ref} (formule)"
+                else:
+                    label = _cell_label(sheet, ref, hints)
+                return SegmentContext(SegmentKind.CELL, label=label, page=sheet - 1)
             if unit.kind == "attr":
                 return _attr_context(unit, f"feuille {sheet}")
             cell = ancestor(unit.anchor, "c")
             if cell is not None:
                 return SegmentContext(
-                    SegmentKind.CELL, label=f"feuille {sheet}!{cell.get('r', '')}", page=sheet - 1
+                    SegmentKind.CELL,
+                    label=_cell_label(sheet, cell.get("r", ""), hints),
+                    page=sheet - 1,
                 )
             local = local_name(unit.anchor.tag)
             if "Header" in local or "Footer" in local:

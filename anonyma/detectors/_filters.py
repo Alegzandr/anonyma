@@ -18,6 +18,7 @@ from functools import lru_cache
 
 from anonyma.data import first_name, is_common_word, lexicon
 from anonyma.models import EntityType, Segment, SegmentKind
+from anonyma.names import civility_of
 from anonyma.textutils import normalize
 
 _PDF_TOKEN = re.compile(
@@ -177,6 +178,10 @@ TECHNICAL = frozenset(
         "Arial-BoldMT",
         "TimesNewRoman",
         "TimesNewRomanPSMT",
+        "Scanner",
+        "Scan",
+        "Numériseur",
+        "Copieur",
     ]
 )
 
@@ -211,6 +216,37 @@ NUMERIC_MIN_DIGITS: dict[str, int] = {
 
 def _words(value: str) -> list[str]:
     return re.findall(r"[^\W\d_]+(?:['’][^\W\d_]+)*", value)
+
+
+#: Grammatical words that never carry a name on their own.
+FUNCTION_WORDS = frozenset(
+    [
+        "le",
+        "la",
+        "les",
+        "l",
+        "un",
+        "une",
+        "des",
+        "du",
+        "de",
+        "d",
+        "au",
+        "aux",
+        "et",
+        "ou",
+        "en",
+        "a",
+        "the",
+        "of",
+        "and",
+        "an",
+    ]
+)
+
+
+def _function_word(word: str) -> bool:
+    return normalize(word) in FUNCTION_WORDS or civility_of(word) is not None
 
 
 def _all_common(value: str) -> bool:
@@ -280,8 +316,17 @@ def plausible(
     if entity_type in NAME_LIKE or entity_type == EntityType.JOB_TITLE:
         if not words:
             return False
+        # Words that carry the name: determiners, prepositions and civilities left out.
+        content = [w for w in words if not _function_word(w)]
+        lowercase_common = bool(content) and all(
+            not w[0].isupper() and is_common_word(w) for w in content
+        )
         if entity_type == EntityType.PERSON:
-            if not any(w[0].isupper() for w in words) and score < COMMON_WORD_SCORE:
+            if not content:
+                return False  # "Mme", "Madame, Monsieur": civilities alone
+            if lowercase_common:
+                return False  # "Un martin-pêcheur": ordinary words, whatever the score
+            if not any(w[0].isupper() for w in content) and score < COMMON_WORD_SCORE:
                 return False  # "vu zephyrin" lower-case fragments need high confidence
             if _all_common(stripped) and not any(
                 (r := first_name(w)) is not None and r.count >= 2000 for w in words
@@ -296,6 +341,8 @@ def plausible(
                 return False  # "Rappeler", "Signature": capitalized single words
         elif entity_type == EntityType.LOCATION and len(words) == 1 and stripped[0].isupper():
             pass  # cities are often common words too (Nice, Tours, Quimper...)
+        elif entity_type in (EntityType.ORGANIZATION, EntityType.LOCATION) and lowercase_common:
+            return False  # "comité de direction", "salle du rez-de-chaussée": not proper names
         elif _all_common(stripped) and score < COMMON_WORD_SCORE:
             return False
     if entity_type == EntityType.USERNAME:

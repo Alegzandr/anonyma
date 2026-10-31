@@ -85,15 +85,22 @@ class RapidOcrEngine:
         rgb = image if image.mode == "RGB" else image.convert("RGB")
         array = np.ascontiguousarray(np.asarray(rgb)[:, :, ::-1])  # RGB -> BGR
         with self._lock:
-            result, _ = self._engine(array, return_word_box=True, text_score=MIN_LINE_SCORE)
+            # Every detected box is returned (score 0 included): a box whose text
+            # could not be read is re-read on its own instead of being dropped.
+            result, _ = self._engine(array, return_word_box=True, text_score=0.0)
         lines: list[OcrLine] = []
         for item in result or []:
             points, text, score = item[0], str(item[1]), float(item[2])
-            if not text.strip():
-                continue
             bbox = _box(points)
+            reread = False
+            if not text.strip() or score < MIN_LINE_SCORE:
+                retry = self._reread(array, bbox)
+                if retry is None:
+                    continue
+                text, score = retry
+                reread = True
             char_boxes: tuple[BBox, ...] | None = None
-            if len(item) > 3 and item[3] and len(item[3]) == len(text):
+            if not reread and len(item) > 3 and item[3] and len(item[3]) == len(text):
                 char_boxes = tuple(_box(p) for p in item[3])
                 # Stretch character cells vertically to the whole line.
                 char_boxes = tuple(BBox(b.x0, bbox.y0, b.x1, bbox.y1) for b in char_boxes)
@@ -106,6 +113,29 @@ class RapidOcrEngine:
                 )
             )
         return lines
+
+    def _reread(self, array: Any, bbox: BBox) -> tuple[str, float] | None:
+        """Recognition alone on one detected box (long lines can fail in the full pass).
+
+        The word-box pass of RapidOCR sometimes returns an empty text for a long
+        line that the recognizer reads perfectly once the line is cropped.
+        """
+        height, width = array.shape[:2]
+        pad = 6
+        x0, y0 = max(0, int(bbox.x0) - pad), max(0, int(bbox.y0) - pad)
+        x1, y1 = min(width, int(bbox.x1) + pad), min(height, int(bbox.y1) + pad)
+        if x1 - x0 < 4 or y1 - y0 < 4:
+            return None
+        import numpy as np
+
+        crop = np.ascontiguousarray(array[y0:y1, x0:x1])
+        with self._lock:
+            result, _ = self._engine(crop, use_det=False, use_cls=False, text_score=0.0)
+        for item in result or []:
+            text, score = str(item[0]), float(item[1])
+            if text.strip() and score >= MIN_LINE_SCORE:
+                return text, score
+        return None
 
 
 def create_engine(config: Config) -> OcrEngine | None:

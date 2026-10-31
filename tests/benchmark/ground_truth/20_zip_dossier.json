@@ -1,0 +1,329 @@
+{
+ "slug": "20_zip_dossier",
+ "format": "zip",
+ "description": "Archive zip : dossier au nom d'une personne, fichiers nommés, courriel contenant une archive contenant un docx et un txt (archive dans un courriel dans une archive), commentaire d'archive",
+ "files": [
+  "dossier_complet.zip"
+ ],
+ "entries": [
+  {
+   "id": "20-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Firmin Delacroix-Vasseur",
+   "where": [
+    "nom de dossier, nom de fichier, CV, courriel, docx et txt imbriqués"
+   ],
+   "surfaces": [
+    "Dossier Firmin Delacroix-Vasseur",
+    "CV_Firmin_Delacroix-Vasseur",
+    "Firmin Delacroix-Vasseur",
+    "DELACROIX-VASSEUR",
+    "Firmin"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Firmin Delacroix-Vasseur"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix-Vasseur Firmin"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix-Vasseur"
+    },
+    {
+     "mode": "text",
+     "text": "Delacroix"
+    },
+    {
+     "mode": "text",
+     "text": "Vasseur"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Firmin"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "20-002",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "4 sentier des Grives, 76000 Rouen",
+   "where": [
+    "CV"
+   ],
+   "surfaces": [
+    "4 sentier des Grives",
+    "76000 Rouen"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "4 sentier des Grives"
+    },
+    {
+     "mode": "text",
+     "text": "sentier des Grives"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "20-003",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "firmin.dv@exemple.test",
+   "where": [
+    "CV, courriel"
+   ],
+   "surfaces": [
+    "firmin.dv@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "firmin.dv@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "firmin.dv@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "20-004",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639985526",
+   "where": [
+    "CV"
+   ],
+   "surfaces": [
+    "+33 6 39 98 55 26"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639985526"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "20-005",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1972-05-06",
+   "where": [
+    "CV, docx imbriqué"
+   ],
+   "surfaces": [
+    "06/05/1972",
+    "6 mai 1972"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "05/06/1972"
+    },
+    {
+     "mode": "text",
+     "text": "06/05/1972"
+    },
+    {
+     "mode": "text",
+     "text": "06/05/72"
+    },
+    {
+     "mode": "text",
+     "text": "06051972"
+    },
+    {
+     "mode": "text",
+     "text": "1972-05-06"
+    },
+    {
+     "mode": "text",
+     "text": "6 May 1972"
+    },
+    {
+     "mode": "text",
+     "text": "6 mai 1972"
+    },
+    {
+     "mode": "text",
+     "text": "6/5/1972"
+    },
+    {
+     "mode": "text",
+     "text": "May 6, 1972"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "20-006",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "fdelacroixv",
+   "where": [
+    "nom de fichier du courriel"
+   ],
+   "surfaces": [
+    "fdelacroixv"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "fdelacroixv"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "20-007",
+   "type": "NIR",
+   "direct": true,
+   "value": "172057686617514",
+   "where": [
+    "docx dans zip dans courriel dans zip"
+   ],
+   "surfaces": [
+    "1 72 05 76 866 175 14"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "172057686617514"
+    },
+    {
+     "mode": "compact",
+     "text": "1720576866175"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "20-008",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7687573018181263165969491",
+   "where": [
+    "txt dans zip dans courriel dans zip"
+   ],
+   "surfaces": [
+    "FR76-8757-3018-1812-6316-5969-491"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7687573018181263165969491"
+    },
+    {
+     "mode": "compact",
+     "text": "87573018181263165969491"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "20-009",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Inès Benali",
+   "where": [
+    "commentaire d'archive, courriel, auteur du docx, CSV"
+   ],
+   "surfaces": [
+    "Inès Benali",
+    "Inès"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Inès Benali"
+    },
+    {
+     "mode": "text",
+     "text": "Benali Inès"
+    },
+    {
+     "mode": "text",
+     "text": "Benali"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Inès"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "20-010",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "ines.benali@exemple.test",
+   "where": [
+    "courriel"
+   ],
+   "surfaces": [
+    "ines.benali@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "ines.benali@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "ines.benali@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "20-011",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639986593",
+   "where": [
+    "courriel"
+   ],
+   "surfaces": [
+    "06 39 98 65 93"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639986593"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Conformément à l'article L. 1234-5 du Code du travail, le préavis est de deux mois.",
+  "La version 2.3.1 du logiciel corrige le problème signalé à la page 12 du manuel."
+ ],
+ "images": {}
+}

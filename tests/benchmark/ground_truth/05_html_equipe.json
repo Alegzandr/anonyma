@@ -1,0 +1,327 @@
+{
+ "slug": "05_html_equipe",
+ "format": "html",
+ "description": "Page « équipe » HTML (href, alt, title, entités, JSON-LD)",
+ "files": [
+  "equipe.html"
+ ],
+ "entries": [
+  {
+   "id": "05-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Claire Martin",
+   "where": [
+    "title, meta, alt, title, gras coupé, nom de fichier image"
+   ],
+   "surfaces": [
+    "Claire Martin",
+    "MARTIN",
+    "Claire"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Claire Martin"
+    },
+    {
+     "mode": "text",
+     "text": "Martin Claire"
+    },
+    {
+     "mode": "word",
+     "text": "Martin"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Claire"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "05-002",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "claire.martin@exemple.test",
+   "where": [
+    "attribut data, mailto encodé %40"
+   ],
+   "surfaces": [
+    "claire.martin@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "claire.martin@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "claire.martin@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-003",
+   "type": "URL",
+   "direct": false,
+   "value": "https://intranet.exemple.test/equipe/claire-martin",
+   "where": [
+    "href"
+   ],
+   "surfaces": [
+    "https://intranet.exemple.test/equipe/claire-martin"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "intranet.exemple.test/equipe/claire-martin"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-004",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "responsable communication",
+   "where": [
+    "texte, attribut title"
+   ],
+   "surfaces": [
+    "responsable communication"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "responsable communication"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-005",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "3 allée des Peupliers, 69003 Lyon",
+   "where": [
+    "balise address avec <br>"
+   ],
+   "surfaces": [
+    "3 allée des Peupliers",
+    "69003 Lyon"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "3 allée des Peupliers"
+    },
+    {
+     "mode": "text",
+     "text": "allée des Peupliers"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-006",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Lyon",
+   "where": [
+    "balise address"
+   ],
+   "surfaces": [
+    "Lyon"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Lyon"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-007",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Julien Petit",
+   "where": [
+    "JSON-LD, texte, title"
+   ],
+   "surfaces": [
+    "Julien Petit",
+    "J. Petit",
+    "Julien"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Julien Petit"
+    },
+    {
+     "mode": "text",
+     "text": "Petit Julien"
+    },
+    {
+     "mode": "word",
+     "text": "Petit"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Julien"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "05-008",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "jpetit",
+   "where": [
+    "commentaire HTML"
+   ],
+   "surfaces": [
+    "jpetit"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "jpetit"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-009",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1975-09-30",
+   "where": [
+    "texte"
+   ],
+   "surfaces": [
+    "30 septembre 1975"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "09/30/1975"
+    },
+    {
+     "mode": "text",
+     "text": "1975-09-30"
+    },
+    {
+     "mode": "text",
+     "text": "30 September 1975"
+    },
+    {
+     "mode": "text",
+     "text": "30 septembre 1975"
+    },
+    {
+     "mode": "text",
+     "text": "30/09/1975"
+    },
+    {
+     "mode": "text",
+     "text": "30/09/75"
+    },
+    {
+     "mode": "text",
+     "text": "30/9/1975"
+    },
+    {
+     "mode": "text",
+     "text": "30091975"
+    },
+    {
+     "mode": "text",
+     "text": "September 30, 1975"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-010",
+   "type": "URL",
+   "direct": false,
+   "value": "https://reseau.example/in/julien-petit-1975",
+   "where": [
+    "href et texte"
+   ],
+   "surfaces": [
+    "https://reseau.example/in/julien-petit-1975"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "reseau.example/in/julien-petit-1975"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-011",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639988945",
+   "where": [
+    "JSON-LD, href tel:, texte"
+   ],
+   "surfaces": [
+    "06 39 98 89 45",
+    "+33639988945"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639988945"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "05-012",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "chef de projet",
+   "where": [
+    "texte"
+   ],
+   "surfaces": [
+    "chef de projet"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "chef de projet"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Un martin-pêcheur a été aperçu près de la fontaine du parc municipal.",
+  "Le petit-déjeuner sera servi à partir de sept heures dans la salle du rez-de-chaussée."
+ ],
+ "images": {}
+}

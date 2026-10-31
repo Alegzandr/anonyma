@@ -1,0 +1,16 @@
+INCIDENT REPORT #INC-2026-0315
+
+Reported by: Oliver Pemberton (site manager), oliver.pemberton@company.example
+Phone: +44 20 7946 0123 / mobile +44 7700 900456
+Date of birth: March 14, 1985 — staff ID opemberton
+Home address: 221 Larkspur Crescent, BS1 4XE Bristol
+
+On 12 March 2026, Siobhan O'Callaghan (HR lead, siobhan.ocallaghan@company.example, +353 1 555 0199) noticed repeated failed logins
+for the account socallaghan from 2001:db8:85a3::8a2e:370:7334 and 198.51.100.77.
+Ms O'Callaghan escalated to Lukas MÜLLER (Berlin office, +49 30 901820, lukas.mueller@firma.example).
+Mr Müller confirmed the refund to IBAN DE93 8996 0346 1786 4123 63 and the payment card
+4970-9702-3464-0391 belonging to Mr Pemberton (date of birth 03/14/1985).
+Belgian account on file: BE25 0577 9041 6082.
+
+The quarterly budget review is postponed until further notice.
+The help desk is open from 8 am to 6 pm, Monday to Friday.

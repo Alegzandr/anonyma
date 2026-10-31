@@ -1,0 +1,582 @@
+{
+ "slug": "24_txt_anglais",
+ "format": "txt",
+ "description": "Rapport d'incident en anglais : téléphones internationaux, IBAN DE/BE, IPv6, date au format US, apostrophe dans le nom",
+ "files": [
+  "incident_report.txt"
+ ],
+ "entries": [
+  {
+   "id": "24-001",
+   "type": "NUMERO_DOSSIER",
+   "direct": false,
+   "value": "INC-2026-0315",
+   "where": [
+    "titre"
+   ],
+   "surfaces": [
+    "INC-2026-0315"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "inc20260315"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-002",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Oliver Pemberton",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Oliver Pemberton",
+    "Mr Pemberton",
+    "Oliver"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Oliver Pemberton"
+    },
+    {
+     "mode": "text",
+     "text": "Pemberton Oliver"
+    },
+    {
+     "mode": "text",
+     "text": "Pemberton"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Oliver"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "24-003",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "site manager",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "site manager"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "site manager"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-004",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "oliver.pemberton@company.example",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "oliver.pemberton@company.example"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "oliver.pemberton@company.example"
+    },
+    {
+     "mode": "raw",
+     "text": "oliver.pemberton@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-005",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+442079460123",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "+44 20 7946 0123"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "2079460123"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-006",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+447700900456",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "+44 7700 900456"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "7700900456"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-007",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1985-03-14",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "March 14, 1985",
+    "03/14/1985"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "03/14/1985"
+    },
+    {
+     "mode": "text",
+     "text": "14 March 1985"
+    },
+    {
+     "mode": "text",
+     "text": "14 mars 1985"
+    },
+    {
+     "mode": "text",
+     "text": "14/03/1985"
+    },
+    {
+     "mode": "text",
+     "text": "14/03/85"
+    },
+    {
+     "mode": "text",
+     "text": "14/3/1985"
+    },
+    {
+     "mode": "text",
+     "text": "14031985"
+    },
+    {
+     "mode": "text",
+     "text": "1985-03-14"
+    },
+    {
+     "mode": "text",
+     "text": "March 14, 1985"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-008",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "opemberton",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "opemberton"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "opemberton"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-009",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "221 Larkspur Crescent, BS1 4XE Bristol",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "221 Larkspur Crescent",
+    "BS1 4XE Bristol"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "221 Larkspur Crescent"
+    },
+    {
+     "mode": "text",
+     "text": "Larkspur Crescent"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-010",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Bristol",
+   "where": [
+    "adresse"
+   ],
+   "surfaces": [
+    "Bristol"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Bristol"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-011",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Siobhan O'Callaghan",
+   "where": [
+    "corps (apostrophe)"
+   ],
+   "surfaces": [
+    "Siobhan O'Callaghan",
+    "Ms O'Callaghan",
+    "Siobhan"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Siobhan O'Callaghan"
+    },
+    {
+     "mode": "text",
+     "text": "O'Callaghan Siobhan"
+    },
+    {
+     "mode": "text",
+     "text": "O'Callaghan"
+    },
+    {
+     "mode": "text",
+     "text": "Callaghan"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Siobhan"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "24-012",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "siobhan.ocallaghan@company.example",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "siobhan.ocallaghan@company.example"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "siobhan.ocallaghan@company.example"
+    },
+    {
+     "mode": "raw",
+     "text": "siobhan.ocallaghan@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-013",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+35315550199",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "+353 1 555 0199"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "15550199"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-014",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "socallaghan",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "socallaghan"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "socallaghan"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-015",
+   "type": "IP",
+   "direct": true,
+   "value": "2001:db8:85a3::8a2e:370:7334",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "2001:db8:85a3::8a2e:370:7334"
+   ],
+   "renderings": [
+    {
+     "mode": "ip",
+     "text": "2001:db8:85a3::8a2e:370:7334"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-016",
+   "type": "IP",
+   "direct": true,
+   "value": "198.51.100.77",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "198.51.100.77"
+   ],
+   "renderings": [
+    {
+     "mode": "ip",
+     "text": "198.51.100.77"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-017",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Lukas Müller",
+   "where": [
+    "corps (majuscules avec tréma)"
+   ],
+   "surfaces": [
+    "Lukas MÜLLER",
+    "Mr Müller",
+    "Lukas"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Lukas Müller"
+    },
+    {
+     "mode": "text",
+     "text": "Müller Lukas"
+    },
+    {
+     "mode": "text",
+     "text": "Müller"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Lukas"
+    }
+   ],
+   "regions": []
+  },
+  {
+   "id": "24-018",
+   "type": "LIEU",
+   "direct": false,
+   "value": "Berlin",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "Berlin"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Berlin"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-019",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+4930901820",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "+49 30 901820"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "30901820"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-020",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "lukas.mueller@firma.example",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "lukas.mueller@firma.example"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "lukas.mueller@firma.example"
+    },
+    {
+     "mode": "raw",
+     "text": "lukas.mueller@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-021",
+   "type": "IBAN",
+   "direct": true,
+   "value": "DE93899603461786412363",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "DE93 8996 0346 1786 4123 63"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "de93899603461786412363"
+    },
+    {
+     "mode": "compact",
+     "text": "899603461786412363"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-022",
+   "type": "CARTE",
+   "direct": true,
+   "value": "4970970234640391",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "4970-9702-3464-0391"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "4970970234640391"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "24-023",
+   "type": "IBAN",
+   "direct": true,
+   "value": "BE25057790416082",
+   "where": [
+    "corps"
+   ],
+   "surfaces": [
+    "BE25 0577 9041 6082"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "be25057790416082"
+    },
+    {
+     "mode": "compact",
+     "text": "057790416082"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "The quarterly budget review is postponed until further notice.",
+  "The help desk is open from 8 am to 6 pm, Monday to Friday."
+ ],
+ "images": {}
+}

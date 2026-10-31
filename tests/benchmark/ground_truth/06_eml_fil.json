@@ -1,0 +1,650 @@
+{
+ "slug": "06_eml_fil",
+ "format": "eml",
+ "description": "Fil de discussion profond : citations >, >>, >>>, transfert, HTML+texte, image en ligne, pièces jointes docx et pdf, message joint contenant un message joint",
+ "files": [
+  "fil_discussion.eml"
+ ],
+ "entries": [
+  {
+   "id": "06-001",
+   "type": "ORGANISATION",
+   "direct": false,
+   "value": "Transports Valmont SAS",
+   "where": [
+    "signature"
+   ],
+   "surfaces": [
+    "Transports Valmont SAS"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Transports Valmont SAS"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-002",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Sophie Boucher",
+   "where": [
+    "From, Return-Path, signature texte et HTML, alt/title, URL, docx joint"
+   ],
+   "surfaces": [
+    "Sophie Boucher",
+    "Sophie BOUCHER",
+    "Sophie"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Sophie Boucher"
+    },
+    {
+     "mode": "text",
+     "text": "Boucher Sophie"
+    },
+    {
+     "mode": "word",
+     "text": "Boucher"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Sophie"
+    }
+   ],
+   "regions": [
+    {
+     "image": "sig",
+     "bbox": [
+      0.1811,
+      0.1636,
+      0.4089,
+      0.35
+     ]
+    }
+   ],
+   "first_name_alone": true
+  },
+  {
+   "id": "06-003",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "sophie.boucher@exemple.test",
+   "where": [
+    "From, Return-Path"
+   ],
+   "surfaces": [
+    "sophie.boucher@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "sophie.boucher@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "sophie.boucher@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-004",
+   "type": "IP",
+   "direct": true,
+   "value": "192.0.2.81",
+   "where": [
+    "en-tête Received"
+   ],
+   "surfaces": [
+    "192.0.2.81"
+   ],
+   "renderings": [
+    {
+     "mode": "ip",
+     "text": "192.0.2.81"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-005",
+   "type": "IDENTIFIANT",
+   "direct": true,
+   "value": "sboucher",
+   "where": [
+    "en-tête Received (nom d'hôte)"
+   ],
+   "surfaces": [
+    "sboucher"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "sboucher"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-006",
+   "type": "URL",
+   "direct": false,
+   "value": "https://intranet.exemple.test/annuaire/sophie.boucher",
+   "where": [
+    "signature, href"
+   ],
+   "surfaces": [
+    "https://intranet.exemple.test/annuaire/sophie.boucher"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "intranet.exemple.test/annuaire/sophie.boucher"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-007",
+   "type": "FONCTION",
+   "direct": false,
+   "value": "responsable RH",
+   "where": [
+    "signature"
+   ],
+   "surfaces": [
+    "responsable RH"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "responsable RH"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-008",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639985559",
+   "where": [
+    "signature texte/HTML, image"
+   ],
+   "surfaces": [
+    "06.39.98.55.59"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639985559"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "sig",
+     "bbox": [
+      0.1578,
+      0.6773,
+      0.3867,
+      0.7955
+     ]
+    }
+   ]
+  },
+  {
+   "id": "06-009",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33199002781",
+   "where": [
+    "signature"
+   ],
+   "surfaces": [
+    "01 99 00 27 81"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "199002781"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-010",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Rémi Fontaine",
+   "where": [
+    "To, citation niveau 1"
+   ],
+   "surfaces": [
+    "Rémi Fontaine",
+    "Rémi"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Rémi Fontaine"
+    },
+    {
+     "mode": "text",
+     "text": "Fontaine Rémi"
+    },
+    {
+     "mode": "word",
+     "text": "Fontaine"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Rémi"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "06-011",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "remi.fontaine@exemple.test",
+   "where": [
+    "To, Received, citation"
+   ],
+   "surfaces": [
+    "remi.fontaine@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "remi.fontaine@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "remi.fontaine@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-012",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Jean-Baptiste Kowalczyk",
+   "where": [
+    "Cc, objet, citations niveaux 1-3, pièces jointes, noms de fichiers"
+   ],
+   "surfaces": [
+    "Jean-Baptiste Kowalczyk",
+    "M. KOWALCZYK",
+    "KOWALCZYK Jean-Baptiste",
+    "M. Kowalczyk",
+    "J.-B. Kowalczyk",
+    "Jean-Baptiste"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Jean-Baptiste Kowalczyk"
+    },
+    {
+     "mode": "text",
+     "text": "Kowalczyk Jean-Baptiste"
+    },
+    {
+     "mode": "text",
+     "text": "Kowalczyk"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Jean-Baptiste"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "06-013",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "J.-B. K.",
+   "where": [
+    "signature citée niveau 2"
+   ],
+   "surfaces": [
+    "J.-B. K."
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "J.-B. K."
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-014",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "jb.kowalczyk@exemple.test",
+   "where": [
+    "Cc, citations"
+   ],
+   "surfaces": [
+    "jb.kowalczyk@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "jb.kowalczyk@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "jb.kowalczyk@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-015",
+   "type": "IBAN",
+   "direct": true,
+   "value": "FR7639222612779401990820835",
+   "where": [
+    "corps, citation niveau 2"
+   ],
+   "surfaces": [
+    "FR76 3922 2612 7794 0199 0820 835",
+    "FR7639222612779401990820835"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "fr7639222612779401990820835"
+    },
+    {
+     "mode": "compact",
+     "text": "39222612779401990820835"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-016",
+   "type": "DATE_NAISSANCE",
+   "direct": true,
+   "value": "1988-07-23",
+   "where": [
+    "corps, docx joint, message joint niveau 2"
+   ],
+   "surfaces": [
+    "23.07.1988",
+    "23 juillet 1988",
+    "23/07/1988"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "07/23/1988"
+    },
+    {
+     "mode": "text",
+     "text": "1988-07-23"
+    },
+    {
+     "mode": "text",
+     "text": "23 July 1988"
+    },
+    {
+     "mode": "text",
+     "text": "23 juillet 1988"
+    },
+    {
+     "mode": "text",
+     "text": "23/07/1988"
+    },
+    {
+     "mode": "text",
+     "text": "23/07/88"
+    },
+    {
+     "mode": "text",
+     "text": "23/7/1988"
+    },
+    {
+     "mode": "text",
+     "text": "23071988"
+    },
+    {
+     "mode": "text",
+     "text": "July 23, 1988"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-017",
+   "type": "NIR",
+   "direct": true,
+   "value": "188075703030092",
+   "where": [
+    "citation niveau 2, docx joint"
+   ],
+   "surfaces": [
+    "1880757030300 92",
+    "1 88 07 57 030 300 92"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "188075703030092"
+    },
+    {
+     "mode": "compact",
+     "text": "1880757030300"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-018",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639984155",
+   "where": [
+    "citation niveau 2"
+   ],
+   "surfaces": [
+    "+33 6 39 98 41 55"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639984155"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-019",
+   "type": "PLAQUE",
+   "direct": true,
+   "value": "GE-319-LQ",
+   "where": [
+    "citation niveau 3, pdf joint, objet du message joint niveau 2"
+   ],
+   "surfaces": [
+    "GE-319-LQ"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "ge319lq"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-020",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "27 rue Jules-Ferry-Prolongée, 57000 Metz",
+   "where": [
+    "docx joint"
+   ],
+   "surfaces": [
+    "27 rue Jules-Ferry-Prolongée"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "27 rue Jules-Ferry-Prolongée"
+    },
+    {
+     "mode": "text",
+     "text": "rue Jules-Ferry-Prolongée"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-021",
+   "type": "ADRESSE",
+   "direct": true,
+   "value": "Résidence Les Mésanges",
+   "where": [
+    "docx joint"
+   ],
+   "surfaces": [
+    "Résidence Les Mésanges"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Résidence Les Mésanges"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-022",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Inès Benali",
+   "where": [
+    "citation niveau 3 (transfert), pdf joint, message joint"
+   ],
+   "surfaces": [
+    "Inès Benali",
+    "Inès"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Inès Benali"
+    },
+    {
+     "mode": "text",
+     "text": "Benali Inès"
+    },
+    {
+     "mode": "text",
+     "text": "Benali"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Inès"
+    }
+   ],
+   "regions": [],
+   "first_name_alone": true
+  },
+  {
+   "id": "06-023",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "ines.benali@exemple.test",
+   "where": [
+    "citation transfert, message joint"
+   ],
+   "surfaces": [
+    "ines.benali@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "ines.benali@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "ines.benali@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "06-024",
+   "type": "TELEPHONE",
+   "direct": true,
+   "value": "+33639986593",
+   "where": [
+    "message joint"
+   ],
+   "surfaces": [
+    "06 3998 6593"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "639986593"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Merci de noter que le chevalier blanc reste une figure de style dans ce rapport.",
+  "Le marchand de journaux ferme le dimanche après-midi."
+ ],
+ "images": {
+  "sig": {
+   "kind": "mime_image",
+   "file": "fil_discussion.eml",
+   "index": 0
+  }
+ }
+}
