@@ -186,3 +186,36 @@ def test_fetch_verifies_hash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     with pytest.raises(SystemExit, match="SHA-256"):
         lo.fetch(bad, tmp_path)
     assert not (tmp_path / "bad.msi").exists()
+
+
+def test_libreoffice_profile_and_environment_are_locked_down(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from lxml import etree
+
+    from anonyma import libreoffice
+
+    settings = etree.fromstring(libreoffice._PROFILE_SETTINGS.encode())
+    props = {
+        (
+            item.get("{http://openoffice.org/2001/registry}path"),
+            prop.get("{http://openoffice.org/2001/registry}name"),
+        ): prop.findtext("value")
+        for item in settings
+        for prop in item
+    }
+    scripting = "/org.openoffice.Office.Common/Security/Scripting"
+    assert props[(scripting, "BlockUntrustedRefererLinks")] == "true"
+    assert props[(scripting, "DisableActiveContent")] == "true"
+    assert props[(scripting, "DisableMacrosExecution")] == "true"
+    assert props[("/org.openoffice.Office.Writer/Content/Update", "Link")] == "0"
+    assert props[("/org.openoffice.Office.Calc/Content/Update", "Link")] == "1"
+    assert props[("/org.openoffice.Office.Calc/Formula/Load", "OOXMLRecalcMode")] == "1"
+
+    for name in ("HTTPS_PROXY", "http_proxy", "ALL_PROXY", "ANONYMA_PASSPHRASE", "SECRET"):
+        monkeypatch.setenv(name, "x")
+    env = libreoffice.child_environment(tmp_path / "profil")
+    assert not {k.upper() for k in env} & {"HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"}
+    assert "ANONYMA_PASSPHRASE" not in env and "SECRET" not in env
+    assert env["HOME"] == str(tmp_path / "profil")
+    assert "PATH" in {k.upper() for k in env}

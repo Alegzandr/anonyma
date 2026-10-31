@@ -2,7 +2,11 @@
 
 Every conversion runs with a throw-away user profile located inside the batch
 temporary folder (``-env:UserInstallation``) so that nothing is written outside
-the portable folder; the profile disables update checks, telemetry and macros.
+the portable folder; the profile disables update checks, telemetry, macros and
+active content, blocks remote content (untrusted referer links), never updates
+links and never recalculates spreadsheets on load (a formula could fetch data or
+bring back a removed value). LibreOffice gets a minimal environment: system
+variables only, never a proxy setting or a secret of Anonyma.
 Conversions are bounded by a timeout and the whole process tree is killed when
 it expires.
 """
@@ -28,6 +32,7 @@ log = get_logger("libreoffice")
 #: Seconds allowed for one conversion.
 DEFAULT_TIMEOUT = 180.0
 
+#: Link updates: Writer 0 = never, Calc 1 = never; recalculation on load: 1 = never.
 _PROFILE_SETTINGS = """<?xml version="1.0" encoding="UTF-8"?>
 <oor:items xmlns:oor="http://openoffice.org/2001/registry"
  xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -40,8 +45,42 @@ _PROFILE_SETTINGS = """<?xml version="1.0" encoding="UTF-8"?>
 <item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="RemovePersonalInformationOnSaving" oor:op="fuse"><value>true</value></prop></item>
 <item oor:path="/org.openoffice.Office.Common/Save/Document"><prop oor:name="CreateBackup" oor:op="fuse"><value>false</value></prop></item>
 <item oor:path="/org.openoffice.Office.Common/Save/Document"><prop oor:name="AutoSave" oor:op="fuse"><value>false</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="BlockUntrustedRefererLinks" oor:op="fuse"><value>true</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="DisableActiveContent" oor:op="fuse"><value>true</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="DisableOLEAutomation" oor:op="fuse"><value>true</value></prop></item>
+<item oor:path="/org.openoffice.Office.Writer/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>0</value></prop></item>
+<item oor:path="/org.openoffice.Office.Calc/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>1</value></prop></item>
+<item oor:path="/org.openoffice.Office.Calc/Formula/Load"><prop oor:name="OOXMLRecalcMode" oor:op="fuse"><value>1</value></prop></item>
+<item oor:path="/org.openoffice.Office.Calc/Formula/Load"><prop oor:name="ODFRecalcMode" oor:op="fuse"><value>1</value></prop></item>
 </oor:items>
 """  # noqa: E501
+
+
+#: System variables LibreOffice may need; nothing else of this process is passed
+#: (no proxy setting, no ``ANONYMA_PASSPHRASE``).
+_ENV_KEEP = frozenset(
+    {
+        "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "OS",
+        "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER",
+        "PROCESSOR_LEVEL", "PROCESSOR_REVISION", "PROGRAMDATA", "PROGRAMFILES",
+        "PROGRAMFILES(X86)", "PROGRAMW6432", "COMMONPROGRAMFILES",
+        "COMMONPROGRAMFILES(X86)", "COMMONPROGRAMW6432", "ALLUSERSPROFILE", "PUBLIC",
+        "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "LC_MESSAGES", "TZ", "USER", "LOGNAME",
+        "FONTCONFIG_FILE", "FONTCONFIG_PATH",
+    }
+)  # fmt: skip
+
+
+def child_environment(profile: Path) -> dict[str, str]:
+    """Environment of a LibreOffice process: the system variables of :data:`_ENV_KEEP`,
+    temp folders in the portable folder, home and profile folders in ``profile``."""
+    env = {key: value for key, value in os.environ.items() if key.upper() in _ENV_KEEP and value}
+    tmp = str(paths.tmp_dir())
+    env.update({"TMPDIR": tmp, "TEMP": tmp, "TMP": tmp, "HOME": str(profile)})
+    if sys.platform == "win32":
+        env.update({"USERPROFILE": str(profile), "APPDATA": str(profile / "appdata")})
+        env["LOCALAPPDATA"] = env["APPDATA"]
+    return env
 
 
 class ConversionError(RuntimeError):
@@ -229,8 +268,7 @@ def convert(
         str(out_dir),
         str(staged),
     ]
-    env = dict(os.environ)
-    env["HOME"] = str(profile)  # some builds still look at $HOME
+    env = child_environment(profile)
     try:
         process = subprocess.Popen(
             command,
