@@ -23,6 +23,13 @@ from PIL import Image, ImageDraw, ImageFont, TiffImagePlugin
 from PIL.PngImagePlugin import PngInfo
 
 from tests.canary import CANARY_EMAIL, CANARY_PERSON
+from tests.fixtures.generators.mail_archive_image_pst import (
+    PstAttachment,
+    PstFolder,
+    PstMessage,
+    PstRecipient,
+    pst_bytes,
+)
 
 OUT = Path(__file__).resolve().parent.parent / "contract"
 COLLEAGUE = "Bérénice Fauxnom"
@@ -61,7 +68,7 @@ def canary_image(
 
 def exif_bytes() -> bytes:
     exif = Image.Exif()
-    exif[0x013B] = CANARY_PERSON  # Artist
+    exif[0x013B] = CANARY_PERSON.encode()  # Artist (UTF-8 bytes)
     exif[0x8298] = f"(c) {CANARY_PERSON}"  # Copyright
     exif[0x010E] = f"Photo de {CANARY_PERSON} {CANARY_EMAIL}"  # ImageDescription
     exif[0x9C9D] = CANARY_PERSON.encode("utf-16-le") + b"\0\0"  # XPAuthor
@@ -232,6 +239,54 @@ def write_mails() -> None:
     )
     (OUT / "boite.mbox").write_bytes(mbox)
     (OUT / "message.msg").write_bytes(msg_bytes())
+    (OUT / "archive.pst").write_bytes(pst_fixture())
+
+
+def pst_fixture() -> bytes:
+    """Outlook data file: canary in folder name, headers, bodies, recipients, attachment."""
+    message = PstMessage(
+        subject=f"Dossier {CANARY_PERSON}",
+        sender_name=CANARY_PERSON,
+        sender_email=CANARY_EMAIL,
+        body=f"Bonjour,\r\nDossier de {CANARY_PERSON} ({CANARY_EMAIL}).\r\n",
+        html_body=(
+            f"<html><body><p>Dossier de <b>{CANARY_PERSON}</b> "
+            f'<a href="mailto:{CANARY_EMAIL}">{CANARY_EMAIL}</a></p></body></html>'
+        ),
+        transport_headers=(
+            "Received: from poste-12.exemple.test ([192.0.2.10]) by mx.exemple.test\r\n"
+            f"From: {CANARY_PERSON} <{CANARY_EMAIL}>\r\n"
+            f"To: {COLLEAGUE} <{COLLEAGUE_EMAIL}>\r\n"
+            f"Subject: Dossier {CANARY_PERSON}\r\n"
+            "Message-ID: <pst-0001@exemple.test>\r\n"
+        ),
+        display_to=COLLEAGUE,
+        recipients=[
+            PstRecipient(COLLEAGUE, COLLEAGUE_EMAIL, 1),
+            PstRecipient(CANARY_PERSON, CANARY_EMAIL, 2),
+        ],
+        attachments=[
+            PstAttachment(
+                f"CV {CANARY_PERSON}.txt",
+                f"CV de {CANARY_PERSON}\r\n{CANARY_EMAIL}\r\n".encode(),
+                "text/plain",
+            )
+        ],
+    )
+    second = PstMessage(
+        subject="Relance",
+        sender_name=COLLEAGUE,
+        sender_email=COLLEAGUE_EMAIL,
+        body=f"Merci de répondre à {CANARY_PERSON} ({CANARY_EMAIL}).\r\n",
+        display_to=CANARY_PERSON,
+        recipients=[PstRecipient(CANARY_PERSON, CANARY_EMAIL, 1)],
+    )
+    inbox = PstFolder(
+        "Boîte de réception",
+        messages=[message],
+        folders=[PstFolder(f"Dossier {CANARY_PERSON}", messages=[second])],
+    )
+    return pst_bytes([inbox])
 
 
 # ---------------------------------------------------------------------------

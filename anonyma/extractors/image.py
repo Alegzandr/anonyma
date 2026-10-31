@@ -118,9 +118,19 @@ def ocr_view(frame: Image.Image) -> Image.Image:
     return frame.convert("RGB")
 
 
+def _demojibake(text: str) -> str:
+    """Pillow decodes EXIF/TIFF ASCII values as latin-1; UTF-8 writers are common."""
+    if text.isascii():
+        return text
+    try:
+        return text.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
+
 def _text_value(value: Any) -> str | None:
     if isinstance(value, str):
-        return value.strip("\x00 ") or None
+        return _demojibake(value).strip("\x00 ") or None
     if isinstance(value, bytes):
         try:
             text = value.decode("utf-8")

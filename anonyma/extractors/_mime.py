@@ -192,7 +192,7 @@ _TOKENS = re.compile(
     r"|\s+"
     r'|[^\s",;<(]+'
 )
-_MAX_WORD_BYTES = 45
+_MAX_WORD_BYTES = 39
 
 
 def _encoded_words(text: str) -> list[str]:
