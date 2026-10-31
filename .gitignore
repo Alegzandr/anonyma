@@ -12,5 +12,4 @@ dist/
 # Données portables générées à l'exécution
 /data/
 /models/
-!tests/fixtures/**
 .claude/

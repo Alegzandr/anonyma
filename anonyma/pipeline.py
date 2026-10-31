@@ -372,12 +372,16 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
     entities: list[Entity] = []
     detectors = detectors_for(config)
     for doc in root.walk():
-        if doc.status is not DocumentStatus.EXTRACTED:
-            continue
-        texts = {s.id: s.text for s in doc.segments}
+        # Unreadable items still get their name analysed: it shows up in reports.
+        segments = (
+            doc.segments
+            if doc.status is DocumentStatus.EXTRACTED
+            else [s for s in doc.segments if s.id == FILENAME_SEGMENT_ID]
+        )
+        texts = {s.id: s.text for s in segments}
         for detector in detectors:
             try:
-                found = detector.detect(doc.segments, doc.id)
+                found = detector.detect(segments, doc.id)
             except Exception as exc:
                 log.warning(
                     "detector %s failed on %s: %s", detector.name, doc.id, type(exc).__name__

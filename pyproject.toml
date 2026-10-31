@@ -15,6 +15,12 @@ dependencies = [
     "onnxruntime>=1.20 ; sys_platform != 'win32'",
     "rich>=13.8",
     "pyside6-essentials>=6.12.0",
+    "py7zr>=1.1.4",
+    "pillow-heif>=1.8.1",
+    "extract-msg>=0.58.0",
+    "libpff-python>=20260926",
+    "rapidocr-onnxruntime>=1.4.4",
+    "opencv-python-headless>=4.10",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +43,13 @@ dev = [
 # ``onnxruntime`` import package, so they must never coexist. Any transitive
 # requirement on plain ``onnxruntime`` (e.g. rapidocr-onnxruntime) is overridden so
 # that it only applies outside Windows.
-override-dependencies = ["onnxruntime>=1.20 ; sys_platform != 'win32'"]
+# rapidocr-onnxruntime requires the full opencv-python, whose bundled Qt clashes
+# with PySide6 on Linux: it is dropped (impossible marker) in favour of the
+# headless build, which provides the same ``cv2`` module.
+override-dependencies = [
+    "onnxruntime>=1.20 ; sys_platform != 'win32'",
+    "opencv-python ; sys_platform == 'never'",
+]
 
 [build-system]
 requires = ["hatchling"]

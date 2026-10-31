@@ -47,6 +47,8 @@ def test_every_format_has_a_fixture() -> None:
 
 @pytest.mark.parametrize("fixture", fixture_files, ids=lambda p: p.name)
 def test_fixture_roundtrip(fixture: Path, tmp_path: Path, canary_config: Config) -> None:
+    if registry.detect_format(fixture) is None and registry.unavailable:
+        pytest.skip(f"format plugin unavailable here: {sorted(registry.unavailable.values())}")
     source_dir = tmp_path / "in"
     source_dir.mkdir()
     source = source_dir / fixture.name

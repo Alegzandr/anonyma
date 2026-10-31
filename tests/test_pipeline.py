@@ -244,3 +244,13 @@ def test_progress_reports_item_index(tmp_path: Path, canary_config: Config) -> N
     events = []
     Pipeline(canary_config).run([src], tmp_path / "out", progress=events.append)
     assert [e.index for e in events if e.stage == "analyse"] == [None, 0, 1]
+
+
+def test_unreadable_item_name_is_anonymized(tmp_path: Path, canary_config: Config) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / f"{CANARY_PERSON}.xyz").write_bytes(b"\x00")
+    result = Pipeline(canary_config).run([src], tmp_path / "out")
+    top = result.results[0]
+    assert top.status is DocumentStatus.UNSUPPORTED
+    assert "uintavalle" not in top.output_name.casefold()
