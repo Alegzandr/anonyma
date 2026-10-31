@@ -67,7 +67,7 @@ def test_from_result_counts(tmp_path: Path) -> None:
     assert report.status_counts == {DocumentStatus.RESIDUE: 1, DocumentStatus.ANONYMIZED: 1}
     assert [f["fichier"] for f in report.failures] == [
         "dossier/<script>alert(1)</script>.txt",
-        "pj.txt",
+        "dossier/b.md › pj.txt",  # an embedded item is located in its container
     ]
     assert report.residues[0]["type"] == "PERSONNE"
     assert report.review == [
@@ -93,7 +93,7 @@ def test_save_dispatch_never_leaks(tmp_path: Path, suffix: str) -> None:
     if suffix == ".json":
         data = json.loads(text)
         assert data["lot"] == report.batch_id
-        assert data["parametres"]["Mode"] == "balises"
+        assert data["parametres_libelles"]["Mode"] == "balises"
     elif suffix in (".html", ".htm"):
         assert text.startswith("<!DOCTYPE html>")
         assert '<html lang="fr">' in text
@@ -230,3 +230,50 @@ def test_possible_residue_is_to_review_not_quarantine(tmp_path: Path) -> None:
     assert report.verdict_code() == "a_revoir"
     assert report.to_dict()["quarantaine"] == 0
     assert "Résidu possible" in report.to_markdown()
+
+
+def test_residues_are_located_and_labelled_in_french(tmp_path: Path) -> None:
+    report = BatchReport.from_result(_result(tmp_path))
+    html = report.to_html()
+    markdown = report.to_markdown()
+    import html as html_module
+
+    for text in (html_module.unescape(html), markdown):
+        assert "Fichier" in text.split("Résidus", 2)[-1]  # residue table has the file
+        assert "valeur d'origine" in text and "Listes métier" in text
+        assert "original_value" not in text and "listes_metier" not in text
+        assert "child.omitted" not in text and "verify.residue" not in text
+    assert "<td>dossier/&lt;script&gt;alert(1)&lt;/script&gt;.txt</td><td>dossier/" in html
+    record = report.to_dict()["residus"][0]
+    assert record["origine"] == "valeur_origine" and record["origine_libelle"] == "valeur d'origine"
+    assert record["detecteur_libelle"] == "Listes métier" and record["type_libelle"] == "Personne"
+
+
+def test_json_report_uses_codes_and_shares_the_exit_code(tmp_path: Path) -> None:
+    data = BatchReport.from_result(_result(tmp_path)).to_dict()
+    assert data["schema"] == 2
+    assert data["verdict"] == "quarantaine" and data["code_sortie"] == 1
+    assert [f["statut"] for f in data["fichiers"]] == ["residu", "anonymise"]
+    assert [f["statut_libelle"] for f in data["fichiers"]] == ["Résidus", "Anonymisé"]
+    assert data["echecs"][1] == {
+        "fichier": "dossier/b.md › pj.txt",
+        "statut": "echec",
+        "statut_libelle": "Échec",
+        "problemes": [],
+        "codes": [],
+    }
+    assert data["nombre_fichiers"] == 2 and data["nombre_elements"] == 3
+    assert data["nombre_elements_inclus"] == 1
+    assert data["statuts_elements"] == {"anonymise": 1, "echec": 1, "residu": 1}
+    assert data["occurrences"] == 3 and data["residus_certains"] == 1
+
+
+def test_pseudonymization_wording(tmp_path: Path) -> None:
+    from anonyma.models import Regime
+
+    result = _result(tmp_path)
+    result.regime = Regime.PSEUDONYMIZATION
+    report = BatchReport.from_result(result)
+    assert report.verdict()[0] == "1\xa0pseudonymisé · 1\xa0en quarantaine (ne pas diffuser)"
+    assert "Pseudonymisé" in report.to_markdown()
+    assert report.to_dict()["fichiers"][1]["statut_libelle"] == "Pseudonymisé"

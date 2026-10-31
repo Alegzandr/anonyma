@@ -21,6 +21,11 @@ Neutral output names (``Config.neutral_filenames``) are kept in a second table,
 ``filenames``: batch id, neutral path and original path encrypted together under the
 same key, row addressed by ``HMAC(k_lookup, "filename" || batch || neutral path)``.
 The table is created on first open, so older stores gain it transparently.
+
+Besides one mapping per value (its canonical form), the pipeline keeps the exact
+text behind each substitute as written in the outputs (``SURFACE_TYPE``: « M.
+[PERSONNE_001] » -> « M. Dupont »), or an empty original when several texts share
+it: :func:`reidentification_map` restores the exact text whenever it is known.
 """
 
 from __future__ import annotations
@@ -44,6 +49,32 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+#: Entity types of the store's internal entries (batch parameters, surface forms):
+#: never values to show or restore as such.
+INTERNAL_PREFIX = "__"
+#: Exact text behind a substitute as written in the outputs (empty: ambiguous).
+SURFACE_TYPE = "__forme__"
+
+
+def is_internal(entity_type: str) -> bool:
+    return entity_type.startswith(INTERNAL_PREFIX)
+
+
+def reidentification_map(entries: Iterator[MappingEntry]) -> dict[str, str]:
+    """``substitute -> original text`` for re-identification: the exact text of the
+    outputs when the store knows it, else the canonical value; internal entries
+    (date shift...) are left out."""
+    mapping: dict[str, str] = {}
+    exact: dict[str, str] = {}
+    for entry in entries:
+        if entry.entity_type == SURFACE_TYPE:
+            if entry.original:
+                exact[entry.substitute] = entry.original
+        elif not is_internal(entry.entity_type):
+            mapping[entry.substitute] = entry.original
+    mapping.update(exact)
+    return mapping
+
 
 class StoreError(Exception):
     """``str(exc)`` is a French user-facing message."""
@@ -66,8 +97,8 @@ class InMemoryMappingStore:
         self._data[(entity_type, key)] = (original, substitute)
 
     def reverse(self, substitute: str) -> str | None:
-        for original, sub in self._data.values():
-            if sub == substitute:
+        for (entity_type, _), (original, sub) in self._data.items():
+            if sub == substitute and not is_internal(entity_type):
                 return original
         return None
 
@@ -426,7 +457,7 @@ class EncryptedMappingStore:
         )
         for lookup, original, sub in rows:
             entry = self._decode_row(bytes(lookup), bytes(original), bytes(sub))
-            if entry.substitute == substitute:
+            if entry.substitute == substitute and not is_internal(entry.entity_type):
                 return entry.original
         return None
 
@@ -471,6 +502,7 @@ class EncryptedMappingStore:
 
 
 __all__ = [
+    "SURFACE_TYPE",
     "EncryptedMappingStore",
     "FilenameEntry",
     "InMemoryMappingStore",
@@ -478,4 +510,6 @@ __all__ = [
     "MappingEntry",
     "StoreError",
     "WrongPassphraseError",
+    "is_internal",
+    "reidentification_map",
 ]

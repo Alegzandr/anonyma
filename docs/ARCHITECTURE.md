@@ -84,6 +84,12 @@ reported in `registry.unavailable` and its format becomes "non supporté".
   folder (or to `<output>_quarantaine/`, a sibling,) once verified, under a name reserved by
   exclusive creation; any failure on the way deletes it. Outputs that fail
   verification are never marked anonymized.
+* Worker processes set up logging like the main process (`logs.setup_logging(worker=True)`):
+  nothing reaches the user's terminal. Pools are shut down by `pipeline.worker_pool`:
+  pending jobs cancelled, idle workers given `POOL_EXIT_TIMEOUT` seconds, then terminated.
+  The pool is sized by the profile the installed models serve (`registry.usable_profile`).
+* Each batch records the files it placed in an output folder (`outputs.record`, in
+  `data/sorties/`) so that `run --remplacer` deletes them, and only them, when unchanged.
 * Errors shown to users: only `UserError` (and `StoreError`, `ModelError`) messages
   are displayed as is; any other exception is shown and logged by type only.
 
@@ -102,12 +108,16 @@ certain; their distinctive words, possible). Values kept by the organization pol
 | certain residue | RESIDUE | `<output>_quarantaine/` |
 | output not re-extractable | FAILED | `<output>_quarantaine/` |
 | an image/page of the **output** could not be OCR'd (`VerificationResult.unread`, any `ocr` issue: OCR disabled, unavailable, failed) | NEEDS_REVIEW + `verify.incomplete` | `<output>_quarantaine/` (content never checked) |
-| possible residue, uncertain entities, or an image/page of the **input** not OCR'd (`analyse.ocr_incomplete`) | NEEDS_REVIEW | output folder |
+| possible residue, uncertain entities, an image/page of the **input** not OCR'd (`analyse.ocr_incomplete`), or embedded items omitted from the container (`container.incomplete`) | NEEDS_REVIEW | output folder |
+| container whose every embedded item was omitted and with no text of its own (`container.empty`) | FAILED | nothing written |
 | none of the above | ANONYMIZED | output folder |
 
 An issue is an OCR gap when one of the dot-separated parts of its code starts with
-`ocr` (`ocr.failed`, `pdf.ocr_unavailable`). The CLI exits with code 1 when any output
-is in quarantine.
+`ocr` (`ocr.failed`, `pdf.ocr_unavailable`).
+
+The CLI derives its exit code from the batch verdict (`report.BatchReport.exit_code`,
+computed from the outcomes of the top-level files): 1 when a file is in quarantine,
+failed, unsupported or cancelled, 0 otherwise (anonymized or to review).
 
 ## File names
 

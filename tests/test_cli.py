@@ -158,9 +158,12 @@ def test_run_anonymizes(
     assert f"Dossier de sortie : {out.resolve()}" in lines
     if report_name.endswith(".json"):
         data = json.loads(report.read_text(encoding="utf-8"))
-        assert data["entites_par_type"] == {"PERSONNE": 3, "EMAIL": 1}
-        assert data["parametres"]["Mode"] == "Balises"
-        assert data["verdict"] == "anonymise"
+        assert data["occurrences_par_type"] == {"EMAIL": 1, "PERSONNE": 3}
+        assert data["entites_par_type"] == data["occurrences_par_type"]  # older name
+        assert data["parametres"]["mode"] == "balises"
+        assert data["parametres_libelles"]["Mode"] == "Balises"
+        assert data["verdict"] == "anonymise" and data["code_sortie"] == 0
+        assert {f["statut"] for f in data["fichiers"]} == {"anonymise"}  # codes, not labels
     if report_name.endswith(".html"):
         assert report.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
 
@@ -289,6 +292,7 @@ def test_pseudonymization_prompts_passphrase(
     tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(cli.PASSPHRASE_ENV, raising=False)
+    monkeypatch.setattr(cli, "_interactive", lambda: True)  # a user at a console
     table = tmp_path / "table.anonyma"
     args = _run_args(corpus, tmp_path / "s1", business_list, "-r", "pseudonymisation")
     result = invoke(*args, "--table", table, input=f"{SECRET}\n{SECRET}\n")
@@ -457,8 +461,9 @@ def test_run_protection_options(tmp_path: Path, corpus: Path, business_list: Pat
         "dossier_0001/document_0002.md",
     ]
     report = json.loads((tmp_path / "rapport.json").read_text(encoding="utf-8"))
-    assert report["parametres"]["Noms des fichiers"] == "neutres"
-    assert report["parametres"]["OCR"] == "non"
+    assert report["parametres"]["noms_neutres"] is True
+    assert report["parametres"]["ocr"] is False
+    assert report["parametres_libelles"]["Noms des fichiers"] == "neutres"
     assert "uintavalle" not in (tmp_path / "rapport.json").read_text(encoding="utf-8")
 
 
@@ -518,7 +523,7 @@ def test_reidentifier_neutral_names(tmp_path: Path, corpus: Path, business_list:
 def test_unexpected_error_shows_its_type_only(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def boom() -> None:
+    def boom(**kwargs: Any) -> None:
         raise RuntimeError("Contrat de Quintavalle.pdf")
 
     monkeypatch.setattr(cli, "app", boom)
@@ -564,7 +569,7 @@ def test_run_help_groups_and_lists_choices() -> None:
     assert "─ Divers ─" in output and "─ Options ─" not in output
     for choice in ("leger", "standard", "complet", "balises", "realiste", "masquage"):
         assert choice in output
-    assert "Utilisation : root run [OPTIONS] CHEMINS..." in output  # no « {CHEMINS...} »
+    assert "Utilisation : anonyma run [OPTIONS] CHEMINS..." in output  # no « {CHEMINS...} »
 
 
 def test_commands_help_uses_infinitives() -> None:
@@ -706,7 +711,8 @@ def test_run_json_summary(
     assert data["dossier_sortie"] == str(out.resolve())
     assert data["dossier_quarantaine"] is None
     assert data["rapport"] == str(report.resolve())
-    assert data["parametres"] == {"profil": "leger", "mode": "balises", "regime": "anonymisation"}
+    assert data["parametres"]["profil"] == "leger" and data["parametres"]["mode"] == "balises"
+    assert data["parametres"]["regime"] == "anonymisation"
     assert {d["statut"] for d in data["documents"]} == {"anonymise"}
     assert "uintavalle" not in result.stdout
     assert "fichiers anonymisés et vérifiés" in result.output  # human summary on stderr
@@ -793,3 +799,244 @@ def test_possible_residue_is_to_review_not_quarantine(
     assert data["dossier_quarantaine"] is None
     assert "1 résidu possible à vérifier avant diffusion" in result.output
     assert "Quarantaine" not in result.output
+
+
+# -- verdict, exit code and JSON vocabulary (client test, round 2) -------------------
+
+
+def _zip_input(tmp_path: Path, name: str, data: bytes) -> Path:
+    folder = tmp_path / "zips"
+    folder.mkdir(exist_ok=True)
+    (folder / name).write_bytes(data)
+    return folder / name
+
+
+def test_omitted_member_makes_the_archive_to_review(tmp_path: Path, business_list: Path) -> None:
+    from tests.test_archive import NOTE, _encrypt_first_entry, _zip
+
+    data = _encrypt_first_entry(_zip({"secret.txt": b"chiffre", "clair.txt": NOTE}))
+    archive = _zip_input(tmp_path, "c.zip", data)
+    report = tmp_path / "r.html"
+    result = invoke(
+        *_run_args(archive, tmp_path / "s", business_list, "--json", "--rapport", report)
+    )
+    data_json = json.loads(result.stdout)
+    # Verdict and exit code agree: a member left out is « À revoir », not « Anonymisé ».
+    assert data_json["verdict"] == "a_revoir" and data_json["code_sortie"] == 0
+    assert result.exit_code == 0
+    assert data_json["resultats"]["a_revoir"] == 1 and data_json["elements_omis"] == 1
+    assert data_json["nombre_fichiers"] == 1 and data_json["nombre_elements_inclus"] == 2
+    document = data_json["documents"][0]
+    assert document["resultat"] == "a_revoir" and document["elements_omis"] == 1
+    assert any(p["code"] == "container.incomplete" for p in document["problemes"])
+    # The failed member is located in its container.
+    assert "c.zip › secret.txt" in result.output
+    assert "c.zip › secret.txt" in report.read_text(encoding="utf-8")
+
+
+def test_archive_with_nothing_kept_fails(tmp_path: Path, business_list: Path) -> None:
+    from tests.test_archive import _encrypt_first_entry, _zip
+
+    archive = _zip_input(tmp_path, "e.zip", _encrypt_first_entry(_zip({"s.txt": b"x"})))
+    result = invoke(*_run_args(archive, tmp_path / "s", business_list, "--json"))
+    data = json.loads(result.stdout)
+    assert data["verdict"] == "echec" and data["code_sortie"] == 1 == result.exit_code
+    assert result.output.splitlines()[0].replace(" ", " ") == "1 en échec"
+    assert not any((tmp_path / "s").rglob("*.zip"))  # no empty shell produced
+
+
+def test_json_counts_have_one_meaning_each(
+    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (corpus / "binaire.xyz").write_bytes(b"\x00\x01")
+    result = invoke(*_run_args(corpus, tmp_path / "s", business_list, "--json"))
+    data = json.loads(result.stdout)
+    assert result.exit_code == data["code_sortie"] == 1
+    assert data["nombre_fichiers"] == data["fichiers"] == 3
+    assert sum(data["resultats"].values()) == data["nombre_fichiers"]
+    assert data["resultats"]["non_supporte"] == 1
+    unsupported = next(d for d in data["documents"] if d["statut"] == "non_supporte")
+    assert unsupported["occurrences"] == 0 and unsupported["chemin"] is None
+    assert unsupported["statut_libelle"] == "Non pris en charge"
+    assert data["occurrences"] == sum(data["occurrences_par_type"].values()) == 4
+    assert data["quarantaine"] == 0 and data["residus_certains"] == 0
+
+    _quarantined_run(monkeypatch)
+    data = json.loads(invoke(*_run_args(corpus, tmp_path / "s2", business_list, "--json")).stdout)
+    assert data["quarantaine"] == data["resultats"]["quarantaine"] == 1
+    assert data["fichiers_a_revoir"] == 0 and data["entites_a_revoir"] == 0
+
+
+def test_unsupported_file_shows_no_occurrence_count(
+    tmp_path: Path, corpus: Path, business_list: Path
+) -> None:
+    (corpus / f"{CANARY_PERSON}.xyz").write_bytes(b"\x00\x01")
+    report = tmp_path / "r.md"
+    invoke(*_run_args(corpus, tmp_path / "s", business_list, "--rapport", report))
+    line = next(x for x in report.read_text(encoding="utf-8").splitlines() if ".xyz" in x)
+    assert "| Non pris en charge | — |" in line
+
+
+def test_pseudonymized_outputs_are_called_so(
+    tmp_path: Path, corpus: Path, business_list: Path
+) -> None:
+    table = tmp_path / "t.anonyma"
+    report = tmp_path / "r.html"
+    args = _run_args(corpus, tmp_path / "s", business_list, "-r", "pseudonymisation")
+    result = invoke(*args, "--table", table, "--rapport", report, env={cli.PASSPHRASE_ENV: SECRET})
+    assert result.exit_code == 0, result.output
+    assert "2 fichiers pseudonymisés et vérifiés." in result.output.splitlines()
+    html = report.read_text(encoding="utf-8")
+    assert "Pseudonymisé" in html and "anonymisés et vérifiés" not in html
+
+
+def test_rerun_into_a_used_folder_warns_and_replace_removes_only_our_files(
+    tmp_path: Path, corpus: Path, business_list: Path
+) -> None:
+    out = tmp_path / "s"
+    assert invoke(*_run_args(corpus, out, business_list)).exit_code == 0
+    first = sorted(p.relative_to(out) for p in out.rglob("*") if p.is_file())
+    (out / "notes-perso.txt").write_text("à garder", encoding="utf-8")
+
+    result = invoke(*_run_args(corpus, out, business_list, "--json"))
+    assert "le dossier de sortie n'est pas vide" in result.output
+    assert json.loads(result.stdout)["dossier_sortie_non_vide"] is True
+    assert any(" (2)" in p.name for p in out.rglob("*"))
+
+    result = invoke(*_run_args(corpus, out, business_list, "--json", "--remplacer"))
+    data = json.loads(result.stdout)
+    assert data["sorties_precedentes_supprimees"] == 4
+    assert sorted(p.relative_to(out) for p in out.rglob("*") if p.is_file()) == sorted(
+        [*first, Path("notes-perso.txt")]
+    )
+    assert (out / "notes-perso.txt").read_text(encoding="utf-8") == "à garder"
+
+
+def test_messages_hold_no_internal_code_or_english(tmp_path: Path, business_list: Path) -> None:
+    folder = tmp_path / "e"
+    folder.mkdir()
+    (folder / "vide.docx").write_bytes(b"")
+    (folder / "abime.docx").write_bytes(b"PK\x03\x04 pas un document")
+    (folder / "inconnu.xyz").write_bytes(b"\x00\x01")
+    report = tmp_path / "r.json"
+    result = invoke(*_run_args(folder, tmp_path / "s", business_list, "--rapport", report))
+    text = result.output + report.read_text(encoding="utf-8").split('"echecs"')[1]
+    assert "vide.docx : Échec de la lecture du fichier : fichier vide." in result.output
+    assert "fichier endommagé ou tronqué" in result.output
+    for internal in ("BadZipFile", "format.unknown", "extract.error :", "Error"):
+        assert internal not in result.output, internal
+    assert "format.unknown :" not in text
+
+
+def test_invalid_configuration_is_explained_in_french(tmp_path: Path, corpus: Path) -> None:
+    config_file = tmp_path / "c.json"
+    config_file.write_text('{"min_score": "0,5"}', encoding="utf-8")
+    result = invoke("analyser", corpus, "--config", config_file)
+    assert result.exit_code == 2
+    assert "la valeur de « min_score » doit être un nombre" in " ".join(result.output.split())
+    assert "not supported" not in result.output
+    config_file.write_text('{"mode": "bidon"}', encoding="utf-8")
+    result = invoke("analyser", corpus, "--config", config_file)
+    assert result.exit_code == 2
+    output = " ".join(result.output.split())
+    assert "mode de remplacement (balises, realiste, masquage)" in output
+    assert "ReplacementMode" not in output
+    result = invoke("config", "definir", "regime", "bidon", "--config", tmp_path / "n.json")
+    assert "Regime" not in result.output and "régime" in result.output
+
+
+def test_missing_language_engine_is_named_precisely(
+    monkeypatch: pytest.MonkeyPatch, corpus: Path, business_list: Path
+) -> None:
+    from anonyma import hardware, registry
+
+    llm = registry.detector_classes()["llm"]
+    monkeypatch.setattr(llm, "is_available", classmethod(lambda cls, config: False))
+    real = cli.engine_available
+    monkeypatch.setattr(cli, "engine_available", lambda name: name != "llm" and real(name))
+    result = invoke("analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-q")
+    output = " ".join(result.output.split())
+    assert "moteur du modèle de langue non disponible dans cette version" in output
+    assert "modèle de langue (modèle non installé)" not in output
+
+    monkeypatch.setattr(hardware, "recommend_profile", lambda info: Profile.FULL)
+    output = " ".join(invoke("materiel").output.split())
+    assert "Profil conseillé Complet" not in output
+    assert "moteur du modèle de langue non disponible dans cette version" in output
+
+
+def test_usage_shows_the_documented_program_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert cli.program_name() == "anonyma"
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    assert cli.program_name() == "anonyma-cli"
+    help_text = " ".join(invoke("run", "--help").output.split())
+    assert "interrompu" in help_text
+
+
+def test_passphrase_without_console_fails_at_once(
+    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(cli.PASSPHRASE_ENV, raising=False)
+    monkeypatch.setattr(cli, "_interactive", lambda: False)
+    args = _run_args(corpus, tmp_path / "s", business_list, "-r", "pseudonymisation")
+    result = invoke(*args, "--table", tmp_path / "t.anonyma", "--json")
+    assert result.exit_code == 2 and result.stdout == ""
+    assert cli.PASSPHRASE_ENV in result.output
+    assert not (tmp_path / "s").exists()
+
+
+def test_reidentifier_restores_the_exact_text_and_names_ignored_files(
+    tmp_path: Path, business_list: Path
+) -> None:
+    folder = tmp_path / "e"
+    folder.mkdir()
+    texts = {
+        "a.txt": "Signé Zéphyrin Quintavalle.\n",
+        "b.txt": "Signé ZÉPHYRIN QUINTAVALLE.\n",  # another form of the same person
+    }
+    for name, text in texts.items():
+        (folder / name).write_text(text, encoding="utf-8")
+    table = tmp_path / "t.anonyma"
+    env = {cli.PASSPHRASE_ENV: SECRET}
+    out = tmp_path / "s"
+    args = _run_args(folder, out, business_list, "-r", "pseudonymisation", "-m", "realiste")
+    assert invoke(*args, "--table", table, env=env).exit_code == 0
+    (out / "e" / "image.png").write_bytes(b"PNG image")
+    result = invoke("reidentifier", out, "-o", tmp_path / "r", "--table", table, env=env)
+    assert result.exit_code == 1
+    for name, text in texts.items():  # as written, not the canonical form
+        assert (tmp_path / "r" / "s" / "e" / name).read_text(encoding="utf-8") == text
+    output = " ".join(result.output.split())
+    assert "« s/e/image.png » ignoré" in output
+    assert "2 fichiers ré-identifiés" in output and "1 fichier ignoré" in output
+
+
+@pytest.mark.parametrize("width", [80, 200])
+def test_models_list_never_cuts_identifiers(monkeypatch: pytest.MonkeyPatch, width: int) -> None:
+    monkeypatch.setattr(cli.out, "_width", width)
+    output = invoke("modeles", "liste").output
+    for spec in model_catalog.CATALOG:
+        assert spec.id in output.split(), spec.id
+        assert spec.revision in output  # needed for an offline import
+    assert "…" not in output
+
+
+def test_analyser_lists_unread_files_under_anonymized_names(
+    corpus: Path, business_list: Path
+) -> None:
+    (corpus / f"{CANARY_PERSON}.xyz").write_bytes(b"\x00\x01")
+    args = ["analyser", corpus, "-p", "leger", "--liste-metier", business_list]
+    result = invoke(*args, "-q")
+    assert result.exit_code == 1
+    assert "entree/[PERSONNE_001].xyz : Format de fichier non reconnu." in result.output
+    assert "uintavalle" not in result.output
+    data = json.loads(invoke(*args, "--json").stdout)
+    assert data["non_analyses"] == [
+        {
+            "fichier": "entree/[PERSONNE_001].xyz",
+            "statut": "non_supporte",
+            "statut_libelle": "Non pris en charge",
+            "problemes": ["Format de fichier non reconnu."],
+            "codes": ["format.unknown"],
+        }
+    ]

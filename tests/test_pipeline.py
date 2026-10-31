@@ -776,3 +776,110 @@ def test_empty_binary_file_is_reported_as_empty(
     [message] = [i.message for i in top.issues if i.code == "extract.empty"]
     assert message.startswith("Fichier vide") and "Error" not in message
     assert not (tmp_path / "out" / name).exists()
+
+
+class _AcrossFoldersDetector(Detector):
+    """Reads ``Exports/sous`` (two folder names) as one organisation."""
+
+    name = "dossiers"
+
+    def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
+        out = []
+        for s in segments:
+            i = s.text.find("Exports/sous")
+            if i >= 0:
+                end = i + len("Exports/sous")
+                out.append(Entity("ORGANISATION", "", document_id, s.id, i, end, 0.9, self.name))
+        return out
+
+
+def test_entity_across_folders_keeps_the_tree_depth(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry.load_plugins()
+    monkeypatch.setitem(registry._detectors, "dossiers", _AcrossFoldersDetector)
+    folder = tmp_path / "Exports" / "sous"
+    folder.mkdir(parents=True)
+    (folder / "a.txt").write_text("Rien.\n", encoding="utf-8")
+    (tmp_path / "Exports" / "b.txt").write_text("Rien.\n", encoding="utf-8")
+    result = Pipeline(canary_config).run([tmp_path / "Exports"], tmp_path / "out")
+    names = sorted(r.output_name for r in result.results)
+    # One substitute per component: never ``[ORGANISATION_001]/a.txt`` (folders merged),
+    # and the input folder has one output name for the whole batch.
+    assert names == [
+        "[ORGANISATION_001]/[ORGANISATION_001]/a.txt",
+        "[ORGANISATION_001]/b.txt",
+    ]
+    written = sorted(
+        p.relative_to(tmp_path / "out").as_posix() for p in (tmp_path / "out").rglob("*.txt")
+    )
+    assert written == names
+
+
+def test_worker_logs_go_to_the_log_file_not_stderr(
+    tmp_path: Path, portable_home: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "abime.docx").write_bytes(b"PK\x03\x04 pas un document")
+    (src / "a.txt").write_text("Rien.\n", encoding="utf-8")
+    config = Config(profile=Profile.LIGHT, workers=2)
+    result = Pipeline(config).run([src], tmp_path / "out")
+    assert {r.status for r in result.results} == {DocumentStatus.FAILED, DocumentStatus.ANONYMIZED}
+    captured = capfd.readouterr()
+    assert "extraction failed" not in captured.err + captured.out
+    log = (portable_home / "data" / "logs" / "anonyma.log").read_text(encoding="utf-8")
+    assert "extraction failed" in log
+
+
+def _linger() -> int:
+    """A job that leaves a non-daemon thread behind: its worker can never exit."""
+    import threading
+    import time
+
+    threading.Thread(target=time.sleep, args=(3600,)).start()
+    return 1
+
+
+def test_pool_shutdown_is_bounded() -> None:
+    import time
+    from concurrent.futures import ProcessPoolExecutor
+
+    from anonyma.pipeline import _worker_init, shutdown_pool
+
+    pool = ProcessPoolExecutor(1, initializer=_worker_init)
+    assert pool.submit(_linger).result() == 1
+    processes = list(pool._processes.values())
+    start = time.monotonic()
+    shutdown_pool(pool, timeout=1.0)
+    assert time.monotonic() - start < 20
+    assert not any(p.is_alive() for p in processes)
+
+
+def test_full_profile_without_its_model_is_not_single_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry.load_plugins()
+    llm = registry.detector_classes()["llm"]
+    monkeypatch.setattr(llm, "is_available", classmethod(lambda cls, config: False))
+    monkeypatch.setattr("os.cpu_count", lambda: 4)
+    pipeline = Pipeline(Config(profile=Profile.FULL))
+    assert pipeline.config.profile is Profile.FULL  # still reported as chosen
+    assert pipeline.detection_profile is not Profile.FULL
+    assert pipeline._workers(10) > 1
+
+
+def test_neutral_names_drop_empty_archive_folders(tmp_path: Path, canary_config: Config) -> None:
+    import zipfile
+
+    src = tmp_path / "in" / "a.zip"
+    src.parent.mkdir()
+    with zipfile.ZipFile(src, "w") as zf:
+        zf.writestr(f"Dossier {CANARY_PERSON}/", b"")
+        zf.writestr("notes/a.txt", b"Rien.")
+    canary_config.neutral_filenames = True
+    top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.ANONYMIZED
+    assert top.output_path is not None
+    with zipfile.ZipFile(top.output_path) as zf:
+        assert zf.namelist() == ["piece_jointe_0001.txt"]

@@ -31,6 +31,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
 from anonyma import model_catalog, netguard, paths
+from anonyma.errors import network_reason
 from anonyma.logs import get_logger
 from anonyma.model_catalog import ModelSpec
 
@@ -384,7 +385,7 @@ class ModelManager:
             log.warning("license check failed for %s: %s", spec.id, type(exc).__name__)
             raise ModelError(
                 "Impossible de lire la licence sur Hugging Face (connexion ou dépôt "
-                f"indisponible : {type(exc).__name__})."
+                f"indisponible : {network_reason(exc)})."
             ) from exc
         return evaluate_license(spec, live_licenses(info))
 
@@ -481,7 +482,7 @@ class ModelManager:
             log.warning("download failed for %s: %s", spec.id, type(exc).__name__)
             raise ModelError(
                 "Le téléchargement a été interrompu ; relancez-le pour le reprendre "
-                f"({type(exc).__name__})."
+                f"({network_reason(exc)})."
             ) from exc
         if expected_size and written != expected_size:
             if written > expected_size:

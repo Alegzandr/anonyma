@@ -17,16 +17,21 @@ from __future__ import annotations
 import os
 import shutil
 import threading
+import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from concurrent.futures import CancelledError, Future, ProcessPoolExecutor, as_completed
+from concurrent.futures import CancelledError, Future, ProcessPoolExecutor, as_completed, wait
 from concurrent.futures.process import BrokenProcessPool
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from anonyma import outputs as output_record
 from anonyma import paths, registry
 from anonyma.config import Config
+from anonyma.errors import failure_reason
+from anonyma.frenchtext import plural
 from anonyma.logs import get_logger
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
@@ -59,10 +64,11 @@ from anonyma.models import (
     VerificationResult,
     WriteContext,
     Writer,
+    apply_replacements,
     new_id,
 )
 from anonyma.policy import apply_policies
-from anonyma.replacer import Replacer, SubstitutionTable, build_plan
+from anonyma.replacer import BLACKOUT_CHAR, Replacer, SubstitutionTable, build_plan
 from anonyma.resolver import (
     DOCUMENT_LOCAL_TYPES,
     PROPAGATION_DETECTOR,
@@ -86,6 +92,14 @@ MANUAL_DETECTOR = "manuel"
 CRASH_MESSAGE = (
     "Le traitement de ce fichier a fait planter le processus de travail deux fois : "
     "fichier non traité."
+)
+#: Issue codes of containers that could not keep every embedded item.
+OMITTED_CODE = "child.omitted"
+INCOMPLETE_CONTAINER_CODE = "container.incomplete"
+EMPTY_CONTAINER_CODE = "container.empty"
+EMPTY_CONTAINER = (
+    "Aucun élément de ce fichier n'a pu être anonymisé (illisible, chiffré ou non pris en "
+    "charge) : fichier non produit."
 )
 #: Format of the links skipped in input folders (never read, reported).
 LINK_FORMAT = "lien"
@@ -170,6 +184,8 @@ class BatchResult:
     results: list[DocumentResult]
     started_at: datetime
     finished_at: datetime = field(default_factory=datetime.now)
+    #: Outputs are pseudonymized (reports say « pseudonymisé ») or anonymized.
+    regime: Regime = Regime.ANONYMIZATION
 
     def all_results(self) -> Iterator[DocumentResult]:
         def walk(r: DocumentResult) -> Iterator[DocumentResult]:
@@ -246,10 +262,62 @@ _ocr_cache: dict[str, OcrEngine | None] = {}
 
 
 def _worker_init() -> None:
-    from anonyma import netguard
+    from anonyma import logs, netguard
 
     paths.configure_environment()
     netguard.install()
+    # Like the main process: records go to data/logs, never to the user's terminal.
+    logs.setup_logging(worker=True)
+
+
+#: Seconds given to idle worker processes to exit once a pool is shut down, before
+#: they are terminated.
+POOL_EXIT_TIMEOUT = 10.0
+
+
+@contextmanager
+def worker_pool(workers: int) -> Iterator[ProcessPoolExecutor]:
+    """A process pool whose shutdown is bounded.
+
+    ``ProcessPoolExecutor.__exit__`` waits without limit for its management thread,
+    which waits for every worker to take its stop signal from the call queue: one
+    worker that never takes it (blocked on the queue's lock, or stuck in native
+    code) hangs the batch after its last result. Here, pending jobs are cancelled,
+    workers get :data:`POOL_EXIT_TIMEOUT` seconds to exit, and the ones left are
+    terminated (every result has been collected by then)."""
+    pool = ProcessPoolExecutor(workers, initializer=_worker_init)
+    try:
+        yield pool
+    finally:
+        shutdown_pool(pool)
+
+
+def shutdown_pool(pool: ProcessPoolExecutor, timeout: float = POOL_EXIT_TIMEOUT) -> None:
+    """Shut ``pool`` down without waiting more than ``timeout`` for its workers."""
+    # Taken before shutdown(), which drops its references.
+    processes = list((getattr(pool, "_processes", None) or {}).values())
+    manager = getattr(pool, "_executor_manager_thread", None)
+    call_queue = getattr(pool, "_call_queue", None)
+    pool.shutdown(wait=False, cancel_futures=True)
+    deadline = time.monotonic() + timeout
+    for process in processes:
+        process.join(max(0.0, deadline - time.monotonic()))
+    stuck = [p for p in processes if p.is_alive()]
+    if stuck:
+        log.warning("%d worker process(es) did not exit; terminating them", len(stuck))
+        # The management thread must not then wait for the queue's feeder thread,
+        # which may be blocked writing to workers that are gone.
+        cancel_join = getattr(call_queue, "cancel_join_thread", None)
+        if callable(cancel_join):
+            cancel_join()
+        for process in stuck:
+            process.terminate()
+        for process in stuck:
+            process.join(POOL_EXIT_TIMEOUT)
+    if isinstance(manager, threading.Thread):
+        manager.join(timeout)
+        if manager.is_alive():
+            log.warning("worker pool management thread still running after shutdown")
 
 
 def detectors_for(config: Config) -> list[Detector]:
@@ -477,7 +545,7 @@ def _extract_into(
         doc.add_issue(
             Severity.ERROR,
             "extract.error",
-            f"Échec de la lecture du fichier ({type(exc).__name__}).",
+            f"Échec de la lecture du fichier : {failure_reason(exc, doc.source)}.",
         )
         return
     doc.status = DocumentStatus.FAILED if doc.has_errors else DocumentStatus.EXTRACTED
@@ -515,7 +583,8 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
                 doc.add_issue(
                     Severity.ERROR,
                     "detect.error",
-                    f"Le détecteur « {detector.name} » a échoué : détection incomplète.",
+                    f"Le détecteur « {_detector_label(detector.name)} » a échoué : détection "
+                    "incomplète.",
                 )
                 break
             for e in found:
@@ -528,6 +597,12 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
                 e.document_id = doc.id
                 entities.append(e)
     return entities
+
+
+def _detector_label(name: str) -> str:
+    from anonyma.gui.labels import detector_label
+
+    return detector_label(name)
 
 
 #: Why an input is not read (``_analyze_one(..., skipped=...)``).
@@ -737,6 +812,26 @@ def store_neutral_names(
                 )
 
 
+def store_surfaces(
+    store: MappingStore, entities: Sequence[Entity], table: SubstitutionTable
+) -> None:
+    """Keep, for each substitute written in the outputs, the exact text it replaces
+    (``[PERSONNE_001]`` for « DUPONT » only), so that re-identification restores the
+    text as it was; a substitute standing for several texts gets an empty original
+    (the canonical value is restored), which also clears an older exact form."""
+    from anonyma.store import SURFACE_TYPE
+
+    if table.mode is ReplacementMode.BLACKOUT:
+        return
+    texts: dict[str, set[str]] = {}
+    for e in entities:
+        if e.cluster_id in table.by_cluster:
+            texts.setdefault(table.substitute_for(e), set()).add(e.value)
+    for substitute, values in sorted(texts.items()):
+        original = next(iter(values)) if len(values) == 1 else ""
+        store.save(SURFACE_TYPE, substitute, original, substitute)
+
+
 def original_names(root: Document) -> list[str]:
     """Every original name of a top-level document's tree (sensitive)."""
     return sorted({d.name for d in root.walk() if d.name})
@@ -774,13 +869,87 @@ class _WriteContext(WriteContext):
 def anonymized_name(
     doc: Document, entities: Sequence[Entity], table: SubstitutionTable, extension: str
 ) -> str:
-    """Apply the plan to the FILENAME segment, sanitize, and set the extension."""
+    """Apply the plan to the FILENAME segment, sanitize, and set the extension.
+
+    Each path component is anonymized on its own: a replacement spanning a separator
+    (an entity ``corpus/Exports`` read across two folder names) is cut at the
+    separator and each piece gets the substitute, so the output tree always has the
+    depth of the input tree (never two folders merged into one)."""
     plan = build_plan(doc, [e for e in entities if e.segment_id == FILENAME_SEGMENT_ID], table)
-    raw = plan.apply(doc.segment(FILENAME_SEGMENT_ID)).replace("\\", "/")
-    parts = [safe_filename(p) for p in raw.split("/") if p not in ("", ".", "..")] or ["_"]
+    text = doc.segment(FILENAME_SEGMENT_ID).text
+    replacements = plan.for_segment(FILENAME_SEGMENT_ID)
+    blackout = table.mode is ReplacementMode.BLACKOUT
+    parts: list[str] = []
+    for start, end in _path_components(text):
+        component = text[start:end]
+        if component in ("", ".", ".."):
+            continue
+        pieces = []
+        for rep in replacements:
+            lo, hi = max(rep.start, start), min(rep.end, end)
+            if lo >= hi:
+                continue
+            # Separators a substitute carries at its edges belong to the path.
+            substitute = (
+                BLACKOUT_CHAR * (hi - lo) if blackout else rep.substitute.strip("/\\") or "_"
+            )
+            piece = replace(rep, start=lo - start, end=hi - start, original=text[lo:hi])
+            pieces.append(replace(piece, substitute=substitute))
+        parts.append(safe_filename(apply_replacements(component, pieces)))
+    parts = parts or ["_"]
     stem = PurePosixPath(parts[-1])
     parts[-1] = safe_filename((stem.stem if stem.suffix else stem.name) + extension)
     return "/".join(parts)
+
+
+def top_level_names(
+    documents: Sequence[Document], entities: Sequence[Entity], table: SubstitutionTable
+) -> dict[str, str]:
+    """``document id -> output name`` of the top-level documents, folders named once
+    for the whole batch.
+
+    Each document's name is anonymized on its own (:func:`anonymized_name`), so a
+    folder could come out masked for one file and not for another (an entity read
+    in one name only). An input folder gets a single output name: the masked one
+    when any of its files masked it (recall over precision), else the first."""
+    by_doc: dict[str, list[Entity]] = {}
+    for e in entities:
+        if e.segment_id == FILENAME_SEGMENT_ID:
+            by_doc.setdefault(e.document_id, []).append(e)
+    own: dict[str, tuple[list[str], list[str]]] = {}
+    folders: dict[tuple[str, ...], str] = {}
+    for doc in documents:
+        name = anonymized_name(doc, by_doc.get(doc.id, []), table, _output_shape(doc)[1])
+        original = [doc.name[s:e] for s, e in _path_components(doc.name)]
+        original = [p for p in original if p not in ("", ".", "..")]
+        parts = name.split("/")
+        if len(parts) != len(original):
+            continue
+        own[doc.id] = (original, parts)
+        for depth in range(1, len(parts)):
+            key = tuple(original[:depth])
+            current = folders.get(key)
+            unmasked = safe_filename(original[depth - 1])
+            if current is None or (current == unmasked and parts[depth - 1] != unmasked):
+                folders[key] = parts[depth - 1]
+    return {
+        doc_id: "/".join(
+            [*(folders[tuple(original[:depth])] for depth in range(1, len(parts))), parts[-1]]
+        )
+        for doc_id, (original, parts) in own.items()
+    }
+
+
+def _path_components(name: str) -> list[tuple[int, int]]:
+    """``(start, end)`` of each component of ``name`` (``/`` and ``\\`` separators)."""
+    bounds: list[tuple[int, int]] = []
+    start = 0
+    for index, char in enumerate(name):
+        if char in "/\\":
+            bounds.append((start, index))
+            start = index + 1
+    bounds.append((start, len(name)))
+    return bounds
 
 
 @dataclass(slots=True)
@@ -796,8 +965,10 @@ class _WriteJob:
     work_dir: Path
     #: Original names of the tree (searched in the output by the verifier).
     names: list[str] = field(default_factory=list)
-    #: ``document id -> neutral name`` when ``config.neutral_filenames``.
-    neutral_names: dict[str, str] = field(default_factory=dict)
+    #: ``document id -> output name`` decided batch-wide: neutral names
+    #: (``config.neutral_filenames``), else the top-level names, whose folders are
+    #: named consistently for the whole batch (:func:`top_level_names`).
+    output_names: dict[str, str] = field(default_factory=dict)
 
 
 def _counts(entities: Sequence[Entity]) -> dict[str, int]:
@@ -814,7 +985,7 @@ def _write_tree(
     the written path (None when the document is omitted)."""
     entities = by_doc.get(doc.id, [])
     writer, extension, pack_folder = _output_shape(doc)
-    name = job.neutral_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
+    name = job.output_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
     result = DocumentResult(
         document_id=doc.id,
         output_name=name,
@@ -838,20 +1009,31 @@ def _write_tree(
             result.issues.append(
                 Issue(
                     Severity.WARNING,
-                    "child.omitted",
+                    OMITTED_CODE,
                     f"Élément « {child_result.output_name} » omis : il n'a pas pu être anonymisé.",
                 )
             )
+
+    nothing_kept = doc.children and all(o.path is None for o in child_outputs.values())
+    if nothing_kept and not _has_own_text(doc):
+        # Nothing of the container could be kept: no empty shell is produced.
+        result.status = DocumentStatus.FAILED
+        result.issues.append(Issue(Severity.ERROR, EMPTY_CONTAINER_CODE, EMPTY_CONTAINER))
+        return result, None
 
     # Top-level outputs too: they only reach the output folder once verified.
     destination = job.work_dir / new_id() / PurePosixPath(name).name
     target = destination.with_name(new_id()) if pack_folder else destination
     plan = build_plan(doc, entities, job.table)
+    shown = doc
+    if job.config.neutral_filenames:
+        # Embedded items are flattened under neutral names: the (empty) folders of an
+        # archive go too, their original names would otherwise stay.
+        shown = replace(doc, segments=[s for s in doc.segments if s.locator[:1] != ("dir",)])
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        result.issues.extend(
-            writer.write(doc, plan, target, _WriteContext(job.config, child_outputs, job.work_dir))
-        )
+        context = _WriteContext(job.config, child_outputs, job.work_dir)
+        result.issues.extend(writer.write(shown, plan, target, context))
         if pack_folder:
             _zip_folder(target, destination)
             shutil.rmtree(target, ignore_errors=True)
@@ -865,7 +1047,7 @@ def _write_tree(
             Issue(
                 Severity.ERROR,
                 "write.error",
-                f"Échec de l'écriture du fichier anonymisé ({type(exc).__name__}).",
+                f"Échec de l'écriture du fichier produit : {failure_reason(exc)}.",
             )
         )
         return result, None
@@ -940,12 +1122,38 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
             Issue(
                 Severity.ERROR,
                 "verify.error",
-                f"La vérification a échoué ({type(exc).__name__}).",
+                f"La vérification a échoué : {failure_reason(exc)}.",
             )
         )
         return result
     _set_status(result, status)
+    omitted = _flag_omissions(result)
+    if omitted and result.status is DocumentStatus.NEEDS_REVIEW:
+        result.issues.append(
+            Issue(
+                Severity.WARNING,
+                INCOMPLETE_CONTAINER_CODE,
+                f"{plural(omitted, 'élément inclus omis', 'éléments inclus omis')} (illisible, "
+                "chiffré ou non pris en charge) : le fichier produit est incomplet, à revoir.",
+            )
+        )
     return result
+
+
+def _has_own_text(doc: Document) -> bool:
+    """Whether a container holds text of its own (mail headers and body...), besides
+    its name and the names of its folders."""
+    return any(s.text.strip() for s in doc.segments if s.context.kind is not SegmentKind.FILENAME)
+
+
+def _flag_omissions(result: DocumentResult) -> int:
+    """Embedded items left out of ``result``'s tree (``child.omitted``). A verified
+    container missing some of them is never « Anonymisé »: it becomes « À revoir »."""
+    omitted = sum(1 for i in result.issues if i.code == OMITTED_CODE)
+    omitted += sum(_flag_omissions(child) for child in result.children)
+    if omitted and result.status is DocumentStatus.ANONYMIZED:
+        result.status = DocumentStatus.NEEDS_REVIEW
+    return omitted
 
 
 def _write_crashed(job: _WriteJob) -> DocumentResult:
@@ -953,7 +1161,7 @@ def _write_crashed(job: _WriteJob) -> DocumentResult:
     doc = job.document
     _, extension, _ = _output_shape(doc)
     entities = [e for e in job.entities if e.document_id == doc.id]
-    name = job.neutral_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
+    name = job.output_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
     return DocumentResult(
         document_id=doc.id,
         output_name=name,
@@ -1065,7 +1273,7 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
                 Issue(
                     Severity.ERROR,
                     "verify.error",
-                    f"La vérification a échoué ({type(exc).__name__}).",
+                    f"La vérification a échoué : {failure_reason(exc)}.",
                 )
             ],
         )
@@ -1085,17 +1293,20 @@ class Pipeline:
         self.config = replace(config, profile=profile)
         self.store = store
         registry.load_plugins()
+        #: Profile the installed models actually serve (``complet`` without its
+        #: language model runs as ``standard``): it sizes the worker pool.
+        self.detection_profile = registry.usable_profile(self.config, profile)
 
     # -- execution helpers --------------------------------------------------
 
     def _workers(self, jobs: int) -> int:
         if self.config.workers:
             wanted = self.config.workers
-        elif self.config.profile is Profile.FULL:
+        elif self.detection_profile is Profile.FULL:
             wanted = 1  # one LLM instance at a time
         else:
             wanted = max(1, min(os.cpu_count() or 1, 8) - 1)
-            if self.config.profile is Profile.STANDARD:
+            if self.detection_profile is Profile.STANDARD:
                 # Each worker holds its own GLiNER instance (~2 GiB).
                 from anonyma import hardware
 
@@ -1163,7 +1374,7 @@ class Pipeline:
     ) -> int | None:
         """Run ``jobs[indices]`` one at a time in a fresh single-worker pool; returns
         the index of the item that broke it (None when all ran or cancelled)."""
-        with ProcessPoolExecutor(1, initializer=_worker_init) as pool:
+        with worker_pool(1) as pool:
             for index in indices:
                 if cancel and cancel.cancelled:
                     return None
@@ -1187,7 +1398,7 @@ class Pipeline:
         Raises ``BrokenProcessPool`` after reporting every result completed before
         the break."""
         reported: set[int] = set()
-        with ProcessPoolExecutor(workers, initializer=_worker_init) as pool:
+        with worker_pool(workers) as pool:
             futures: dict[Future[Any], int] = {pool.submit(fn, *jobs[i]): i for i in indices}
             try:
                 for future in as_completed(futures):
@@ -1208,6 +1419,12 @@ class Pipeline:
                     if future.exception() is None:
                         done(index, future.result())
                 raise
+            finally:
+                # Leaving early (interrupted): pending jobs never start, running ones
+                # finish (they may be placing an output), before the pool shuts down.
+                for f in futures:
+                    f.cancel()
+                wait(list(futures))
 
     def _analysis_crashed(
         self, source: Path, name: str, config: Config, work_dir: Path, *rest: Any
@@ -1216,7 +1433,7 @@ class Pipeline:
         worker as well), so that it is reported anonymized."""
         job = (source, name, config, work_dir, SKIP_CRASH)
         try:
-            with ProcessPoolExecutor(1, initializer=_worker_init) as pool:
+            with worker_pool(1) as pool:
                 result: tuple[Document, list[Entity]] = pool.submit(_analyze_one, *job).result()
                 return result
         except BrokenProcessPool:
@@ -1299,6 +1516,8 @@ class Pipeline:
         resolved = resolve_decisions(analysis, decisions)
         entities, active = resolved.entities, resolved.clusters
         table = Replacer(self.config, self.store).assign(active, entities, analysis.documents)
+        if self.store is not None and self.config.regime is Regime.PSEUDONYMIZATION:
+            store_surfaces(self.store, entities, table)
         local = {cid for cid, c in active.items() if c.entity_type in DOCUMENT_LOCAL_TYPES}
         batch_wide = sorted(
             {
@@ -1310,11 +1529,12 @@ class Pipeline:
         )
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)
         review = {cid for cid, c in active.items() if c.needs_review}
-        neutral: dict[str, str] = {}
         if self.config.neutral_filenames:
-            neutral = neutral_names(analysis.documents)
+            names = neutral_names(analysis.documents)
             if self.store is not None and self.config.regime is Regime.PSEUDONYMIZATION:
-                store_neutral_names(self.store, analysis.batch_id, analysis.documents, neutral)
+                store_neutral_names(self.store, analysis.batch_id, analysis.documents, names)
+        else:
+            names = top_level_names(analysis.documents, entities, table)
 
         jobs: list[tuple[Any, ...]] = []
         for doc in analysis.documents:
@@ -1338,7 +1558,7 @@ class Pipeline:
                         output_dir=output_dir,
                         work_dir=analysis.work_dir / f"w-{new_id()[:8]}",
                         names=original_names(doc),
-                        neutral_names={d.id: neutral[d.id] for d in doc.walk() if d.id in neutral},
+                        output_names={d.id: names[d.id] for d in doc.walk() if d.id in names},
                     ),
                 )
             )
@@ -1351,7 +1571,15 @@ class Pipeline:
                 if out is not None
                 else DocumentResult(doc.id, "", doc.format, doc.format, DocumentStatus.CANCELLED)
             )
-        return BatchResult(analysis.batch_id, output_dir, results, analysis.started_at)
+        # What this batch wrote, so that a later run can replace it (``--remplacer``).
+        output_record.record(output_dir, [r.output_path for r in results if r.output_path])
+        return BatchResult(
+            analysis.batch_id,
+            output_dir,
+            results,
+            analysis.started_at,
+            regime=self.config.regime,
+        )
 
     def run(
         self,
@@ -1369,6 +1597,43 @@ class Pipeline:
     def close(self, analysis: BatchAnalysis) -> None:
         paths.release(analysis.work_dir)
         shutil.rmtree(analysis.work_dir, ignore_errors=True)
+
+
+def display_names(analysis: BatchAnalysis, separator: str = " › ") -> dict[str, str]:
+    """``document id -> anonymized path`` of every item of an analysis, as a run
+    with tags would name it (« [PERSONNE_001]/cv.pdf › piece.txt »): what reports
+    and messages may show before anything is written. Neutral names when the
+    configuration asks for them."""
+    if analysis.config.neutral_filenames:
+        names = neutral_names(analysis.documents)
+    else:
+        config = replace(analysis.config, mode=ReplacementMode.TAG, regime=Regime.ANONYMIZATION)
+        clusters = {
+            cid: c for cid, c in analysis.clusters.items() if c.review is not ReviewStatus.REJECTED
+        }
+        entities = [e for e in analysis.entities if e.cluster_id in clusters]
+        table = Replacer(config).assign(clusters, entities, analysis.documents)
+        names = top_level_names(analysis.documents, entities, table)
+        by_doc: dict[str, list[Entity]] = {}
+        for e in entities:
+            if e.segment_id == FILENAME_SEGMENT_ID:
+                by_doc.setdefault(e.document_id, []).append(e)
+        for doc in analysis.all_documents():
+            if doc.id not in names:
+                extension = _output_shape(doc)[1]
+                names[doc.id] = anonymized_name(doc, by_doc.get(doc.id, []), table, extension)
+    paths: dict[str, str] = {}
+
+    def visit(doc: Document, prefix: str) -> None:
+        name = names.get(doc.id, "_")
+        path = f"{prefix}{separator}{name}" if prefix else name
+        paths[doc.id] = path
+        for child in doc.children:
+            visit(child, path)
+
+    for doc in analysis.documents:
+        visit(doc, "")
+    return paths
 
 
 def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> ResolvedDecisions:
@@ -1537,6 +1802,7 @@ __all__ = [
     "ResolvedDecisions",
     "collect_inputs",
     "detect_tree",
+    "display_names",
     "drop_inside_whitelist",
     "extract_file",
     "is_quarantined",
@@ -1545,6 +1811,7 @@ __all__ = [
     "propagate_names",
     "quarantine_dir",
     "resolve_decisions",
+    "top_level_names",
     "validate_output_dir",
     "walk_inputs",
 ]

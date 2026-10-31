@@ -1,8 +1,8 @@
 """Command-line interface (Typer), French only.
 
-Exit codes: 0 everything anonymized, 1 some file has residues / failed / is
-unsupported (or the operation failed), 2 usage error (bad option, wrong
-passphrase, invalid configuration).
+Exit codes: 0 every file anonymized (or to review), 1 some file in quarantine,
+failed or unsupported, or the operation was interrupted or failed, 2 usage error
+(bad option, wrong passphrase, invalid configuration, no console for a prompt).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from rich.console import Console
 from rich.table import Table
 
 from anonyma.frenchtext import plural
-from anonyma.models import DocumentStatus, Profile, Regime, ReplacementMode
+from anonyma.models import DocumentStatus, Profile, Regime, ReplacementMode, Severity
 
 if TYPE_CHECKING:
     from anonyma.config import Config
@@ -38,16 +38,6 @@ DEFAULT_STORE_NAME = "table-correspondance.anonyma"
 EXIT_OK = 0
 EXIT_PARTIAL = 1
 EXIT_USAGE = 2
-
-#: Statuses that make ``anonyma run`` exit with code 1.
-BAD_STATUSES = frozenset(
-    {
-        DocumentStatus.RESIDUE,
-        DocumentStatus.FAILED,
-        DocumentStatus.UNSUPPORTED,
-        DocumentStatus.CANCELLED,
-    }
-)
 
 #: Text formats handled by ``anonyma reidentifier`` (plain substitution).
 REIDENTIFY_EXTENSIONS = frozenset(
@@ -75,6 +65,12 @@ out = Console(highlight=False)
 err = Console(stderr=True, highlight=False)
 
 
+def program_name() -> str:
+    """The command as users type it: ``anonyma-cli`` in the portable build (see
+    ``packaging/``), ``anonyma`` from sources (``uv run anonyma``)."""
+    return "anonyma-cli" if getattr(sys, "frozen", False) else "anonyma"
+
+
 # ---------------------------------------------------------------------------
 # French messages for Typer internals
 # ---------------------------------------------------------------------------
@@ -87,6 +83,25 @@ def _extra_arguments(match: re.Match[str]) -> str:
     extra = match.group(1)
     noun = "Argument inattendu" if len(extra.split()) < 2 else "Arguments inattendus"
     return f"{noun} : {extra}"
+
+
+#: Enumerations of the configuration: French name of the setting.
+_ENUM_SETTINGS = {
+    "ReplacementMode": ("mode de remplacement", ReplacementMode),
+    "Regime": ("régime", Regime),
+    "Profile": ("profil", Profile),
+}
+
+
+def _invalid_choice(match: re.Match[str]) -> str:
+    """« 'bidon' is not a valid ReplacementMode » in French, with the valid values."""
+    value, name = match.group(1), match.group(2)
+    known = _ENUM_SETTINGS.get(name)
+    if known is None:
+        return f"{value} n'est pas une valeur valide."
+    setting, enum_type = known
+    choices = ", ".join(str(member.value) for member in enum_type)
+    return f"{value} n'est pas une valeur valide pour le {setting} ({choices})."
 
 
 _Replacement = str | Callable[[re.Match[str]], str]
@@ -113,7 +128,8 @@ _ERROR_TRANSLATIONS: tuple[tuple[re.Pattern[str], _Replacement], ...] = tuple(
         (r"(\S+) is not a valid float( range)?\.", r"\1 n'est pas un nombre."),
         (r"(\S+) is not a valid boolean\.[^\n]*", r"\1 n'est pas une valeur oui/non."),
         (r"(\S+) is not in the range (.+)\.", r"\1 n'est pas dans l'intervalle \2."),
-        (r"(\S+) is not a valid ([A-Za-z ]+)\.?$", r"\1 n'est pas une valeur valide (\2)."),
+        (r"(\S+) is not a valid ([A-Za-z]+)\.?$", _invalid_choice),
+        (r"(\S+) is not a valid ([A-Za-z ]+)\.?$", r"\1 n'est pas une valeur valide."),
         (r"Expecting .* line (\d+) column \d+ \(char \d+\)", r"JSON mal formé (ligne \1)"),
         (r"Did you mean (.+)\?", r"Vouliez-vous dire \1 ?"),
         # Paths are not echoed: they may carry a sensitive file name.
@@ -300,6 +316,7 @@ CONTEXT = {"help_option_names": ["-h", "--help"]}
 SUBCOMMAND = "COMMANDE [ARGUMENTS]..."
 
 app = typer.Typer(
+    name=program_name(),
     help="Anonyma : anonymisation locale et en masse de documents.",
     no_args_is_help=True,
     add_completion=False,
@@ -433,8 +450,65 @@ def load_config(config_file: Path | None) -> Config:
         fail(f"Fichier de configuration introuvable : {config_file}")
     try:
         return Config.load(config_file)
-    except (ValueError, TypeError, OSError) as exc:
+    except TypeError:
+        # A Python message (« '<=' not supported between... ») tells users nothing.
+        fail(f"Configuration invalide : {_type_problem(config_file)}")
+    except UnicodeDecodeError:
+        fail("Configuration invalide : enregistrez le fichier en UTF-8.")
+    except (ValueError, OSError) as exc:
         fail(f"Configuration invalide : {translate_error(str(exc))}")
+
+
+#: French name of the JSON type of a setting.
+_JSON_KINDS = ((bool, "oui/non (true ou false)"), ((int, float), "un nombre"), (str, "un texte"))
+
+
+def _type_problem(config_file: Path | None) -> str:
+    """Which setting of a configuration file has a value of the wrong type."""
+    from anonyma import paths
+    from anonyma.config import Config
+
+    generic = "une valeur n'a pas le type attendu (nombre, texte, oui/non ou liste)."
+    try:
+        raw = json.loads((config_file or paths.config_path()).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return generic
+    defaults = Config().to_dict()
+    if not isinstance(raw, dict):
+        return "le fichier doit contenir un objet JSON."
+    for scope, values, expected in (
+        ("", raw, defaults),
+        ("limits.", raw.get("limits") or {}, defaults["limits"]),
+    ):
+        if not isinstance(values, dict):
+            return f"« {scope.rstrip('.') or 'limits'} » doit être un objet JSON."
+        for key, value in values.items():
+            default = expected.get(key)
+            if key not in expected or default is None or value is None:
+                continue
+            kind = _expected_kind(default)
+            if kind and not _same_kind(value, default):
+                return f"la valeur de « {scope}{key} » doit être {kind}."
+    return generic
+
+
+def _expected_kind(default: Any) -> str:
+    if isinstance(default, list):
+        return "une liste"
+    if isinstance(default, dict):
+        return "un objet JSON"
+    for types, kind in _JSON_KINDS:
+        if isinstance(default, types):
+            return kind
+    return ""
+
+
+def _same_kind(value: Any, default: Any) -> bool:
+    if isinstance(default, bool) or isinstance(value, bool):
+        return isinstance(value, bool) and isinstance(default, bool)
+    if isinstance(default, (int, float)):
+        return isinstance(value, (int, float))
+    return isinstance(value, type(default))
 
 
 def _read_whitelist(path: Path, what: str = "Liste blanche") -> list[str]:
@@ -545,6 +619,12 @@ def read_passphrase(*, confirm: bool) -> str:
     _env_passphrase = None
     if env:
         return env
+    if not _interactive():
+        # A prompt nobody can answer would hang a script or an agent.
+        fail(
+            "Phrase secrète requise, mais aucune console interactive pour la saisir : "
+            f"définissez la variable d'environnement {PASSPHRASE_ENV}."
+        )
     try:
         # On stderr: stdout stays free for --json.
         value: str = typer.prompt(
@@ -559,6 +639,14 @@ def read_passphrase(*, confirm: bool) -> str:
     if not value:
         fail("La phrase secrète ne peut pas être vide.")
     return value
+
+
+def _interactive() -> bool:
+    """Whether a user can answer a prompt (standard input is a terminal)."""
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (ValueError, OSError):
+        return False
 
 
 def open_store(path: Path, *, create: bool) -> EncryptedMappingStore:
@@ -606,15 +694,50 @@ def progress_display(enabled: bool) -> Iterator[Callable[[ProgressEvent], None] 
 
 
 #: French names of detectors that may be missing (model not installed...).
-_DETECTOR_LABELS = {"gliner": "GLiNER", "llm": "modèle de langage local"}
+_DETECTOR_LABELS = {"gliner": "GLiNER", "llm": "modèle de langue"}
+#: Detectors whose engine (a library) may be left out of a build.
+_ENGINE_MISSING = {
+    "gliner": "moteur GLiNER non disponible dans cette version",
+    "llm": "moteur du modèle de langue non disponible dans cette version",
+}
+#: Detector each profile adds, so that it is worth choosing.
+_PROFILE_DETECTOR = {Profile.STANDARD: "gliner", Profile.FULL: "llm"}
+
+
+def engine_available(detector: str) -> bool:
+    """Whether this build ships the library a model-based detector runs on (a model
+    may be installed while its engine is not: llama-cpp-python left out...)."""
+    import importlib.util
+
+    modules = {"gliner": ("onnxruntime", "tokenizers"), "llm": ("llama_cpp",)}
+    return all(importlib.util.find_spec(m) is not None for m in modules.get(detector, ()))
+
+
+def runnable_profile(profile: Profile) -> Profile:
+    """``profile``, or the most thorough lower one whose engines this build ships."""
+    for candidate in (Profile.FULL, Profile.STANDARD):
+        if candidate.rank <= profile.rank and engine_available(_PROFILE_DETECTOR[candidate]):
+            return candidate
+    return Profile.LIGHT
 
 
 def _missing_detectors(config: Config) -> list[str]:
     """French names of the detectors the profile enables but cannot run."""
+    return [_DETECTOR_LABELS.get(name, name) for name in _missing_detector_names(config)]
+
+
+def _missing_detector_names(config: Config) -> list[str]:
     from anonyma import registry
 
-    names = registry.missing_detectors(config, config.effective_profile())
-    return [_DETECTOR_LABELS.get(name, name) for name in names]
+    return registry.missing_detectors(config, config.effective_profile())
+
+
+def _missing_reason(name: str) -> str:
+    """« GLiNER (modèle non installé) », « modèle de langue (moteur ... version) »."""
+    label = _DETECTOR_LABELS.get(name, name)
+    if not engine_available(name) and name in _ENGINE_MISSING:
+        return f"{label} ({_ENGINE_MISSING[name]})"
+    return f"{label} (modèle non installé)"
 
 
 def _short_label(label: str) -> str:
@@ -635,22 +758,28 @@ def _profile_warning(config: Config) -> str | None:
 
     effective = config.effective_profile()
     if config.profile is None:
-        advised = hardware.recommend_profile(hardware.detect_hardware())
-        if advised is effective:
+        # Never advise a profile whose engine this build lacks.
+        advised = runnable_profile(hardware.recommend_profile(hardware.detect_hardware()))
+        if advised.rank <= effective.rank:
             return None
         return (
             f"Profil appliqué : {_profile_name(effective)}. Le profil "
             f"{_profile_name(advised)} conseillé pour cette machine demande des modèles "
-            "non installés (voir « anonyma modeles liste »)."
+            f"non installés (voir « {program_name()} modeles liste »)."
         )
-    missing = _missing_detectors(config)
-    if not missing:
+    names = _missing_detector_names(config)
+    if not names:
         return None
-    without = "ce détecteur" if len(missing) < 2 else "ces détecteurs"
+    without = "ce détecteur" if len(names) < 2 else "ces détecteurs"
+    hint = (
+        f" (voir « {program_name()} modeles liste »)"
+        if any(engine_available(name) for name in names)
+        else ""
+    )
     return (
         f"Profil {_profile_name(effective)} choisi, mais non disponible : "
-        f"{', '.join(missing)}. La détection se fait sans {without} "
-        "(voir « anonyma modeles liste »)."
+        f"{', '.join(_missing_reason(n) for n in names)}. La détection se fait sans "
+        f"{without}{hint}."
     )
 
 
@@ -674,8 +803,29 @@ def _settings(config: Config) -> dict[str, str]:
         "Régime": _short_label(REGIME_LABELS.get(config.regime, config.regime.value)),
         "Mode paranoïaque": "oui" if config.paranoid else "non",
         "OCR": "oui" if config.ocr_enabled else "non",
-        "Noms des fichiers": "neutres" if config.neutral_filenames else "anonymisés",
+        "Noms des fichiers": "neutres" if config.neutral_filenames else _done_word(config),
         "Organisations": config.organization_policy.replace("_", " "),
+    }
+
+
+def _done_word(config: Config) -> str:
+    """« anonymisés » or, in pseudonymization, « pseudonymisés »."""
+    return "pseudonymisés" if config.regime is Regime.PSEUDONYMIZATION else "anonymisés"
+
+
+def _parameters(config: Config) -> dict[str, Any]:
+    """The batch settings of :func:`_settings` as machine values (JSON)."""
+    from anonyma import registry
+
+    return {
+        "profil": config.effective_profile().value,
+        "mode": config.mode.value,
+        "regime": config.regime.value,
+        "paranoiaque": config.paranoid,
+        "ocr": config.ocr_enabled,
+        "noms_neutres": config.neutral_filenames,
+        "organisations": config.organization_policy,
+        "detecteurs_indisponibles": registry.missing_detectors(config, config.effective_profile()),
     }
 
 
@@ -739,6 +889,16 @@ QuietOpt = Annotated[
         "--silencieux",
         "-q",
         help="Ne pas afficher la progression.",
+        rich_help_panel=PANEL_OUTPUT,
+    ),
+]
+ReplaceOpt = Annotated[
+    bool,
+    typer.Option(
+        "--remplacer",
+        help="Supprimer d'abord les fichiers qu'une exécution précédente d'Anonyma a écrits "
+        "dans le dossier de sortie et sa quarantaine (s'ils n'ont pas été modifiés depuis) ; "
+        "les autres fichiers ne sont jamais touchés.",
         rich_help_panel=PANEL_OUTPUT,
     ),
 ]
@@ -973,9 +1133,9 @@ PlainTableOpt = Annotated[
 
 RUN_HELP = (
     "Anonymiser des fichiers et dossiers vers un dossier de sortie (alias : anonymiser).\n\n"
-    "Codes de sortie : 0 tout est anonymisé et vérifié ; 1 au moins un fichier en "
-    "quarantaine, en échec ou non pris en charge ; 2 erreur d'utilisation. Avec --json, la "
-    "sortie standard ne contient que le bilan JSON."
+    "Codes de sortie : 0 tout est anonymisé et vérifié, ou à revoir ; 1 au moins un "
+    "fichier en quarantaine, en échec ou non pris en charge, ou traitement interrompu ; "
+    "2 erreur d'utilisation. Avec --json, la sortie standard ne contient que le bilan JSON."
 )
 
 
@@ -986,6 +1146,7 @@ def run(
     report_path: ReportOpt = None,
     as_json: RunJsonOpt = False,
     quiet: QuietOpt = False,
+    replace_previous: ReplaceOpt = False,
     neutral_names: NeutralNamesOpt = None,
     profile: ProfileOpt = None,
     paranoid: ParanoidOpt = None,
@@ -1042,6 +1203,7 @@ def run(
     store = None
     if config.regime is Regime.PSEUDONYMIZATION:
         store = open_store(store_path(config, table), create=True)
+    previous = _prepare_output(output, replace_previous)
     try:
         pipeline = Pipeline(config, store=store)
         with progress_display(not quiet) as progress:
@@ -1056,12 +1218,13 @@ def run(
 
     report = BatchReport.from_result(result)
     report.settings = _settings(pipeline.config)
+    report.parameters = _parameters(pipeline.config)
     if report_path is not None:
         try:
             report.save(report_path)
         except OSError:
             fail("Impossible d'enregistrer le rapport.", EXIT_PARTIAL)
-    summary = run_summary(report, result, pipeline.config, report_path)
+    summary = run_summary(report, result, pipeline.config, report_path, previous=previous)
     if as_json:
         _print_run_summary(err, report, summary)
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -1071,6 +1234,48 @@ def run(
 
 
 app.command("anonymiser", hidden=True, help="Alias de « run ».")(run)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class OutputState:
+    """The output folder before the run: whether it already held something (after
+    ``--remplacer``) and how many files of earlier runs were deleted."""
+
+    not_empty: bool = False
+    removed: int = 0
+
+
+def _prepare_output(output: Path, replace_previous: bool) -> OutputState:
+    """Apply ``--remplacer`` and warn (stderr) when the output folder is not empty."""
+    from anonyma import outputs
+
+    removed = 0
+    if replace_previous:
+        cleanup = outputs.remove_previous(output)
+        removed = cleanup.removed
+        if cleanup.removed or cleanup.kept:
+            done = "supprimé" if cleanup.removed < 2 else "supprimés"
+            message = f"{plural(cleanup.removed, 'fichier')} d'une exécution précédente {done}."
+            if cleanup.kept:
+                kept = "conservé" if cleanup.kept < 2 else "conservés"
+                message += f" {plural(cleanup.kept, 'fichier modifié', 'fichiers modifiés')}"
+                message += f" depuis, {kept}."
+            err.print(message, markup=False, soft_wrap=True)
+    not_empty = outputs.holds_files(output)
+    if not_empty:
+        advice = (
+            "les fichiers qui ne viennent pas d'Anonyma sont conservés"
+            if replace_previous
+            else "utilisez --remplacer pour supprimer d'abord ce qu'une exécution précédente "
+            "y a écrit"
+        )
+        err.print(
+            "[bold yellow]Attention :[/] le dossier de sortie n'est pas vide. Rien n'est "
+            "écrasé : un fichier produit sous un nom déjà pris reçoit un suffixe numéroté "
+            f"(« (2) ») ; {advice}.",
+            soft_wrap=True,
+        )
+    return OutputState(not_empty, removed)
 
 
 def _check_output_dir(inputs: Sequence[Path], output: Path) -> None:
@@ -1086,50 +1291,66 @@ def _check_output_dir(inputs: Sequence[Path], output: Path) -> None:
 
 
 def run_summary(
-    report: BatchReport, result: BatchResult, config: Config, report_path: Path | None
+    report: BatchReport,
+    result: BatchResult,
+    config: Config,
+    report_path: Path | None,
+    *,
+    previous: OutputState | None = None,
 ) -> dict[str, Any]:
-    """Machine-readable outcome of ``run``: codes, counts and paths only (never an
-    original value or file name; file names are the anonymized ones)."""
-    from anonyma.pipeline import is_quarantined, quarantine_dir
+    """Machine-readable outcome of ``run`` (``--json``): codes, counts and paths only,
+    never an original value or file name (file names are the anonymized ones).
 
-    statuses = {r.status for r in result.all_results()}
-    # Certain residues and actual placement only: a possible residue is « À revoir ».
-    quarantined = report.quarantined
+    The vocabulary is documented in the README (« Automatisation ») and shared with
+    the JSON report (:meth:`BatchReport.counts`); ``code_sortie`` is derived from
+    ``verdict`` (:meth:`BatchReport.exit_code`)."""
+    from anonyma.pipeline import is_quarantined, quarantine_dir
+    from anonyma.report import SCHEMA_VERSION, walk_paths
+
+    previous = previous or OutputState()
     quarantine = quarantine_dir(result.output_dir)
-    # Quarantined outputs (residues, incomplete verification) are never a success.
-    code = EXIT_PARTIAL if statuses & BAD_STATUSES or quarantined else EXIT_OK
-    documents = [
-        {
-            "fichier": r.output_name,
-            "statut": r.status.value,
-            "quarantaine": is_quarantined(r, result.output_dir),
-            "occurrences": entry["entites"],
-            "residus": r.residue_count,
-            "a_revoir": r.review_count,
-        }
-        for r, entry in zip(result.results, report.files, strict=True)
-    ]
+    counts = report.counts()
+    text, _ = report.verdict()
+    documents = []
+    for r, record in zip(result.results, report.file_records(), strict=True):
+        problems = [
+            {"element": path, "code": i.code, "gravite": i.severity.value, "message": i.message}
+            for item, path in walk_paths(r)
+            for i in item.issues
+            if i.severity is not Severity.INFO
+        ]
+        documents.append(
+            {
+                **record,
+                "quarantaine": is_quarantined(r, result.output_dir),
+                "chemin": str(r.output_path) if r.output_path is not None else None,
+                "problemes": problems,
+            }
+        )
+    in_quarantine = counts["quarantaine"] or quarantine.exists()
     return {
+        "schema": SCHEMA_VERSION,
         "verdict": report.verdict_code(),
-        "code_sortie": code,
+        "verdict_libelle": text,
+        "code_sortie": report.exit_code(),
         "lot": report.batch_id,
-        "fichiers": len(result.results),
-        "elements": sum(1 for _ in result.all_results()),
-        "statuts": {str(s): n for s, n in sorted(report.status_counts.items())},
-        "quarantaine": quarantined,
-        "a_revoir": len(report.review),
-        "residus": len(report.residues),
+        "regime": report.regime.value,
+        # Same counts as nombre_fichiers / nombre_elements (names kept for scripts).
+        "fichiers": counts["nombre_fichiers"],
+        "elements": counts["nombre_elements"],
+        **counts,
+        # Older names: a_revoir = entites_a_revoir, residus = certain + possible
+        # residues, echecs = items (any depth) listed among the failures.
+        "a_revoir": counts["entites_a_revoir"],
+        "residus": counts["residus_certains"] + counts["residus_possibles"],
         "echecs": len(report.failures),
-        "occurrences_par_type": dict(sorted(report.entity_counts.items())),
         "dossier_sortie": str(result.output_dir),
+        "dossier_sortie_non_vide": previous.not_empty,
+        "sorties_precedentes_supprimees": previous.removed,
         # Also given when the folder exists (left by an earlier batch, for instance).
-        "dossier_quarantaine": str(quarantine) if quarantined or quarantine.exists() else None,
+        "dossier_quarantaine": str(quarantine) if in_quarantine else None,
         "rapport": str(report_path.resolve()) if report_path is not None else None,
-        "parametres": {
-            "profil": config.effective_profile().value,
-            "mode": config.mode.value,
-            "regime": config.regime.value,
-        },
+        "parametres": _parameters(config),
         "documents": documents,
     }
 
@@ -1257,8 +1478,28 @@ def analyse(
     raise typer.Exit(EXIT_PARTIAL if bad & set(summary["statuts"]) else EXIT_OK)
 
 
+#: Statuses of an item the analysis could not read.
+_UNREAD = frozenset({DocumentStatus.FAILED, DocumentStatus.UNSUPPORTED, DocumentStatus.CANCELLED})
+
+
 def analysis_summary(analysis: BatchAnalysis) -> dict[str, Any]:
-    """Counts only (no value, no file name)."""
+    """Counts, and the items that could not be read under their anonymized names
+    (never a value or an original name)."""
+    from anonyma.pipeline import display_names
+    from anonyma.report import status_label
+
+    unread = [d for d in analysis.all_documents() if d.status in _UNREAD]
+    names = display_names(analysis) if unread else {}
+    problems = [
+        {
+            "fichier": names.get(doc.id, "_"),
+            "statut": doc.status.value,
+            "statut_libelle": status_label(doc.status),
+            "problemes": [i.message for i in doc.issues if i.severity is not Severity.INFO],
+            "codes": [i.code for i in doc.issues if i.severity is not Severity.INFO],
+        }
+        for doc in unread
+    ]
     statuses: dict[str, int] = {}
     formats: dict[str, int] = {}
     for doc in analysis.all_documents():
@@ -1282,6 +1523,8 @@ def analysis_summary(analysis: BatchAnalysis) -> dict[str, Any]:
         "occurrences_par_type": dict(occurrences),
         "entites_distinctes_par_type": dict(sorted(distinct.items())),
         "a_revoir": len(analysis.review_clusters()),
+        # Items that could not be read (failed, unsupported, cancelled), any depth.
+        "non_analyses": problems,
     }
 
 
@@ -1318,6 +1561,12 @@ def _print_analysis(summary: dict[str, Any]) -> None:
     ]
     if problems:
         out.print("Éléments non analysés : " + " · ".join(problems), style="yellow")
+        for item in summary["non_analyses"]:
+            reasons = " ; ".join(item["problemes"]) or item["statut_libelle"]
+            out.print(
+                f"[yellow]•[/] {_markup_escape(item['fichier'])} : {_markup_escape(reasons)}",
+                soft_wrap=True,
+            )
     if summary["a_revoir"]:
         n = summary["a_revoir"]
         verb = "serait" if n < 2 else "seraient"
@@ -1385,7 +1634,9 @@ def reidentify(
             else:
                 out.print(f"{_markup_escape(tag)} → {_markup_escape(original)}")
         if inputs and output is not None:
-            mapping = {e.substitute: e.original for e in store.items()}
+            from anonyma.store import reidentification_map
+
+            mapping = reidentification_map(store.items())
             items = collect_inputs(inputs)
             _check_reidentify_output(inputs, output)
             if _reidentify_files(items, output, mapping) != EXIT_OK:
@@ -1401,7 +1652,7 @@ def _print_names(entries: Sequence[Any]) -> None:
         return
     listing = Table(show_edge=False)
     for column in ("Lot", "Nom produit", "Nom d'origine"):
-        listing.add_column(column)
+        listing.add_column(column, overflow="fold")  # names are never cut
     for entry in entries:
         listing.add_row(entry.batch_id, entry.output_name, _markup_escape(entry.original))
     out.print(listing)
@@ -1460,21 +1711,27 @@ def _reidentify_files(items: list[tuple[Path, str]], output: Path, mapping: dict
 
     code = EXIT_OK
     total = 0
-    for index, (path, name) in enumerate(items, start=1):
+    done = ignored = 0
+
+    def skip(name: str, reason: str) -> None:
+        # ``name``: a pseudonymized output name (what the user gave), safe to show.
+        nonlocal code, ignored
+        out.print(f"[yellow]« {_markup_escape(name)} » ignoré : {reason}.[/]", soft_wrap=True)
+        code = EXIT_PARTIAL
+        ignored += 1
+
+    for path, name in items:
         if path.suffix.lower() not in REIDENTIFY_EXTENSIONS:
-            out.print(f"[yellow]Fichier n°{index} ignoré : format non pris en charge.[/]")
-            code = EXIT_PARTIAL
+            skip(name, "format non pris en charge (fichiers texte seulement)")
             continue
         try:
             data = path.read_bytes()
         except OSError:
-            out.print(f"[yellow]Fichier n°{index} ignoré : lecture impossible.[/]")
-            code = EXIT_PARTIAL
+            skip(name, "lecture impossible")
             continue
         decoded = _decode(data)
         if decoded is None:
-            out.print(f"[yellow]Fichier n°{index} ignoré : encodage non reconnu.[/]")
-            code = EXIT_PARTIAL
+            skip(name, "encodage non reconnu")
             continue
         text, encoding = decoded
         restored, count = reidentify_text(text, mapping)
@@ -1488,13 +1745,16 @@ def _reidentify_files(items: list[tuple[Path, str]], output: Path, mapping: dict
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(restored.encode(encoding))
         except OSError:
-            out.print(f"[yellow]Fichier n°{index} non écrit : écriture impossible.[/]")
-            code = EXIT_PARTIAL
+            skip(name, "écriture impossible")
             continue
         total += count
-    files = plural(len(items), "fichier traité", "fichiers traités")
+        done += 1
+    files = plural(done, "fichier ré-identifié", "fichiers ré-identifiés")
     substitutes = plural(total, "substitut remplacé", "substituts remplacés")
-    out.print(f"{files}, {substitutes}.", soft_wrap=True)
+    line = f"{files}, {substitutes}"
+    if ignored:
+        line += f" ; {plural(ignored, 'fichier ignoré', 'fichiers ignorés')}"
+    out.print(f"{line}.", soft_wrap=True)
     _print_path(out, "Dossier de sortie", output)
     return code
 
@@ -1530,23 +1790,54 @@ def models_list() -> None:
     if not statuses:
         out.print("Le catalogue de modèles est vide.")
         raise typer.Exit()
+    from anonyma.model_catalog import ModelKind
+
     recommended = hardware.recommend_llm(hardware.detect_hardware())
+    if not engine_available("llm"):
+        recommended = None
+    engines = {ModelKind.LLM: "llm", ModelKind.GLINER: "gliner"}
+    # Identifiers and revisions are typed or copied: never cut. On a narrow terminal
+    # the licence and the revision (to download by hand for an offline import) are
+    # listed under the table instead of in columns.
+    wide = out.width >= WIDE_MODEL_LIST
     table = Table(show_edge=False)
-    for column in ("Identifiant", "Type", "Titre", "Licence", "Taille", "État"):
-        table.add_column(column)
+    longest = max(len(s.spec.id) for s in statuses)
+    table.add_column("Identifiant", no_wrap=True, min_width=longest)
+    table.add_column("Type", no_wrap=True)
+    table.add_column("Titre", min_width=14)
+    if wide:
+        table.add_column("Licence", no_wrap=True)
+    table.add_column("Taille", no_wrap=True)
+    table.add_column("État", min_width=12)
+    if wide:
+        table.add_column("Révision", no_wrap=True)
     for status in statuses:
         spec = status.spec
         size = sum(f.size for f in spec.files)
-        title = spec.title + (" [cyan](conseillé)[/]" if spec.id == recommended else "")
-        table.add_row(
-            spec.id,
-            spec.kind.value,
-            title,
-            spec.license,
-            hardware.format_bytes(size) if size else "?",
-            _status_label(status, manager.partial_bytes(spec.id)),
-        )
+        title = _markup_escape(spec.title)
+        if spec.id == recommended:
+            title += " [cyan](conseillé)[/]"
+        state = _status_label(status, manager.partial_bytes(spec.id))
+        engine = engines.get(spec.kind)
+        if status.installed and engine and not engine_available(engine):
+            state += f" [yellow]({_ENGINE_MISSING[engine]})[/]"
+        size_text = hardware.format_bytes(size) if size else "?"
+        if wide:
+            table.add_row(
+                spec.id, spec.kind.value, title, spec.license, size_text, state, spec.revision
+            )
+        else:
+            table.add_row(spec.id, spec.kind.value, title, size_text, state)
     out.print(table)
+    if not wide:
+        out.print("Licence et révision (import hors ligne) :")
+        for status in statuses:
+            spec = status.spec
+            out.print(f"• {spec.id} : {spec.license}, révision {spec.revision}", soft_wrap=True)
+
+
+#: Terminal width from which ``modeles liste`` shows licences and revisions as columns.
+WIDE_MODEL_LIST = 150
 
 
 def _spec_or_fail(model_id: str) -> Any:
@@ -1554,7 +1845,7 @@ def _spec_or_fail(model_id: str) -> Any:
 
     spec = get_spec(model_id)
     if spec is None:
-        fail(f"Modèle inconnu : {model_id} (voir « anonyma modeles liste »).")
+        fail(f"Modèle inconnu : {model_id} (voir « {program_name()} modeles liste »).")
     return spec
 
 
@@ -1675,7 +1966,18 @@ def hardware_info(config_file: ConfigOpt = None) -> None:
     table.add_column()
     # Same words as the GUI: « conseillé », profile labels of the Settings page.
     rows = {label: value for label, value in hardware.summary(info)}
-    rows["Profil recommandé"] = PROFILE_LABELS[hardware.recommend_profile(info)]
+    recommended = hardware.recommend_profile(info)
+    advised = runnable_profile(recommended)  # never a profile this build cannot run
+    rows["Profil recommandé"] = PROFILE_LABELS[advised]
+    notes = list(info.notes)
+    if not engine_available("llm"):
+        rows["Modèle de langage recommandé"] = f"aucun ({_ENGINE_MISSING['llm']})"
+    if advised is not recommended:
+        detector = _PROFILE_DETECTOR[recommended]
+        notes.append(
+            f"Le profil {PROFILE_LABELS[recommended]} conviendrait à cette machine, mais "
+            f"{_ENGINE_MISSING[detector]}."
+        )
     renamed = {
         "Profil recommandé": "Profil conseillé",
         "Modèle de langage recommandé": "Modèle de langue conseillé",
@@ -1686,8 +1988,8 @@ def hardware_info(config_file: ConfigOpt = None) -> None:
     if config.profile is not None:
         table.add_row("Profil imposé", PROFILE_LABELS[config.profile])
     out.print(table)
-    for note in info.notes:
-        out.print(f"• {note}")
+    for note in notes:
+        out.print(f"• {_markup_escape(note)}")
 
 
 @app.command("formats")
@@ -1858,7 +2160,9 @@ def main() -> None:
     multiprocessing.freeze_support()
     force_utf8()
     try:
-        app()
+        # Usage lines and hints show the documented name, whatever argv[0] is
+        # (« anonyma-cli.exe », a full path, « python -m anonyma »...).
+        app(prog_name=program_name())
     except Exception as exc:
         if isinstance(exc, OSError) and _stdout_closed():
             # ``anonyma ... | head``: the reader left, nothing more to say.

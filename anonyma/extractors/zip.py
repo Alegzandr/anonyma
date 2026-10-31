@@ -11,6 +11,7 @@ import zipfile
 from concurrent.futures import CancelledError
 from pathlib import Path
 
+from anonyma.errors import failure_reason
 from anonyma.extractors._archive import (
     clean_entry_name,
     copy_limited,
@@ -41,6 +42,15 @@ def entry_name(info: zipfile.ZipInfo) -> str:
         except UnicodeDecodeError:
             continue
     return info.filename
+
+
+def _member_reason(info: zipfile.ZipInfo, exc: BaseException) -> str:
+    """French reason a member could not be read; never the exception text."""
+    if info.flag_bits & 0x1:
+        return "élément chiffré par mot de passe"
+    if isinstance(exc, NotImplementedError):
+        return "méthode de compression non prise en charge"
+    return failure_reason(exc)
 
 
 @register_extractor
@@ -88,8 +98,8 @@ class ZipExtractor(Extractor):
                         ctx,
                         name,
                         "archive.entry_unreadable",
-                        f"Élément illisible ({type(exc).__name__}) : il ne peut pas être "
-                        "anonymisé.",
+                        f"Élément illisible ({_member_reason(info, exc)}) : il ne peut pas "
+                        "être anonymisé.",
                     )
                     continue
                 ctx.extract_child(target, name, document)
