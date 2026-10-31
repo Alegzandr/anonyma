@@ -629,3 +629,17 @@ def test_same_output_name_is_never_overwritten(tmp_path: Path) -> None:
     assert (out / "x.txt").read_text(encoding="utf-8") == "un"
     assert (placed / "sous" / "m.eml").read_text(encoding="utf-8") == "trois"
     assert not folder.exists()
+
+
+def test_place_copies_across_volumes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from anonyma import pipeline as pipeline_module
+
+    def cross_device(*_args: object) -> None:
+        raise OSError("cross-device link")
+
+    monkeypatch.setattr(pipeline_module.os, "replace", cross_device)
+    written = tmp_path / "w" / "x.txt"
+    written.parent.mkdir()
+    written.write_text("un", encoding="utf-8")
+    placed = pipeline_module._place(written, tmp_path / "out", "x.txt")
+    assert placed.read_text(encoding="utf-8") == "un" and not written.exists()
