@@ -468,6 +468,26 @@ Lecture :
 * un prénom rare écrit en casse mixte, sans aucun indice (civilité, libellé,
   autre mention), n'est pas détecté.
 
+## Profil complet (modèle de langage local)
+
+Mesuré avec Qwen3 4B (Q4_K_M, processeur seul, `--accueil` contenant aussi GLiNER),
+avant et après la reprise du harnais du modèle de langage (`results/complet.*`) :
+
+| | Rappel direct | Autres types | Précision | Phrases témoins | À revoir |
+|---|---|---|---|---|---|
+| `complet` — avant | 100,0 % (324/324) | 96,7 % | 92,7 % | 82,2 % | 6 |
+| `complet` — après | 100,0 % (324/324) | 96,7 % | 92,7 % | 82,2 % | 9 |
+
+Sur ce corpus, les expressions régulières et GLiNER trouvent déjà tout ce que le modèle
+de langage trouve : les chiffres ne bougent pas. Les phrases témoins perdues par rapport
+à `standard` (88,4 %) sont « Le boucher du marché couvert… », que le modèle décrit comme
+identifiant indirect : elles restent masquées, mais vont désormais en revue (d'où les
+trois fichiers « À revoir » de plus). Les gains se voient sur le corpus dédié au modèle
+(`tests/test_llm.py`, mesures dans l'historique Git de `anonyma/llm.py`) : texte injecté
+14/14 entités trouvées (8/14 avant), segment long 97,8 % de rappel (64,4 % avant),
+aucune détection sur 90 segments sans contenu. Durées non comparables (machine partagée
+pendant les mesures).
+
 ## Limites et fuites connues restantes
 
 * **`leger`** : 1 fuite, l'identifiant `socallaghan` cité sans contexte (« for the account
@@ -499,7 +519,7 @@ Lecture :
   celle du nom de famille. Les archives 7z embarquent l'heure de génération (seul
   fichier non reproductible à l'octet près).
 * **Environnement** : Windows 11, sources, sans LibreOffice (pas de `.doc`/`.ppt`, un
-  `.xls` deviendrait `.xlsx`) ; profil `complet` non mesuré. Le test
+  `.xls` deviendrait `.xlsx`) ; profil `complet` mesuré une fois (section dédiée). Le test
   `tests/gui/test_models_page.py::test_hardware_and_recommendation` interrompt
   Python (« Fatal Python error: Aborted ») quand toute la suite tourne dans ce bac à
   sable, y compris sur le code d'origine ; il passe seul.
