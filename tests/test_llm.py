@@ -207,7 +207,7 @@ def _runner(answers: Sequence[str]) -> llm.LlmRunner:
     runner = llm.LlmRunner.__new__(llm.LlmRunner)
     fake = FakeLlama(answers)
     runner.llm = fake  # type: ignore[assignment]
-    runner.n_ctx = 4096
+    runner.n_ctx = 32768  # byte-level fake tokens: a long prompt
     runner.grammar = object()  # type: ignore[assignment]
     runner._forbidden = frozenset(SPECIAL.values())
     before, after = llm.render_prompt(None)
@@ -237,7 +237,8 @@ def test_extract_restarts_from_the_cached_prefix() -> None:
     runner.extract("Mme Riou a rappelé.")
     assert all(p[: len(runner._prefix)] == runner._prefix for p in fake.prompts)
     assert fake.prompts[1][-len(runner._suffix) :] == runner._suffix
-    assert runner.text_budget == 4096 - len(runner._prefix) - len(runner._suffix) - 1536
+    assert runner.text_budget == runner.n_ctx - len(runner._prefix) - len(runner._suffix) - 1536
+    assert runner.window_tokens == llm.WINDOW_TOKENS
 
 
 def test_extract_stops_a_repetition_loop() -> None:
@@ -250,7 +251,7 @@ def test_extract_stops_a_repetition_loop() -> None:
 
 
 class FakeRunner:
-    text_budget = 40
+    window_tokens = 40
 
     def __init__(self, answer: Sequence[tuple[str, str]]) -> None:
         self.answer = [llm.LlmMention(t, k) for t, k in answer]
@@ -336,7 +337,7 @@ def test_short_segments_share_calls_and_long_ones_are_windowed(
     found, runner = _detect(monkeypatch, [*cells, long], [("Kervella", "PERSONNE")])
     assert runner.calls[0] == llm.SEGMENT_SEPARATOR.join(c.text for c in cells)
     assert len(runner.calls) > 2  # the long segment is cut
-    assert all(len(c.split()) <= FakeRunner.text_budget for c in runner.calls)
+    assert all(len(c.split()) <= FakeRunner.window_tokens for c in runner.calls)
     # Grounded in every segment of the group, once per span.
     assert sorted({e.segment_id for e in found}) == sorted(
         [c.id for c in cells if c.text == "Kervella"] + ["long"]
@@ -349,6 +350,14 @@ def test_batches_keep_order_and_budget() -> None:
     groups = list(batches(segments, 10, lambda t: len(t.split())))
     assert [s.id for g, _ in groups for s in g] == [s.id for s in segments]
     assert all(len(text.split()) <= 10 for _, text in groups)
+
+
+def test_sentences_are_not_pooled() -> None:
+    """Pooled sentences make the model list fewer entities: only short ones share."""
+    sentence = " ".join(["mot"] * 30)
+    segments = [_seg("a", "Nom"), _seg("b", sentence), _seg("c", sentence), _seg("d", "Riou")]
+    groups = [[s.id for s in g] for g, _ in batches(segments, 128, lambda t: len(t.split()))]
+    assert groups == [["a"], ["b"], ["c"], ["d"]]
 
 
 def test_no_model_means_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -463,7 +472,7 @@ def test_llm_is_deterministic(llm_config: Config) -> None:
 def test_llm_runner_budget_fits_context(llm_config: Config) -> None:
     runner = LlmDetector(llm_config)._runner()
     assert runner.text_budget >= 1024
-    text = "Le comité a examiné les points inscrits à l'ordre du jour. " * 400
+    text = "Le comité a examiné les points inscrits à l'ordre du jour. " * 100
     segment = _seg("s", text + "Rédigé par Gwenaëlle Le Bihan.")
     started = time.perf_counter()
     found = LlmDetector(llm_config).detect([segment], "d")

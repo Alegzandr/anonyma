@@ -143,6 +143,12 @@ SEED = 1234
 N_CTX = 4096
 #: Context reserved for the answer (about 30 tokens per item).
 OUTPUT_TOKENS = 1536
+#: Document tokens per call. Measured on dense synthetic French text with Qwen3 4B,
+#: recall of one long segment: 96 tokens 95.6 %, 192: 86.7 %, 384: 77.8 %, 768: 66.7 %
+#: (the model lists fewer entities as the window grows), at about the same speed.
+WINDOW_TOKENS = 128
+#: Share of a window repeated in the next one (entities crossing a boundary).
+WINDOW_OVERLAP = 0.25
 #: Same item emitted this many times: the model is looping, stop decoding.
 MAX_REPEATS = 3
 
@@ -403,6 +409,11 @@ class LlmRunner:
     def text_budget(self) -> int:
         """Document tokens that fit with the prompt and a full answer."""
         return self.n_ctx - len(self._prefix) - len(self._suffix) - OUTPUT_TOKENS
+
+    @property
+    def window_tokens(self) -> int:
+        """Document tokens per call (:data:`WINDOW_TOKENS`, within the context)."""
+        return min(WINDOW_TOKENS, self.text_budget)
 
     def _warm(self) -> None:
         self.llm.n_tokens = 0

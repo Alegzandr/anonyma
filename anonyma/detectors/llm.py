@@ -33,6 +33,8 @@ SCORE = 0.75
 #: Segments with fewer letters carry nothing the model can add to the rule-based
 #: detectors (dates, numbers, « Ok »), and only invite it to make something up.
 MIN_LETTERS = 3
+#: Segments up to this many tokens may share a model call.
+SHORT_SEGMENT_TOKENS = 24
 #: Words that make a description point at a person (roles, trades, family ties...),
 #: normalized (no accents, lower case); feminine and plural forms are matched too.
 _PERSON_WORDS = (
@@ -151,7 +153,7 @@ class LlmDetector(Detector):
         runner = self._runner()
         found: list[Entity] = []
         seen: set[tuple[str, int, int]] = set()
-        for group, text in batches(todo, runner.text_budget, runner.count_tokens):
+        for group, text in batches(todo, runner.window_tokens, runner.count_tokens):
             for mention in runner.extract(text):
                 for segment in group:
                     for start, end in llm.locate(segment.text, mention.text):
@@ -176,11 +178,18 @@ class LlmDetector(Detector):
 
 
 def batches(
-    segments: Sequence[Segment], budget: int, count: Callable[[str], int]
+    segments: Sequence[Segment],
+    budget: int,
+    count: Callable[[str], int],
+    short: int = SHORT_SEGMENT_TOKENS,
 ) -> Iterator[tuple[list[Segment], str]]:
-    """Model calls for ``segments``: short consecutive segments share one call
-    (separated by blank lines, so that a lone « Merci » is read in its context, and
-    much faster), a long one is cut into overlapping windows of ``budget`` tokens.
+    """Model calls for ``segments``, each at most ``budget`` tokens of text.
+
+    Consecutive short segments (cells, header fields, signature lines: at most
+    ``short`` tokens) share one call, separated by blank lines: a lone « Merci » is
+    read in its context, and 100 cells do not mean 100 calls. A longer segment goes
+    alone (the model lists fewer entities when sentences are pooled), cut into
+    overlapping windows when it exceeds ``budget``.
 
     Each item is ``(segments, text)``: mentions are searched in every segment of the
     group (a window of a long segment is searched in the whole segment).
@@ -188,22 +197,25 @@ def batches(
     group: list[Segment] = []
     used = 0
     separator = count(llm.SEGMENT_SEPARATOR)
+
+    def flush() -> Iterator[tuple[list[Segment], str]]:
+        if group:
+            yield list(group), llm.SEGMENT_SEPARATOR.join(s.text for s in group)
+
     for segment in segments:
         size = count(segment.text)
-        if size > budget:
-            if group:
-                yield group, llm.SEGMENT_SEPARATOR.join(s.text for s in group)
-                group, used = [], 0
-            for _, window in llm.windows(segment.text, budget, count):
+        if size > short:
+            yield from flush()
+            group, used = [], 0
+            for _, window in llm.windows(segment.text, budget, count, llm.WINDOW_OVERLAP):
                 yield [segment], window
             continue
         if group and used + separator + size > budget:
-            yield group, llm.SEGMENT_SEPARATOR.join(s.text for s in group)
+            yield from flush()
             group, used = [], 0
         used += size + (separator if group else 0)
         group.append(segment)
-    if group:
-        yield group, llm.SEGMENT_SEPARATOR.join(s.text for s in group)
+    yield from flush()
 
 
 def _keep(segment: Segment, entity_type: str, value: str, start: int) -> bool:
