@@ -83,6 +83,8 @@ log = get_logger("pipeline")
 #: users zip or upload as a whole, so it must only hold verified files.
 QUARANTINE_SUFFIX = "_quarantaine"
 MANUAL_DETECTOR = "manuel"
+#: Format of the links skipped in input folders (never read, reported).
+LINK_FORMAT = "lien"
 #: RAM budget per worker process in the STANDARD profile (GLiNER loaded per process).
 GLINER_WORKER_RAM = int(2.5 * 1024**3)
 
@@ -180,23 +182,55 @@ class BatchResult:
 # ---------------------------------------------------------------------------
 
 
-def collect_inputs(inputs: Sequence[Path]) -> list[tuple[Path, str]]:
+def _is_link(path: Path) -> bool:
+    """Symbolic link or Windows junction (``os.walk`` follows junctions)."""
+    try:
+        return path.is_symlink() or os.path.isjunction(path)
+    except OSError:
+        return True
+
+
+def walk_inputs(inputs: Sequence[Path]) -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
     """Expand files and folders into ``(path, logical name)``; folders keep their
-    own name as first component. Symlinked folders are not followed."""
+    own name as first component.
+
+    Inside a folder, symbolic links and junctions (to files or folders) are never
+    followed, nor is anything that resolves outside the folder: they are returned
+    apart, as ``(path, logical name)`` too, so that the batch can report them. Files
+    and folders given explicitly are taken as they are."""
     items: list[tuple[Path, str]] = []
+    links: list[tuple[Path, str]] = []
     for raw in inputs:
         path = Path(raw)
         if path.is_dir():
-            base = path.resolve().parent
+            root = path.resolve()
+            top = path.resolve().name or path.name
             for dirpath, dirnames, filenames in os.walk(path, followlinks=False):
-                dirnames.sort()
+                folder = Path(dirpath)
+                prefix = PurePosixPath(top, folder.relative_to(path).as_posix())
+                kept = []
+                for dirname in sorted(dirnames):
+                    if _is_link(folder / dirname):
+                        links.append((folder / dirname, (prefix / dirname).as_posix()))
+                    else:
+                        kept.append(dirname)
+                dirnames[:] = kept
                 for filename in sorted(filenames):
-                    file = Path(dirpath) / filename
-                    if file.is_file():
-                        items.append((file, file.resolve().relative_to(base).as_posix()))
+                    file = folder / filename
+                    name = (prefix / filename).as_posix()
+                    if _is_link(file) or not file.resolve().is_relative_to(root):
+                        links.append((file, name))
+                    elif file.is_file():
+                        items.append((file, name))
         elif path.is_file():
             items.append((path, path.name))
-    return items
+    return items, links
+
+
+def collect_inputs(inputs: Sequence[Path]) -> list[tuple[Path, str]]:
+    """Expand files and folders into ``(path, logical name)`` (see
+    :func:`walk_inputs`; links inside folders are left out)."""
+    return walk_inputs(inputs)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -494,10 +528,31 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
 
 
 def _analyze_one(
-    source: Path, name: str, config: Config, work_dir: Path
+    source: Path, name: str, config: Config, work_dir: Path, link: bool = False
 ) -> tuple[Document, list[Entity]]:
-    doc = extract_file(source, name, config, work_dir)
+    doc = _link_document(source, name) if link else extract_file(source, name, config, work_dir)
     return doc, detect_tree(doc, config)
+
+
+def _link_document(source: Path, name: str) -> Document:
+    """A link skipped by :func:`walk_inputs`: never read, reported (its name is
+    still analysed, so that it shows up anonymized)."""
+    doc = Document(source=source, name=name, format=LINK_FORMAT, status=DocumentStatus.UNSUPPORTED)
+    doc.add_issue(
+        Severity.ERROR,
+        "input.link",
+        "Lien symbolique ou jonction ignoré : sa cible n'est pas traitée "
+        "(copiez les fichiers eux-mêmes dans le dossier).",
+    )
+    doc.segments.append(
+        Segment(
+            id=FILENAME_SEGMENT_ID,
+            text=name,
+            locator=(),
+            context=SegmentContext(SegmentKind.FILENAME, label="nom de fichier"),
+        )
+    )
+    return doc
 
 
 # ---------------------------------------------------------------------------
@@ -1081,9 +1136,13 @@ class Pipeline:
         batch_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + new_id()[:6]
         work_dir = paths.tmp_dir() / batch_id
         work_dir.mkdir(parents=True, exist_ok=True)
-        items = collect_inputs(inputs)
+        files, links = walk_inputs(inputs)
+        if links:
+            log.warning("%d link(s) skipped in input folders", len(links))
+        items = [*files, *links]
         jobs = [
-            (path, name, self.config, work_dir / f"f{i}") for i, (path, name) in enumerate(items)
+            (path, name, self.config, work_dir / f"f{i}", i >= len(files))
+            for i, (path, name) in enumerate(items)
         ]
         outputs = self._map(_analyze_one, jobs, "analyse", progress, cancel)
 
@@ -1128,7 +1187,8 @@ class Pipeline:
     ) -> BatchResult:
         decisions = decisions or ReviewDecisions()
         output_dir = Path(output_dir).resolve()
-        validate_output_dir([*analysis.inputs, *(d.source for d in analysis.documents)], output_dir)
+        sources = [d.source for d in analysis.documents if d.format != LINK_FORMAT]
+        validate_output_dir([*analysis.inputs, *sources], output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         resolved = resolve_decisions(analysis, decisions)
@@ -1380,4 +1440,5 @@ __all__ = [
     "quarantine_dir",
     "resolve_decisions",
     "validate_output_dir",
+    "walk_inputs",
 ]

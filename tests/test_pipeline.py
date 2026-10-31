@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
@@ -27,6 +29,7 @@ from anonyma.pipeline import (
     quarantine_dir,
     resolve_decisions,
     validate_output_dir,
+    walk_inputs,
 )
 from anonyma.store import InMemoryMappingStore
 from anonyma.writers.text import TextWriter
@@ -658,3 +661,39 @@ def test_quarantine_folder_must_not_overlap_the_inputs(tmp_path: Path) -> None:
     inputs.mkdir()
     with pytest.raises(OutputDirError):
         validate_output_dir([inputs], tmp_path / "sortie")
+
+
+def _dir_link(link: Path, target: Path) -> None:
+    """A junction on Windows (no privilege needed), a symbolic link elsewhere."""
+    if sys.platform == "win32":
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+def test_links_in_input_folders_are_never_followed(tmp_path: Path, canary_config: Config) -> None:
+    outside = tmp_path / f"Dossier {CANARY_PERSON}"
+    outside.mkdir()
+    (outside / "secret.txt").write_text(f"Courrier de {CANARY_PERSON}.", encoding="utf-8")
+    folder = tmp_path / "entree"
+    (folder / "sous").mkdir(parents=True)
+    (folder / "sous" / "a.txt").write_text("Bonjour.", encoding="utf-8")
+    _dir_link(folder / "lien", outside)
+    with contextlib.suppress(OSError):  # file links need a privilege on Windows
+        (folder / "fichier.txt").symlink_to(outside / "secret.txt")
+
+    files, links = walk_inputs([folder])
+    assert [n for _, n in files] == ["entree/sous/a.txt"]
+    assert "entree/lien" in [n for _, n in links]
+    result = Pipeline(canary_config).run([folder], tmp_path / "out")
+    by_status = {r.status for r in result.results}
+    assert DocumentStatus.UNSUPPORTED in by_status
+    skipped = [r for r in result.results if r.status is DocumentStatus.UNSUPPORTED]
+    for r in skipped:
+        assert [i.code for i in r.issues] == ["input.link"]
+        assert "uintavalle" not in r.output_name.casefold()
+        assert all("uintavalle" not in i.message.casefold() for i in r.issues)
+    written = [p for p in (tmp_path / "out").rglob("*") if p.is_file()]
+    assert [p.name for p in written] == ["a.txt"]
