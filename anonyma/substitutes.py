@@ -132,15 +132,17 @@ def match_case(original: str, fake: str) -> str:
 
 
 def reshape(original: str, fake_chars: str) -> str:
-    """Write ``fake_chars`` into the alphanumeric positions of ``original``."""
+    """Write ``fake_chars`` into the alphanumeric positions of ``original``.
+
+    An original character is never kept: positions left once ``fake_chars`` is
+    exhausted get ``0`` (digits) or ``X`` (letters)."""
     out: list[str] = []
     it = iter(fake_chars)
     for ch in original:
         if ch.isalnum():
             nxt = next(it, None)
             if nxt is None:
-                out.append(ch)
-                continue
+                nxt = "0" if ch.isdigit() else "X"
             out.append(nxt.lower() if ch.islower() else nxt)
         else:
             out.append(ch)
