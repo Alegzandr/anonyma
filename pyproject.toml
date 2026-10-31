@@ -9,8 +9,11 @@ dependencies = [
     "typer>=0.12",
     "faker>=30",
     "cryptography>=44",
-    "huggingface-hub>=0.25",
+    "huggingface-hub>=1.0",
     "pillow>=11",
+    "onnxruntime-directml>=1.20 ; sys_platform == 'win32'",
+    "onnxruntime>=1.20 ; sys_platform != 'win32'",
+    "rich>=13.8",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +26,16 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "mypy>=1.11",
+    "pyinstaller>=6.22.3",
 ]
+
+[tool.uv]
+# ONNX Runtime packaging: onnxruntime-directml on Windows (DirectML + CPU providers),
+# onnxruntime elsewhere (CoreML + CPU on macOS). Both wheels install the same
+# ``onnxruntime`` import package, so they must never coexist. Any transitive
+# requirement on plain ``onnxruntime`` (e.g. rapidocr-onnxruntime) is overridden so
+# that it only applies outside Windows.
+override-dependencies = ["onnxruntime>=1.20 ; sys_platform != 'win32'"]
 
 [build-system]
 requires = ["hatchling"]
