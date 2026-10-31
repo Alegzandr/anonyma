@@ -2,14 +2,17 @@
 
 Only segments with indirect-identifier cues (roles, family ties, « le seul... »,
 organisational units) or capitalized words the lexicon does not explain are sent to
-the model, unless ``Config.llm_all_segments`` is set. Skipped by the verifier
+the model, unless ``Config.llm_all_segments`` is set; segments with fewer than
+:data:`MIN_LETTERS` letters never are. Short consecutive segments share one call.
+Every mention is grounded: kept only where it occurs in the segments sent, and
+filtered by the same plausibility rules as GLiNER. Skipped by the verifier
 (``verify = False``): too slow and not deterministic enough for a second pass.
 """
 
 from __future__ import annotations
 
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import regex
@@ -17,26 +20,56 @@ import regex
 from anonyma import llm
 from anonyma.config import Config
 from anonyma.data import lexicon
-from anonyma.detectors._filters import skip_segment
+from anonyma.detectors._filters import COMMON_WORD_SCORE, mid_sentence, plausible, skip_segment
 from anonyma.logs import get_logger
 from anonyma.model_catalog import LLM_PREFERENCE, ModelKind, ModelSpec, get_spec
-from anonyma.models import Detector, Entity, Profile, Segment
+from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
 from anonyma.registry import register_detector
-from anonyma.textutils import find_all, normalize
+from anonyma.textutils import normalize
 
 log = get_logger("detectors.llm")
 
 SCORE = 0.75
-CUES = regex.compile(
-    r"(?<![a-z])(?:drh|rh|directeur|directrice|responsable|chef|cheffe|gerant|gerante|"
-    r"president|presidente|pdg|dg|maire|adjoint|adjointe|medecin|docteur|infirmier|"
-    r"infirmiere|professeur|instituteur|institutrice|avocat|avocate|notaire|employe|employee|"
-    r"salarie|salariee|stagiaire|collegue|voisin|voisine|epoux|epouse|mari|conjoint|"
-    r"conjointe|fils|fille|pere|mere|frere|soeur|oncle|tante|cousin|cousine|eleve|patient|"
-    r"patiente|locataire|proprietaire|le seul|la seule|l'unique|agence|service|filiale|"
-    r"succursale|antenne|delegation|mairie|ecole|college|lycee|hopital|clinique|cabinet|"
-    r"usine|magasin|boutique|equipe|departement)(?![a-z])"
+#: Segments with fewer letters carry nothing the model can add to the rule-based
+#: detectors (dates, numbers, « Ok »), and only invite it to make something up.
+MIN_LETTERS = 3
+#: Words that make a description point at a person (roles, trades, family ties...),
+#: normalized (no accents, lower case); feminine and plural forms are matched too.
+_PERSON_WORDS = (
+    "drh|rh|directeur|directrice|responsable|chef|cheffe|gerant|president|pdg|dg|maire|"
+    "adjoint|medecin|docteur|infirmier|infirmiere|professeur|instituteur|institutrice|"
+    "enseignant|avocat|notaire|juge|greffier|greffiere|huissier|employe|salarie|stagiaire|"
+    "apprenti|collegue|voisin|epoux|epouse|mari|conjoint|compagnon|compagne|ami|amie|fils|"
+    "fille|pere|mere|frere|soeur|oncle|tante|cousin|cousine|neveu|niece|grand-pere|"
+    "grand-mere|petit-fils|petite-fille|beau-pere|belle-mere|beau-frere|belle-soeur|veuf|"
+    "veuve|eleve|etudiant|patient|patiente|client|cliente|locataire|proprietaire|habitant|"
+    "resident|temoin|victime|plaignant|comptable|secretaire|assistant|assistante|technicien|"
+    "technicienne|ingenieur|chauffeur|livreur|pharmacien|pharmacienne|dentiste|veterinaire|"
+    "psychologue|kinesitherapeute|sage-femme|aide-soignant|aide-soignante|pompier|gendarme|"
+    "policier|policiere|militaire|officier|capitaine|commandant|cure|pretre|pasteur|imam|"
+    "rabbin|elu|elue|conseiller|conseillere|depute|senateur|senatrice|ministre|prefet|"
+    "delegue|representant|tresorier|tresoriere|benevole|fondateur|fondatrice|associe|"
+    "heritier|heritiere|gardien|gardienne|concierge|facteur|factrice|boulanger|boulangere|"
+    "boucher|bouchere|commercant|commercante|artisan|agriculteur|agricultrice|eleveur|"
+    "vendeur|vendeuse|caissier|caissiere|serveur|serveuse|cuisinier|cuisiniere|nourrice|"
+    "retraite|retraitee|ancien|ancienne|homme|femme|enfant|bebe|dame|garcon|jeune|personne|"
+    "le seul|la seule|l'unique|seul|seule|unique"
 )
+PERSON_CUES = regex.compile(rf"(?<![a-z])(?:{_PERSON_WORDS})(?:e|s|es)?(?![a-z])")
+CUES = regex.compile(
+    rf"(?<![a-z])(?:{_PERSON_WORDS}|agence|service|filiale|succursale|antenne|delegation|"
+    r"mairie|ecole|college|lycee|hopital|clinique|cabinet|usine|magasin|boutique|equipe|"
+    r"departement)(?:e|s|es)?(?![a-z])"
+)
+#: An LLM date of birth needs a birth cue in its segment (other dates are left to
+#: the date rules, which mask them as DATE).
+BIRTH_CUES = regex.compile(r"(?<![a-z])(?:ne|nee|naissance|ddn|naitre|born|birth)(?![a-z])")
+_CALENDAR = frozenset(
+    {"lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche", "janvier",
+     "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre",
+     "novembre", "decembre"}
+)  # fmt: skip
+_TOKEN = regex.compile(r"[\p{L}\p{N}]+")
 _CAPITALIZED = regex.compile(r"(?<=[\p{Ll},;] )\p{Lu}\p{Ll}+")
 
 _runners: dict[str, llm.LlmRunner] = {}
@@ -103,7 +136,7 @@ class LlmDetector(Detector):
             return _runners[key]
 
     def wanted(self, text: str) -> bool:
-        if not any(c.isalpha() for c in text):
+        if sum(c.isalpha() for c in text) < MIN_LETTERS:
             return False
         if self.config.llm_all_segments:
             return True
@@ -117,23 +150,24 @@ class LlmDetector(Detector):
             return []
         runner = self._runner()
         found: list[Entity] = []
-        for segment in todo:
-            seen: set[tuple[int, int]] = set()
-            for offset, chunk in llm.chunks(segment.text):
-                for mention in runner.extract(chunk):
-                    for start, end in find_all(chunk, mention.text):
-                        span = (offset + start, offset + end)
-                        if span in seen:
+        seen: set[tuple[str, int, int]] = set()
+        for group, text in batches(todo, runner.text_budget, runner.count_tokens):
+            for mention in runner.extract(text):
+                for segment in group:
+                    for start, end in llm.locate(segment.text, mention.text):
+                        key = (segment.id, start, end)
+                        value = segment.text[start:end]
+                        if key in seen or not _keep(segment, mention.entity_type, value, start):
                             continue
-                        seen.add(span)
+                        seen.add(key)
                         found.append(
                             Entity(
                                 entity_type=mention.entity_type,
-                                value=segment.text[span[0] : span[1]],
+                                value=value,
                                 document_id=document_id,
                                 segment_id=segment.id,
-                                start=span[0],
-                                end=span[1],
+                                start=start,
+                                end=end,
                                 score=SCORE,
                                 detector=self.name,
                             )
@@ -141,4 +175,67 @@ class LlmDetector(Detector):
         return found
 
 
-__all__ = ["LlmDetector", "select_model"]
+def batches(
+    segments: Sequence[Segment], budget: int, count: Callable[[str], int]
+) -> Iterator[tuple[list[Segment], str]]:
+    """Model calls for ``segments``: short consecutive segments share one call
+    (separated by blank lines, so that a lone « Merci » is read in its context, and
+    much faster), a long one is cut into overlapping windows of ``budget`` tokens.
+
+    Each item is ``(segments, text)``: mentions are searched in every segment of the
+    group (a window of a long segment is searched in the whole segment).
+    """
+    group: list[Segment] = []
+    used = 0
+    separator = count(llm.SEGMENT_SEPARATOR)
+    for segment in segments:
+        size = count(segment.text)
+        if size > budget:
+            if group:
+                yield group, llm.SEGMENT_SEPARATOR.join(s.text for s in group)
+                group, used = [], 0
+            for _, window in llm.windows(segment.text, budget, count):
+                yield [segment], window
+            continue
+        if group and used + separator + size > budget:
+            yield group, llm.SEGMENT_SEPARATOR.join(s.text for s in group)
+            group, used = [], 0
+        used += size + (separator if group else 0)
+        group.append(segment)
+    if group:
+        yield group, llm.SEGMENT_SEPARATOR.join(s.text for s in group)
+
+
+def _keep(segment: Segment, entity_type: str, value: str, start: int) -> bool:
+    """Type sanity on top of the plausibility rules shared with GLiNER: « Merci » is no
+    name, « Lundi » no place, « Re: Réunion » no description of a person."""
+    words = _TOKEN.findall(normalize(value))
+    if words and all(w in _CALENDAR or w.isdigit() for w in words):
+        return entity_type == EntityType.DATE_OF_BIRTH and _born(segment.text)
+    if entity_type == EntityType.DATE_OF_BIRTH:
+        return any(c.isdigit() for c in value) and _born(segment.text)
+    if entity_type == EntityType.INDIRECT and not PERSON_CUES.search(normalize(value)):
+        return False
+    text = segment.text
+    filename = segment.context.kind is SegmentKind.FILENAME
+    capitalized = not filename and value[:1].isupper() and mid_sentence(text, start)
+    # A mention is no probability. Several words copied together (« mairie de
+    # Pont-Aven », « 3 impasse des Mouettes ») are as sure as GLiNER's surest spans; a
+    # lone common word (« Cordialement », « Bises ») or a job title is not.
+    sure = len(words) > 1 and entity_type != EntityType.JOB_TITLE
+    score = COMMON_WORD_SCORE if sure else SCORE
+    return plausible(
+        entity_type,
+        value,
+        score,
+        filename=filename,
+        ocr=segment.context.kind is SegmentKind.OCR,
+        capitalized_mid_sentence=capitalized,
+    )
+
+
+def _born(text: str) -> bool:
+    return BIRTH_CUES.search(normalize(text)) is not None
+
+
+__all__ = ["LlmDetector", "batches", "select_model"]
