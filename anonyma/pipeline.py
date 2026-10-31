@@ -83,6 +83,10 @@ log = get_logger("pipeline")
 #: users zip or upload as a whole, so it must only hold verified files.
 QUARANTINE_SUFFIX = "_quarantaine"
 MANUAL_DETECTOR = "manuel"
+CRASH_MESSAGE = (
+    "Le traitement de ce fichier a fait planter le processus de travail deux fois : "
+    "fichier non traité."
+)
 #: Format of the links skipped in input folders (never read, reported).
 LINK_FORMAT = "lien"
 #: RAM budget per worker process in the STANDARD profile (GLiNER loaded per process).
@@ -527,23 +531,41 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
     return entities
 
 
+#: Why an input is not read (``_analyze_one(..., skipped=...)``).
+SKIP_LINK = "link"
+SKIP_CRASH = "crash"
+
+
 def _analyze_one(
-    source: Path, name: str, config: Config, work_dir: Path, link: bool = False
+    source: Path,
+    name: str,
+    config: Config,
+    work_dir: Path,
+    skipped: str = "",
+    cancel: CancelToken | None = None,
 ) -> tuple[Document, list[Entity]]:
-    doc = _link_document(source, name) if link else extract_file(source, name, config, work_dir)
+    """Extract and detect one input; a ``skipped`` input is not read, only its name
+    is analysed (so that it shows up anonymized in reports). ``cancel``: inline runs
+    only (a token does not cross processes), checked by containers between items."""
+    doc = skipped_document(source, name, skipped) if skipped else None
+    doc = doc or extract_file(source, name, config, work_dir, cancel=cancel)
     return doc, detect_tree(doc, config)
 
 
-def _link_document(source: Path, name: str) -> Document:
-    """A link skipped by :func:`walk_inputs`: never read, reported (its name is
-    still analysed, so that it shows up anonymized)."""
-    doc = Document(source=source, name=name, format=LINK_FORMAT, status=DocumentStatus.UNSUPPORTED)
-    doc.add_issue(
-        Severity.ERROR,
-        "input.link",
-        "Lien symbolique ou jonction ignoré : sa cible n'est pas traitée "
-        "(copiez les fichiers eux-mêmes dans le dossier).",
-    )
+def skipped_document(source: Path, name: str, reason: str) -> Document:
+    """An input never read: a link of an input folder (``SKIP_LINK``) or a file that
+    crashed its worker process twice (``SKIP_CRASH``)."""
+    if reason == SKIP_LINK:
+        doc = Document(source, name, LINK_FORMAT, status=DocumentStatus.UNSUPPORTED)
+        doc.add_issue(
+            Severity.ERROR,
+            "input.link",
+            "Lien symbolique ou jonction ignoré : sa cible n'est pas traitée "
+            "(copiez les fichiers eux-mêmes dans le dossier).",
+        )
+    else:
+        doc = Document(source, name, "inconnu", status=DocumentStatus.FAILED)
+        doc.add_issue(Severity.ERROR, "worker.crash", CRASH_MESSAGE)
     doc.segments.append(
         Segment(
             id=FILENAME_SEGMENT_ID,
@@ -927,6 +949,23 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
     return result
 
 
+def _write_crashed(job: _WriteJob) -> DocumentResult:
+    """A document whose writing crashed its worker twice: failed, nothing written."""
+    doc = job.document
+    _, extension, _ = _output_shape(doc)
+    entities = [e for e in job.entities if e.document_id == doc.id]
+    name = job.neutral_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
+    return DocumentResult(
+        document_id=doc.id,
+        output_name=name,
+        format=doc.format,
+        output_format=doc.format,
+        status=DocumentStatus.FAILED,
+        entity_counts=_counts(entities),
+        issues=[Issue(Severity.ERROR, "worker.crash", CRASH_MESSAGE)],
+    )
+
+
 def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[DocumentStatus, Path]:
     """Verify ``written`` and fill ``result`` (counters, issues). Returns the status of
     the tree and the folder the output belongs in: the output folder, or the
@@ -1074,26 +1113,84 @@ class Pipeline:
         stage: str,
         progress: ProgressCallback | None,
         cancel: CancelToken | None,
+        crashed: Callable[..., Any],
     ) -> list[Any | None]:
-        """Run ``fn(*job)`` for each job; ``None`` for jobs skipped by cancellation."""
+        """Run ``fn(*job)`` for each job; ``None`` for jobs skipped by cancellation.
+
+        Worker processes may die (native crash, memory): the items left are then run
+        one at a time in a fresh single-worker pool, never in this process, and an
+        item that crashes that pool too gets ``crashed(*job)`` as its result."""
         results: list[Any | None] = [None] * len(jobs)
         total = len(jobs)
+        finished: set[int] = set()
+
+        def done(index: int, value: Any) -> None:
+            results[index] = value
+            finished.add(index)
+            if progress:
+                progress(ProgressEvent(stage, len(finished), total, index=index))
+
         if progress:
             progress(ProgressEvent(stage, 0, total))
         if self._workers(total) == 1:
             for i, job in enumerate(jobs):
                 if cancel and cancel.cancelled:
                     break
-                results[i] = fn(*job)
-                if progress:
-                    progress(ProgressEvent(stage, i + 1, total, index=i))
+                try:
+                    done(i, fn(*job))
+                except CancelledError:  # raised inside the item (inline extraction)
+                    break
             return results
-        finished: set[int] = set()
         try:
-            with ProcessPoolExecutor(self._workers(total), initializer=_worker_init) as pool:
-                futures: dict[Future[Any], int] = {
-                    pool.submit(fn, *job): i for i, job in enumerate(jobs)
-                }
+            self._pool(fn, jobs, list(range(total)), self._workers(total), cancel, done)
+        except BrokenProcessPool:
+            log.warning("worker pool broken during %s; retrying the remaining items", stage)
+            while not (cancel and cancel.cancelled):
+                pending = [i for i in range(total) if i not in finished]
+                culprit = self._serial(fn, jobs, pending, cancel, done) if pending else None
+                if culprit is None:
+                    break
+                log.warning("item %d of %s crashed its worker twice", culprit, stage)
+                done(culprit, crashed(*jobs[culprit]))
+        return results
+
+    @staticmethod
+    def _serial(
+        fn: Callable[..., Any],
+        jobs: list[tuple[Any, ...]],
+        indices: list[int],
+        cancel: CancelToken | None,
+        done: Callable[[int, Any], None],
+    ) -> int | None:
+        """Run ``jobs[indices]`` one at a time in a fresh single-worker pool; returns
+        the index of the item that broke it (None when all ran or cancelled)."""
+        with ProcessPoolExecutor(1, initializer=_worker_init) as pool:
+            for index in indices:
+                if cancel and cancel.cancelled:
+                    return None
+                try:
+                    value = pool.submit(fn, *jobs[index]).result()
+                except BrokenProcessPool:
+                    return index
+                done(index, value)
+        return None
+
+    @staticmethod
+    def _pool(
+        fn: Callable[..., Any],
+        jobs: list[tuple[Any, ...]],
+        indices: list[int],
+        workers: int,
+        cancel: CancelToken | None,
+        done: Callable[[int, Any], None],
+    ) -> None:
+        """Run ``jobs[indices]`` in a fresh pool, reporting each result to ``done``.
+        Raises ``BrokenProcessPool`` after reporting every result completed before
+        the break."""
+        reported: set[int] = set()
+        with ProcessPoolExecutor(workers, initializer=_worker_init) as pool:
+            futures: dict[Future[Any], int] = {pool.submit(fn, *jobs[i]): i for i in indices}
+            try:
                 for future in as_completed(futures):
                     if cancel and cancel.cancelled:
                         # Pending jobs are dropped; running ones still finish and are
@@ -1102,28 +1199,29 @@ class Pipeline:
                             f.cancel()
                     if future.cancelled():
                         continue
-                    index = futures[future]
-                    results[index] = future.result()
-                    finished.add(index)
-                    if progress:
-                        progress(ProgressEvent(stage, len(finished), total, index=index))
+                    value = future.result()
+                    reported.add(futures[future])
+                    done(futures[future], value)
+            except BrokenProcessPool:
+                for future, index in futures.items():
+                    if index in reported or not future.done() or future.cancelled():
+                        continue
+                    if future.exception() is None:
+                        done(index, future.result())
+                raise
+
+    def _analysis_crashed(
+        self, source: Path, name: str, config: Config, work_dir: Path, *rest: Any
+    ) -> tuple[Document, list[Entity]]:
+        """An input that crashed its worker twice: only its name is analysed (in a
+        worker as well), so that it is reported anonymized."""
+        job = (source, name, config, work_dir, SKIP_CRASH)
+        try:
+            with ProcessPoolExecutor(1, initializer=_worker_init) as pool:
+                result: tuple[Document, list[Entity]] = pool.submit(_analyze_one, *job).result()
+                return result
         except BrokenProcessPool:
-            # A worker died (native crash, memory): finish the remaining items here.
-            log.warning(
-                "worker pool broken during %s; finishing %d item(s) inline",
-                stage,
-                total - len(finished),
-            )
-            for index, job in enumerate(jobs):
-                if index in finished:
-                    continue
-                if cancel and cancel.cancelled:
-                    break
-                results[index] = fn(*job)
-                finished.add(index)
-                if progress:
-                    progress(ProgressEvent(stage, len(finished), total, index=index))
-        return results
+            return skipped_document(source, name, SKIP_CRASH), []
 
     # -- public API ----------------------------------------------------------
 
@@ -1140,11 +1238,19 @@ class Pipeline:
         if links:
             log.warning("%d link(s) skipped in input folders", len(links))
         items = [*files, *links]
+        inline = cancel if self._workers(len(items)) == 1 else None
         jobs = [
-            (path, name, self.config, work_dir / f"f{i}", i >= len(files))
+            (
+                path,
+                name,
+                self.config,
+                work_dir / f"f{i}",
+                SKIP_LINK if i >= len(files) else "",
+                inline,
+            )
             for i, (path, name) in enumerate(items)
         ]
-        outputs = self._map(_analyze_one, jobs, "analyse", progress, cancel)
+        outputs = self._map(_analyze_one, jobs, "analyse", progress, cancel, self._analysis_crashed)
 
         documents: list[Document] = []
         entities: list[Entity] = []
@@ -1237,7 +1343,7 @@ class Pipeline:
                     ),
                 )
             )
-        outputs = self._map(_write_and_verify, jobs, "ecriture", progress, cancel)
+        outputs = self._map(_write_and_verify, jobs, "ecriture", progress, cancel, _write_crashed)
         results: list[DocumentResult] = []
         for job, out in zip(jobs, outputs, strict=True):
             doc = job[0].document
