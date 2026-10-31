@@ -527,24 +527,16 @@ _TIME_ZONE_PART = re.compile(r"(?:UTC|GMT)?\s*[+\-]\d{1,2}(?:[:']?\d{2}'?)?")
 _PDF_TIMESTAMP = re.compile(r"^(\s*D:)(\d{4})(\d{2})(\d{2})(\d{6}|\d{4}|\d{2})?(.*)$", re.DOTALL)
 
 
-def _random_times(text: str, rng: random.Random) -> tuple[str, int]:
-    """Replace every time of day in ``text`` by a random one in the same format."""
+def shift_timestamp(original: str, days: int) -> str | None:
+    """A date with a time of day (or a time alone): the date shifted by ``days``,
+    the time of day and the time zone kept, so that every rendering of one instant
+    (``2026-10-31T13:22:05Z``, ``31/10/2026 14:22``, ``Sat, 31 Oct 2026 13:22:05
+    +0000``) moves by the same whole number of days and the order and intervals of
+    the events are preserved.
 
-    def one(m: re.Match[str]) -> str:
-        hour, sep1, _minute, sep2, second = m.groups()
-        out = f"{rng.randint(7, 19):0{len(hour)}d}{sep1}{rng.randint(0, 59):02d}"
-        if second is not None:
-            out += f"{sep2}{rng.randint(0, 59):02d}"
-        return out
-
-    return _TIME_PART.subn(one, text)
-
-
-def shift_timestamp(original: str, days: int, rng: random.Random) -> str | None:
-    """A date with a time of day (or a time alone): date shifted, time randomized.
-
-    Handles ``31/10/2026 à 14:22``, ``2026-10-31T14:22:05Z``, ``14h22``, PDF-style
-    ``D:20261031142205+01'00'``. None when ``original`` holds no time.
+    Handles ``31/10/2026 à 14:22``, ``2026-10-31T14:22:05.123+01:00``, ``14h22``,
+    PDF-style ``D:20261031142205+01'00'``. None when ``original`` holds no time or a
+    date this function cannot shift (the caller then randomizes the whole value).
     """
     m = _PDF_TIMESTAMP.match(original)
     if m:
@@ -553,25 +545,19 @@ def shift_timestamp(original: str, days: int, rng: random.Random) -> str | None:
         if parsed is None:
             return None
         new = parsed + timedelta(days=days)
-        fake_clock = ""
-        if clock:
-            parts = [rng.randint(7, 19), rng.randint(0, 59), rng.randint(0, 59)]
-            fake_clock = "".join(f"{p:02d}" for p in parts)[: len(clock)]
-        return f"{prefix}{new.year:04d}{new.month:02d}{new.day:02d}{fake_clock}{rest}"
+        return f"{prefix}{new.year:04d}{new.month:02d}{new.day:02d}{clock or ''}{rest}"
     m = _DATE_PREFIX.match(original)
     if m:
         shifted = shift_date(m.group(), days)
         if shifted is None:
             return None
-        rest, _count = _random_times(original[m.end() :], rng)
-        return shifted + rest
-    # A time alone (with its zone): any other number is a date this function cannot
-    # shift (``2026.10.31 14:22``): the caller then randomizes the whole value.
+        return shifted + original[m.end() :]
+    # A time alone (with its zone) stays: any other number is a date this function
+    # cannot shift (``2026.10.31 14:22``).
     leftover = _TIME_ZONE_PART.sub("", _TIME_PART.sub("", original))
-    if any(c.isdigit() for c in leftover):
+    if any(c.isdigit() for c in leftover) or not _TIME_PART.search(original):
         return None
-    text, count = _random_times(original, rng)
-    return text if count else None
+    return original
 
 
 # -- places and organisations --------------------------------------------------------

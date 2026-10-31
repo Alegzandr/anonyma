@@ -126,14 +126,14 @@ def test_ordinary_dates_and_times_follow_detect_dates() -> None:
 
 
 def test_realistic_timestamps_are_shifted() -> None:
-    import random
-
-    rng = random.Random(1)
-    out = shift_timestamp("31/10/2026 à 14:22:05", 10, rng)
-    assert out is not None and out.startswith("10/11/2026 à ") and "14:22:05" not in out
-    pdf = shift_timestamp("D:20261031142205+01'00'", -1, rng)
-    assert pdf is not None and pdf.startswith("D:20261030") and pdf.endswith("+01'00'")
-    assert shift_timestamp("sans heure", 3, rng) is None
+    # Whole days: the time of day and the zone are kept (order and intervals survive).
+    assert shift_timestamp("31/10/2026 à 14:22:05", 10) == "10/11/2026 à 14:22:05"
+    assert shift_timestamp("D:20261031142205+01'00'", -1) == "D:20261030142205+01'00'"
+    assert shift_timestamp("2026-10-31T14:22:05.123+01:00", 1) == "2026-11-01T14:22:05.123+01:00"
+    assert shift_timestamp("31 Oct 2026 13:22:05 +0000", 1) == "01 Nov 2026 13:22:05 +0000"
+    assert shift_timestamp("14h22", 5) == "14h22"
+    assert shift_timestamp("sans heure", 3) is None
+    assert shift_timestamp("2026.10.31 14:22", 3) is None
 
 
 # -- opaque identifiers -------------------------------------------------------------------

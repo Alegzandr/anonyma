@@ -11,8 +11,12 @@ Modes:
   numbers would have to skip the stored ones and so reveal the size of the table.
 * REALISTIC: Faker ``fr_FR`` / INSEE given names, deterministic per cluster within a
   batch (and across batches through the mapping store), same gender, same shape
-  (case, initials, order, separators), valid checksums, dates shifted by one
-  batch-wide offset, never equal to a real value of the batch.
+  (case, initials, order, separators), valid checksums, never equal to a real value
+  of the batch. Dates move by one batch-wide whole number of days (secret, kept in
+  the mapping table in pseudonymization), time of day and time zone kept: every
+  rendering of an instant gets the same substitute and order and intervals survive.
+  Birth dates move by their own secret offset per date (30 to 365 days, either way):
+  one known event date must not reveal them.
 * BLACKOUT: block characters of the same length.
 
 Variant-specific substitutes (``by_variant``) keep every surface form consistent:
@@ -65,6 +69,12 @@ TAG_ID_LENGTH = 4
 #: Pseudo entity type used to persist batch parameters in the mapping store.
 PARAMETER_TYPE = "__parametre__"
 DATE_SHIFT_KEY = "decalage_dates"
+#: Key of the per-date offsets of birth dates (hex), kept with the batch parameters.
+BIRTH_KEY = "cle_dates_naissance"
+#: Bounds (days) of the offset of every date of a batch, and of a birth date.
+DATE_SHIFT_DAYS = (30, 400)
+BIRTH_SHIFT_DAYS = (30, 365)
+DATE_TYPES = frozenset({EntityType.DATE, EntityType.DATE_OF_BIRTH})
 MAX_ATTEMPTS = 25
 
 
@@ -353,6 +363,7 @@ class _Realistic:
                             self.forbidden_tokens.add(key)
         self.forbidden.discard("")
         self.shift = self._date_shift()
+        self.birth_key = self._birth_key()
         self.tags = replacer.tag_allocator()
 
     # -- orchestration -----------------------------------------------------------
@@ -404,7 +415,7 @@ class _Realistic:
         for vkey, (_, substitute) in chosen.items():
             if substitute != base:
                 self.table.by_variant[(cluster.id, vkey)] = substitute
-        if known is None:
+        if base != known:
             self.r.remember(cluster, base)
 
     def _tag(self, cluster: EntityCluster) -> None:
@@ -413,6 +424,10 @@ class _Realistic:
         self.used.add(normalize(tag))
 
     def _acceptable(self, cluster: EntityCluster, result: Mapping[str, str]) -> bool:
+        if cluster.entity_type in DATE_TYPES:
+            # A shifted date may equal another date of the batch: the offset is what
+            # hides them, and every rendering of an instant must follow it.
+            return True
         for substitute in result.values():
             key = normalize(substitute)
             if key in self.forbidden or key in self.used:
@@ -429,10 +444,36 @@ class _Realistic:
             if known and known.lstrip("-").isdigit():
                 return int(known)
         rng = random.SystemRandom()
-        shift = rng.choice([-1, 1]) * rng.randint(30, 400)
+        shift = rng.choice([-1, 1]) * rng.randint(*DATE_SHIFT_DAYS)
         if self.store:
             self.store.save(PARAMETER_TYPE, DATE_SHIFT_KEY, DATE_SHIFT_KEY, str(shift))
         return shift
+
+    def _birth_key(self) -> bytes:
+        if self.store:
+            known = self.store.lookup(PARAMETER_TYPE, BIRTH_KEY)
+            if known:
+                try:
+                    return bytes.fromhex(known)
+                except ValueError:
+                    pass
+        key = secrets.token_bytes(32)
+        if self.store:
+            self.store.save(PARAMETER_TYPE, BIRTH_KEY, BIRTH_KEY, key.hex())
+        return key
+
+    def date_shift(self, entity_type: str, value: str) -> int:
+        """Days ``value`` moves by: the batch offset, or for a birth date its own
+        offset, keyed on the date itself so that every format of it agrees."""
+        if entity_type != EntityType.DATE_OF_BIRTH:
+            return self.shift
+        born = fk.parse_date(value)
+        if born is None:
+            return self.shift
+        digest = hmac.new(self.birth_key, born.isoformat().encode(), hashlib.sha256).digest()
+        low, high = BIRTH_SHIFT_DAYS
+        days = low + int.from_bytes(digest[:4], "big") % (high - low + 1)
+        return days if digest[4] & 1 else -days
 
     def domain(self, original: str, rng: random.Random) -> str:
         original = original.casefold()
@@ -452,7 +493,7 @@ class _Realistic:
     def nir_birth(self, nir: str) -> tuple[int, int] | None:
         """(year, month) of the substitute birth date of the person a NIR belongs
         to: a date of birth of the batch in the NIR's year and month, shifted like
-        every date. None when no such date is known."""
+        that date. None when no such date is known."""
         compact = checksums.compact(nir)
         if len(compact) < 5 or not compact[1:5].isdigit():
             return None
@@ -462,7 +503,9 @@ class _Realistic:
                 continue
             born = fk.parse_date(cluster.canonical)
             if born is not None and born.year % 100 == year and born.month == month:
-                shifted = born + timedelta(days=self.shift)
+                shifted = born + timedelta(
+                    days=self.date_shift(EntityType.DATE_OF_BIRTH, cluster.canonical)
+                )
                 return shifted.year, shifted.month
         return None
 
@@ -616,19 +659,19 @@ def _vat(st: _Realistic, original: str, rng: random.Random) -> str:
 def _dates(
     st: _Realistic, cluster: EntityCluster, rng: random.Random, known: str | None
 ) -> dict[str, str]:
+    """Every variant shifted by the offset of the cluster's date (see
+    :meth:`_Realistic.date_shift`), recomputed on each run: a substitute stored by an
+    older version (random time of day) must not survive. A value that is no date
+    this module can shift keeps its stored random substitute."""
     out: dict[str, str] = {}
+    days = st.date_shift(cluster.entity_type, cluster.canonical)
 
-    def shifted(value: str) -> str:
-        return (
-            fk.shift_date(value, st.shift)
-            or fk.shift_timestamp(value, st.shift, rng)
-            or fk.random_like(value, rng)
-        )
+    def shifted(value: str) -> str | None:
+        return fk.shift_date(value, days) or fk.shift_timestamp(value, days)
 
     for variant in cluster.variants:
-        out[variant] = shifted(variant)
-    base = known or shifted(cluster.canonical)
-    out[""] = base
+        out[variant] = shifted(variant) or known or fk.random_like(variant, rng)
+    out[""] = shifted(cluster.canonical) or known or fk.random_like(cluster.canonical, rng)
     return out
 
 
