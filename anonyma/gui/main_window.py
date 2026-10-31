@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import override
 
-from PySide6.QtCore import QByteArray, QSize, Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import QByteArray, QModelIndex, QPersistentModelIndex, QSize, Qt
+from PySide6.QtGui import QCloseEvent, QKeySequence, QPainter, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -13,10 +13,13 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QStackedWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QVBoxLayout,
     QWidget,
 )
 
+from anonyma.frenchtext import typo
 from anonyma.gui import dialogs, icons, theme
 from anonyma.gui.context import AppContext
 from anonyma.gui.controller import BatchController, Phase
@@ -29,13 +32,32 @@ from anonyma.logs import get_logger
 
 log = get_logger("gui.window")
 
+IndexLike = QModelIndex | QPersistentModelIndex
+
+#: Navigation, in workflow order; Ctrl+1… follows this order. A gap separates the
+#: batch pages from the configuration pages.
 PAGES = (
     ("processing", "Traitement", "process"),
     ("review", "Revue", "review"),
+    ("report", "Rapport", "report"),
     ("models", "Modèles", "models"),
     ("settings", "Réglages", "settings"),
-    ("report", "Rapport", "report"),
 )
+_GAP_BEFORE = "models"
+_GAP = 16
+_GAP_ROLE = Qt.ItemDataRole.UserRole + 1
+
+
+class _NavDelegate(QStyledItemDelegate):
+    """Draws the first configuration page below a gap that separates it from the
+    batch pages (the gap is part of its row, so keyboard navigation is unchanged)."""
+
+    @override
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: IndexLike) -> None:
+        if index.data(_GAP_ROLE):
+            option = QStyleOptionViewItem(option)
+            option.rect = option.rect.adjusted(0, _GAP, 0, 0)
+        super().paint(painter, option, index)
 
 
 class MainWindow(QMainWindow):
@@ -62,10 +84,14 @@ class MainWindow(QMainWindow):
         self.nav = QListWidget()
         self.nav.setObjectName("Sidebar")
         self.nav.setIconSize(QSize(18, 18))
-        self.nav.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.nav.setItemDelegate(_NavDelegate(self.nav))
+        # Tab reaches the list (focus ring on the current page); a click does not
+        # leave a ring behind.
+        self.nav.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         side_layout.addWidget(self.nav, 1)
-        self.footer = QLabel("Hors ligne · traitement local")
+        self.footer = QLabel(typo("Hors ligne : aucune donnée ne quitte ce poste"))
         self.footer.setObjectName("SidebarFooter")
+        self.footer.setWordWrap(True)
         self.footer.setContentsMargins(20, 8, 12, 14)
         side_layout.addWidget(self.footer)
         root.addWidget(side)
@@ -82,19 +108,24 @@ class MainWindow(QMainWindow):
         self.pages: dict[str, QWidget] = {
             "processing": self.processing,
             "review": self.review,
+            "report": self.report,
             "models": self.models,
             "settings": self.settings,
-            "report": self.report,
         }
-        for key, label, _icon in PAGES:
+        for number, (key, label, _icon) in enumerate(PAGES, start=1):
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, key)
-            item.setSizeHint(QSize(180, 40))
+            item.setData(_GAP_ROLE, key == _GAP_BEFORE)
+            item.setSizeHint(QSize(180, 40 + (_GAP if key == _GAP_BEFORE else 0)))
+            item.setToolTip(f"{label} (Ctrl+{number})")
             self.nav.addItem(item)
             self.stack.addWidget(self.pages[key])
-        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{number}"), self)
+            shortcut.activated.connect(lambda k=key: self.show_page(k))
+        self.nav.currentItemChanged.connect(self._nav_changed)
         self.nav.setCurrentRow(0)
         self._refresh_icons()
+        QShortcut(QKeySequence("Ctrl+O"), self).activated.connect(self._add_files)
 
         self.processing.review_requested.connect(lambda: self.show_page("review"))
         self.processing.report_requested.connect(lambda: self.show_page("report"))
@@ -106,8 +137,16 @@ class MainWindow(QMainWindow):
         self.controller.phase_changed.connect(self._phase_changed)
         theme.notifier().changed.connect(self._refresh_icons)
 
-        self.statusBar().showMessage("Prêt.")
         self._restore_geometry()
+        self._first_show = True
+
+    @override
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        if self._first_show:
+            # Start without a focus ring on the side navigation: Tab reaches it.
+            self._first_show = False
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _brand(self) -> QWidget:
         """Application mark and name at the top of the side column."""
@@ -127,26 +166,41 @@ class MainWindow(QMainWindow):
 
     # -- navigation ---------------------------------------------------------------------
 
-    def show_page(self, key: str) -> None:
+    def _nav_item(self, key: str) -> QListWidgetItem | None:
         for row in range(self.nav.count()):
             item = self.nav.item(row)
             if item is not None and item.data(Qt.ItemDataRole.UserRole) == key:
-                self.nav.setCurrentRow(row)
-                return
+                return item
+        return None
+
+    def show_page(self, key: str) -> None:
+        item = self._nav_item(key)
+        if item is not None:
+            self.nav.setCurrentItem(item)
 
     def current_page(self) -> str:
         item = self.nav.currentItem()
-        return str(item.data(Qt.ItemDataRole.UserRole)) if item is not None else ""
+        return str(item.data(Qt.ItemDataRole.UserRole) or "") if item is not None else ""
+
+    def _nav_changed(self, current: QListWidgetItem | None, _previous: object) -> None:
+        key = str(current.data(Qt.ItemDataRole.UserRole) or "") if current is not None else ""
+        if key in self.pages:
+            self.stack.setCurrentWidget(self.pages[key])
+            self._phase_changed(self.controller.phase.value)
+
+    def _add_files(self) -> None:
+        self.show_page("processing")
+        self.processing.add_files_button.click()
 
     def _refresh_icons(self) -> None:
         colour = theme.tokens().sidebar_text
-        for row, (_key, _label, icon_name) in enumerate(PAGES):
-            item = self.nav.item(row)
+        for key, _label, icon_name in PAGES:
+            item = self._nav_item(key)
             if item is not None:
                 item.setIcon(icons.icon(icon_name, colour))
 
     def _update_review_label(self, pending: int) -> None:
-        item = self.nav.item(1)
+        item = self._nav_item("review")
         if item is not None:
             item.setText(f"Revue ({pending})" if pending else "Revue")
 
@@ -157,8 +211,9 @@ class MainWindow(QMainWindow):
     def _correct_and_reapply(self) -> None:
         self.show_page("review")
         self.review.banner.show_message(
-            "Corrigez les décisions (validez l'entité oubliée, ajoutez une entité…), puis "
-            "cliquez sur « Appliquer » : les fichiers produits précédemment seront remplacés.",
+            "Corrigez les décisions (masquez l'entité oubliée, ajoutez une entité…), puis "
+            "cliquez sur « Appliquer les décisions » : les fichiers produits précédemment "
+            "seront remplacés.",
             "info",
         )
 
@@ -167,16 +222,23 @@ class MainWindow(QMainWindow):
         self.review.show_residue(top_document_id, location, value)
 
     def _result_ready(self) -> None:
-        if self.current_page() == "review":
+        # « Traitement » already says it in its banner: only other pages need the news.
+        if self.current_page() in ("processing", "review"):
             return
-        self.statusBar().showMessage("Traitement terminé : le rapport est disponible.", 8000)
+        self.statusBar().showMessage(typo("Traitement terminé : le rapport est disponible."), 8000)
 
     def _phase_changed(self, phase: str) -> None:
+        """The status bar only speaks while something runs, and only away from
+        « Traitement », which shows the progress itself (no idle « Prêt. »)."""
         messages = {
             Phase.ANALYZING.value: "Analyse en cours…",
             Phase.APPLYING.value: "Écriture et vérification en cours…",
         }
-        self.statusBar().showMessage(messages.get(phase, "Prêt."))
+        message = messages.get(phase) if self.current_page() != "processing" else None
+        if message:
+            self.statusBar().showMessage(message)
+        else:
+            self.statusBar().clearMessage()
 
     # -- geometry (kept in Config.ui, never in QSettings) -----------------------------------
 
@@ -207,6 +269,7 @@ class MainWindow(QMainWindow):
             title="Quitter Anonyma",
             ok_label="Annuler et quitter",
             cancel_label="Continuer le traitement",
+            warn=True,
         ):
             event.ignore()
             return
@@ -214,7 +277,9 @@ class MainWindow(QMainWindow):
             self,
             "Des réglages modifiés n'ont pas été enregistrés. Quitter sans les enregistrer ?",
             title="Quitter Anonyma",
-            ok_label="Quitter",
+            ok_label="Quitter sans enregistrer",
+            cancel_label="Rester",
+            warn=True,
         ):
             event.ignore()
             return

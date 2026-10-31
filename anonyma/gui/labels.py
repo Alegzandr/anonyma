@@ -12,11 +12,19 @@ from anonyma.models import (
 )
 from anonyma.report import STATUS_LABELS
 
+#: Short choice labels; the gloss (tooltip and helper line) explains each choice.
 PROFILE_LABELS: dict[Profile | None, str] = {
-    None: "Automatique (selon le matériel)",
-    Profile.LIGHT: "Léger — règles et listes",
-    Profile.STANDARD: "Standard — + modèle GLiNER",
-    Profile.FULL: "Complet — + modèle de langue",
+    None: "Automatique",
+    Profile.LIGHT: "Léger",
+    Profile.STANDARD: "Standard",
+    Profile.FULL: "Complet",
+}
+
+PROFILE_GLOSSES: dict[Profile | None, str] = {
+    None: "Choisi selon la mémoire, le processeur et la carte graphique de ce poste.",
+    Profile.LIGHT: "Règles et listes : rapide, sans modèle.",
+    Profile.STANDARD: "Règles et listes, plus le modèle GLiNER pour les noms et les lieux.",
+    Profile.FULL: "Standard, plus un modèle de langue pour les cas ambigus.",
 }
 
 PROFILE_SHORT: dict[Profile, str] = {
@@ -26,15 +34,47 @@ PROFILE_SHORT: dict[Profile, str] = {
 }
 
 MODE_LABELS: dict[ReplacementMode, str] = {
-    ReplacementMode.TAG: "Balises — [PERSONNE_001]",
-    ReplacementMode.REALISTIC: "Réaliste — substituts vraisemblables",
-    ReplacementMode.BLACKOUT: "Masquage — caviardage",
+    ReplacementMode.TAG: "Balises",
+    ReplacementMode.REALISTIC: "Réaliste",
+    ReplacementMode.BLACKOUT: "Masquage",
+}
+
+MODE_GLOSSES: dict[ReplacementMode, str] = {
+    ReplacementMode.TAG: "Chaque valeur devient une balise, par exemple [PERSONNE_001].",
+    ReplacementMode.REALISTIC: "Chaque valeur devient un substitut vraisemblable du même type.",
+    ReplacementMode.BLACKOUT: "Chaque valeur est caviardée.",
 }
 
 REGIME_LABELS: dict[Regime, str] = {
-    Regime.ANONYMIZATION: "Anonymisation — irréversible, aucune table conservée",
-    Regime.PSEUDONYMIZATION: "Pseudonymisation — table de correspondance chiffrée",
+    Regime.ANONYMIZATION: "Anonymisation",
+    Regime.PSEUDONYMIZATION: "Pseudonymisation",
 }
+
+REGIME_GLOSSES: dict[Regime, str] = {
+    Regime.ANONYMIZATION: "Irréversible : aucune table de correspondance n'est conservée.",
+    Regime.PSEUDONYMIZATION: (
+        "Une table de correspondance chiffrée permet de retrouver les valeurs d'origine."
+    ),
+}
+
+#: Detector names (``Entity.detector``) -> French label shown in the review.
+DETECTOR_LABELS: dict[str, str] = {
+    "regex_fr": "Règles",
+    "listes_metier": "Listes métier",
+    "gliner": "Modèle GLiNER",
+    "llm": "Modèle de langue",
+    "paranoiaque": "Mode paranoïaque",
+    "codes": "Codes-barres",
+    "identifiants_techniques": "Identifiants techniques",
+    "politique": "Organisations",
+    "propagation": "Propagation dans le lot",
+    "manuel": "Ajout manuel",
+}
+
+
+def detector_label(name: str) -> str:
+    return DETECTOR_LABELS.get(name, name.replace("_", " ").capitalize())
+
 
 KIND_LABELS: dict[SegmentKind, str] = {
     SegmentKind.BODY: "Texte",

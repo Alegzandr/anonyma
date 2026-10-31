@@ -21,6 +21,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate, QStyleOptionViewItem
 
+from anonyma.frenchtext import typo
 from anonyma.gui import theme
 from anonyma.gui.labels import KIND_LABELS, entity_type_label
 from anonyma.gui.preview import (
@@ -31,9 +32,10 @@ from anonyma.gui.preview import (
     flag_reason,
     is_decided,
     occurrences_label,
+    score_detail,
     snippet,
 )
-from anonyma.gui.widgets import BADGE_ROLE, PROGRESS_ROLE
+from anonyma.gui.widgets import BADGE_ROLE
 from anonyma.models import Entity, EntityCluster
 from anonyma.textutils import normalize
 
@@ -59,14 +61,14 @@ class QueueRow:
     format: str
     status: str
     level: str
-    entities: str
-    progress: int
+    #: Occurrences (masked mentions) in the file, "—" before the analysis.
+    occurrences: str
     root: str = ""
     document_id: str = ""
 
 
 class QueueModel(QAbstractTableModel):
-    COLUMNS = ("Fichier", "Format", "Statut", "Entités", "Progression")
+    COLUMNS = ("Fichier", "Format", "Statut", "Occurrences")
 
     def __init__(self, parent: object = None) -> None:
         super().__init__(None)
@@ -119,13 +121,11 @@ class QueueModel(QAbstractTableModel):
         row = self.rows[index.row()]
         col = index.column()
         if role == Qt.ItemDataRole.DisplayRole:
-            return (row.name, row.format, row.status, row.entities, "")[col]
+            return (row.name, row.format, row.status, row.occurrences)[col]
         if role == Qt.ItemDataRole.ToolTipRole and col == 0:
             return row.name
         if role == BADGE_ROLE and col == 2:
             return row.level
-        if role == PROGRESS_ROLE and col == 4:
-            return row.progress
         if role == Qt.ItemDataRole.TextAlignmentRole and col == 3:
             return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         if role == Qt.ItemDataRole.UserRole:
@@ -153,6 +153,7 @@ class ClusterView:
     max_score: float
     detectors: tuple[str, ...]
     reason: str
+    detail: str
     manual: bool
 
     @property
@@ -180,11 +181,11 @@ SORTS = {
 
 STATE_FILTERS = {
     "": "Toutes les entités",
-    "non_decidees": "Non décidées",
+    "non_decidees": "Sans décision",
     "a_revoir": "À revoir",
-    "decidees": "Décidées",
-    "validees": "Validées",
-    "rejetees": "Rejetées",
+    "decidees": "Avec décision",
+    "validees": "Masquées",
+    "rejetees": "Non masquées",
     "manuelles": "Ajouts manuels",
 }
 
@@ -255,6 +256,7 @@ class ClusterTreeModel(QAbstractItemModel):
             max_score=cluster.max_score,
             detectors=tuple(sorted(cluster.detectors)),
             reason=flag_reason(cluster, c.analysis.config.review_threshold, manual),
+            detail="" if manual else score_detail(cluster, c.analysis.config.review_threshold),
             manual=manual,
         )
         self._views[cid] = view
@@ -440,9 +442,15 @@ class ClusterTreeModel(QAbstractItemModel):
                 if role == Qt.ItemDataRole.DisplayRole:
                     return view.title
                 if role == Qt.ItemDataRole.ToolTipRole:
-                    return f"{view.title}\nMotif : {view.reason}"
+                    lines = [view.title, f"Motif : {view.reason}"]
+                    if view.detail:
+                        lines.append(view.detail)
+                    return typo("\n".join(lines))
             if index.column() == 1:
                 if role == Qt.ItemDataRole.DisplayRole:
+                    # Masked without a decision is the default: no badge.
+                    return "" if view.state is RowState.AUTO else STATE_LABELS[view.state]
+                if role == Qt.ItemDataRole.ToolTipRole:
                     return STATE_LABELS[view.state]
                 if role == BADGE_ROLE:
                     return STATE_LEVELS[view.state]
@@ -464,7 +472,7 @@ class ClusterTreeModel(QAbstractItemModel):
             return mention.location
         if index.column() == 1:
             if role == Qt.ItemDataRole.DisplayRole:
-                return "Occurrence rejetée" if mention.rejected else ""
+                return "Non masquée" if mention.rejected else ""
             if role == BADGE_ROLE:
                 return "neutral" if mention.rejected else None
         return None

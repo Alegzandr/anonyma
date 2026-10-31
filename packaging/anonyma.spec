@@ -51,6 +51,16 @@ for package in ("anonyma.extractors", "anonyma.writers", "anonyma.detectors"):
 datas = collect_data_files("anonyma")  # anonyma/data/** and any package data
 binaries = []
 
+# Qt's own French texts (standard buttons, context menus): loaded by anonyma.app at
+# start-up from PySide6/translations. Listed explicitly so that the file is shipped
+# whatever the PyInstaller Qt hooks decide to collect.
+import PySide6  # noqa: E402
+
+QT_TRANSLATIONS = Path(PySide6.__file__).resolve().parent / "translations"
+for name in ("qtbase_fr.qm",):
+    if (QT_TRANSLATIONS / name).is_file():
+        datas.append((str(QT_TRANSLATIONS / name), "PySide6/translations"))
+
 # Faker loads its locale providers dynamically (the contrib hook also collects
 # them; listed explicitly so that fr_FR never goes missing).
 LOCALE_MODULE = re.compile(r"^[a-z]{2,3}_[A-Z]{2}$")

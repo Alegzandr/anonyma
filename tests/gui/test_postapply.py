@@ -46,7 +46,7 @@ def test_quarantine_residue_jump_and_reapply(
     assert len(report.quarantined) == 2
     assert report.quarantine_table.rowCount() == 2
     reason = report.quarantine_table.item(0, 2).text()
-    assert "valeur(s) sensible(s)" in reason
+    assert "sensible" in reason and "encore présente" in reason and "(s)" not in reason
     assert report.residue_rows
     assert "quarantaine" in report.banner.text()
     assert [b.text() for b in report.banner.action_buttons] == [
@@ -104,3 +104,23 @@ def test_report_opens_folder_outputs(
     c.result.results[0].output_path = folder
     report.open_selected_output()
     assert opened[-1] == folder
+
+
+def test_report_verdict_and_breakdown() -> None:
+    counts = {DocumentStatus.ANONYMIZED: 6, DocumentStatus.NEEDS_REVIEW: 1}
+    assert report_module.verdict(counts) == (
+        "6 fichiers sur 7 sont prêts à être diffusés.",
+        "warning",
+    )
+    assert report_module.breakdown(counts).replace(" ", " ") == (
+        "7 fichiers : 6 anonymisés · 1 à revoir"
+    )
+    counts = {DocumentStatus.ANONYMIZED: 1, DocumentStatus.RESIDUE: 1}
+    assert report_module.verdict(counts)[1] == "danger"
+    assert report_module.verdict({DocumentStatus.ANONYMIZED: 1}) == (
+        "Le fichier est anonymisé et vérifié.",
+        "success",
+    )
+    assert report_module.batch_period("2026-10-31T14:08:25", "2026-10-31T14:09:02") == (
+        "Traité le 31/10/2026 de 14:08 à 14:09"
+    )

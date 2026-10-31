@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
+from typing import override
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -12,22 +15,25 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QProgressBar,
+    QStackedWidget,
     QTableView,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from anonyma import registry
+from anonyma.frenchtext import NBSP, plural, typo
 from anonyma.gui import dialogs
-from anonyma.gui.controller import REVIEW_POLICIES, BatchController, Phase
+from anonyma.gui.controller import REVIEW_POLICIES, REVIEW_POLICY_GLOSSES, BatchController, Phase
 from anonyma.gui.itemmodels import QueueModel, QueueRow
 from anonyma.gui.labels import STATUS_LEVELS, status_label
 from anonyma.gui.widgets import (
     BadgeDelegate,
     Banner,
     DropArea,
-    ProgressDelegate,
     button,
     left_header,
     muted,
@@ -39,15 +45,25 @@ from anonyma.pipeline import ProgressEvent, is_quarantined, quarantine_dir
 
 STAGE_LABELS = {"analyse": "Analyse des fichiers", "ecriture": "Écriture et vérification"}
 
-POLICY_HINTS = {
-    "aucune": "« Anonymiser » écrit directement les fichiers, sans s'arrêter à la revue.",
-    "incertaines": "« Anonymiser » s'arrête à la revue seulement si des entités sont incertaines.",
-    "systematique": "« Anonymiser » s'arrête toujours à la revue avant d'écrire les fichiers.",
-}
+#: Summary of the supported families (the full extension list is in the tooltip).
+FORMATS_SUMMARY = "Office, PDF, courriels (eml, msg, pst), images, archives, texte et données."
+
+RUN_LABEL = "Anonymiser"
+APPLY_LABEL = "Appliquer les décisions"
 
 
 def _count_tree(result: DocumentResult) -> int:
     return sum(result.entity_counts.values()) + sum(_count_tree(c) for c in result.children)
+
+
+def duration(seconds: float) -> str:
+    """« 8 s », « 2 min 05 s », « 1 h 03 min » (unbreakable spaces)."""
+    s = max(0, round(seconds))
+    if s < 60:
+        return f"{s}{NBSP}s"
+    if s < 3600:
+        return f"{s // 60}{NBSP}min{NBSP}{s % 60:02d}{NBSP}s"
+    return f"{s // 3600}{NBSP}h{NBSP}{s % 3600 // 60:02d}{NBSP}min"
 
 
 class ProcessingPage(QWidget):
@@ -57,21 +73,23 @@ class ProcessingPage(QWidget):
     def __init__(self, controller: BatchController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.controller = controller
+        self._started = 0.0
+        self._last_event: ProgressEvent | None = None
+        self.setAcceptDrops(True)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(12)
-        layout.addWidget(
-            page_header(
-                "Traitement",
-                "Ajoutez des fichiers ou des dossiers, choisissez un dossier de sortie, puis "
-                "anonymisez. Les originaux ne sont jamais modifiés.",
-            )
-        )
+        layout.addWidget(page_header("Traitement"))
 
+        self.banner = Banner()
+        layout.addWidget(self.banner)
+
+        # Queue: the drop area is the empty state of the table.
+        self.queue_stack = QStackedWidget()
         self.drop_area = DropArea()
-        self.add_files_button = button("Ajouter des fichiers…", "file")
-        self.add_folder_button = button("Ajouter un dossier…", "folder")
+        self.add_files_button = button("Ajouter des fichiers…")
+        self.add_folder_button = button("Ajouter un dossier…")
         self.add_files_button.clicked.connect(self._pick_files)
         self.add_folder_button.clicked.connect(self._pick_folder)
         self.drop_area.add_button(self.add_files_button)
@@ -79,10 +97,8 @@ class ProcessingPage(QWidget):
         self.drop_area.finish_buttons()
         self.drop_area.dropped.connect(self.add_paths)
         self.drop_area.hint.setText(self._formats_hint())
-        layout.addWidget(self.drop_area)
-
-        self.banner = Banner()
-        layout.addWidget(self.banner)
+        self.drop_area.hint.setToolTip(self._formats_tooltip())
+        self.queue_stack.addWidget(self.drop_area)
 
         self.model = QueueModel()
         self.table = QTableView()
@@ -97,32 +113,45 @@ class ProcessingPage(QWidget):
         left_header(self.table)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((1, 90), (2, 150), (3, 80), (4, 140)):
+        for col, width in ((1, 90), (2, 150), (3, 110)):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
             self.table.setColumnWidth(col, width)
         self.table.setItemDelegateForColumn(2, BadgeDelegate(self.table))
-        self.table.setItemDelegateForColumn(4, ProgressDelegate(self.table))
         self.table.doubleClicked.connect(lambda _i: self.review_requested.emit())
-        layout.addWidget(self.table, 1)
+        self.queue_stack.addWidget(self.table)
+        layout.addWidget(self.queue_stack, 1)
 
         queue_bar = QHBoxLayout()
         self.summary = muted("")
         queue_bar.addWidget(self.summary, 1)
-        self.remove_button = button("Retirer la sélection", "trash")
+        self.add_button = QToolButton()
+        self.add_button.setText("Ajouter")
+        self.add_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        add_menu = QMenu(self.add_button)
+        add_menu.addAction("Des fichiers…", self.add_files_button.click)
+        add_menu.addAction("Un dossier…", self.add_folder_button.click)
+        self.add_button.setMenu(add_menu)
+        self.remove_button = button("Retirer la sélection")
         self.remove_button.clicked.connect(self._remove_selected)
         self.clear_button = button("Vider la liste")
-        self.clear_button.clicked.connect(self.controller.clear_inputs)
+        self.clear_button.clicked.connect(self._clear)
+        queue_bar.addWidget(self.add_button)
         queue_bar.addWidget(self.remove_button)
         queue_bar.addWidget(self.clear_button)
-        layout.addLayout(queue_bar)
+        self.queue_bar = QWidget()
+        self.queue_bar.setLayout(queue_bar)
+        queue_bar.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.queue_bar)
 
         out_row = QHBoxLayout()
-        out_row.addWidget(QLabel("Dossier de sortie"))
+        output_label = QLabel("Dossier de &sortie")
+        out_row.addWidget(output_label)
         self.output_edit = QLineEdit()
-        self.output_edit.setPlaceholderText("Choisissez un dossier distinct des originaux")
+        self.output_edit.setPlaceholderText("Un dossier distinct des originaux")
         self.output_edit.editingFinished.connect(self._output_edited)
+        output_label.setBuddy(self.output_edit)
         out_row.addWidget(self.output_edit, 1)
-        self.output_button = button("Choisir…", "folder")
+        self.output_button = button("Choisir…")
         self.output_button.clicked.connect(self._pick_output)
         out_row.addWidget(self.output_button)
         layout.addLayout(out_row)
@@ -132,11 +161,18 @@ class ProcessingPage(QWidget):
         layout.addWidget(self.output_error)
 
         policy_row = QHBoxLayout()
-        policy_row.addWidget(QLabel("Relecture"))
+        policy_label = QLabel("&Relecture")
+        policy_row.addWidget(policy_label)
         self.policy_combo = QComboBox()
         self.policy_combo.setObjectName("ReviewPolicy")
         for key, label in REVIEW_POLICIES.items():
             self.policy_combo.addItem(label, key)
+            self.policy_combo.setItemData(
+                self.policy_combo.count() - 1,
+                typo(REVIEW_POLICY_GLOSSES[key]),
+                Qt.ItemDataRole.ToolTipRole,
+            )
+        policy_label.setBuddy(self.policy_combo)
         self.policy_combo.currentIndexChanged.connect(self._policy_changed)
         policy_row.addWidget(self.policy_combo)
         self.policy_hint = muted("")
@@ -144,48 +180,58 @@ class ProcessingPage(QWidget):
         policy_row.addWidget(self.policy_hint, 1)
         layout.addLayout(policy_row)
 
-        progress_row = QHBoxLayout()
-        self.stage_label = muted("Prêt.")
+        # Global progress: visible while running, or to say why a run stopped.
+        self.progress_box = QWidget()
+        progress_row = QHBoxLayout(self.progress_box)
+        progress_row.setContentsMargins(0, 0, 0, 0)
+        self.stage_label = muted("")
+        self.stage_label.setWordWrap(False)
         self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 1)
-        self.progress_bar.setValue(0)
+        self.progress_bar.setRange(0, 0)
         # The stage label already reads « n / total »: no percentage drawn on the bar.
         self.progress_bar.setTextVisible(False)
-        progress_row.addWidget(self.stage_label, 1)
-        progress_row.addWidget(self.progress_bar, 2)
-        layout.addLayout(progress_row)
+        self.time_label = muted("")
+        self.time_label.setWordWrap(False)
+        progress_row.addWidget(self.stage_label)
+        progress_row.addWidget(self.progress_bar, 1)
+        progress_row.addWidget(self.time_label)
+        layout.addWidget(self.progress_box)
+        self._clock = QTimer(self)
+        self._clock.setInterval(1000)
+        self._clock.timeout.connect(self._update_times)
 
         actions = QHBoxLayout()
-        self.analyze_button = button("Analyser", "process")
+        self.analyze_button = button("Analyser")
         self.analyze_button.setToolTip("Détecter les entités sans rien écrire.")
-        self.review_button = button("Revoir", "review")
+        self.review_button = button("Revoir")
         self.review_button.setToolTip("Contrôler et corriger les entités détectées.")
-        self.apply_button = button("Appliquer", "check")
-        self.apply_button.setToolTip("Écrire les fichiers anonymisés avec les décisions de revue.")
-        self.report_button = button("Voir le rapport", "report")
-        self.cancel_button = button("Annuler", "cancel")
+        self.report_button = button("Voir le rapport")
+        self.cancel_button = button("Annuler")
         self.cancel_button.setProperty("danger", True)
-        self.run_button = primary_button("Anonymiser", "play")
+        self.run_button = primary_button(RUN_LABEL, "play")
         self.analyze_button.clicked.connect(self.start_analyze)
         self.review_button.clicked.connect(self.review_requested.emit)
-        self.apply_button.clicked.connect(self.start_apply)
         self.report_button.clicked.connect(self.report_requested.emit)
         self.cancel_button.clicked.connect(self._cancel)
-        self.run_button.clicked.connect(self.start_one_click)
-        for b in (self.analyze_button, self.review_button, self.apply_button, self.report_button):
+        self.run_button.clicked.connect(self.run_primary)
+        for b in (self.analyze_button, self.review_button, self.report_button):
             actions.addWidget(b)
         actions.addStretch(1)
         actions.addWidget(self.cancel_button)
         actions.addWidget(self.run_button)
         layout.addLayout(actions)
+        shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        shortcut.activated.connect(self._primary_shortcut)
 
         c = self.controller
         c.inputs_changed.connect(self.refresh)
         c.queue_ready.connect(self.refresh)
-        c.phase_changed.connect(lambda _p: self.refresh())
+        c.phase_changed.connect(self._phase_changed)
         c.progress.connect(self._on_progress)
         c.analysis_ready.connect(self._on_analysis)
         c.analysis_cleared.connect(self.refresh)
+        c.decisions_changed.connect(self._update_buttons)
         c.result_ready.connect(self._on_result)
         c.failed.connect(self._on_failed)
         c.cancelled.connect(self._on_cancelled)
@@ -198,30 +244,38 @@ class ProcessingPage(QWidget):
     # -- helpers ------------------------------------------------------------------
 
     @staticmethod
-    def _formats_hint() -> str:
+    def _extensions() -> list[str]:
         formats = registry.supported_formats()
-        extensions = sorted(
+        return sorted(
             ext
             for ext, fmt in registry.supported_extensions().items()
             if all(formats.get(fmt, (False, False)))
         )
-        if not extensions:
+
+    @classmethod
+    def _formats_hint(cls) -> str:
+        if not cls._extensions():
             return "Aucun format n'est disponible dans cette installation."
-        if len(extensions) > 18:
-            return (
-                f"{len(extensions)} extensions prises en charge : "
-                + ", ".join(extensions[:18])
-                + "…"
-            )
-        return "Formats pris en charge : " + ", ".join(extensions)
+        return FORMATS_SUMMARY
+
+    @classmethod
+    def _formats_tooltip(cls) -> str:
+        extensions = cls._extensions()
+        if not extensions:
+            return ""
+        return typo(
+            f"{plural(len(extensions), 'extension prise', 'extensions prises')} en "
+            f"charge : " + ", ".join(extensions)
+        )
 
     def _load_policy(self) -> None:
         policy = self.controller.review_policy()
         self.policy_combo.blockSignals(True)
         self.policy_combo.setCurrentIndex(max(self.policy_combo.findData(policy), 0))
         self.policy_combo.blockSignals(False)
-        self.policy_hint.setText(POLICY_HINTS[policy])
-        self.run_button.setToolTip(POLICY_HINTS[policy])
+        gloss = typo(REVIEW_POLICY_GLOSSES[policy])
+        self.policy_hint.setText(gloss)
+        self._update_buttons()
 
     def _policy_changed(self) -> None:
         policy = str(self.policy_combo.currentData())
@@ -239,11 +293,28 @@ class ProcessingPage(QWidget):
     def set_review_policy(self, policy: str) -> None:
         self.policy_combo.setCurrentIndex(self.policy_combo.findData(policy))
 
+    def _keep_decisions(self, action: str, ok_label: str) -> bool:
+        """True when the user prefers to keep the review decisions that ``action``
+        would discard (nothing to ask when there are none)."""
+        count = self.controller.decision_count()
+        if not count:
+            return False
+        return not dialogs.confirm(
+            self,
+            f"{action} efface {plural(count, 'décision', 'décisions')} de revue.",
+            title=ok_label,
+            ok_label=ok_label,
+            cancel_label="Garder mes décisions",
+            warn=True,
+        )
+
     def add_paths(self, items: list[Path]) -> None:
         if self.controller.busy:
             self.banner.show_message(
                 "Un traitement est en cours : patientez ou annulez-le.", "warning"
             )
+            return
+        if self._keep_decisions("Modifier la liste des fichiers", "Modifier la liste"):
             return
         added = self.controller.add_inputs(items)
         if not added:
@@ -261,11 +332,12 @@ class ProcessingPage(QWidget):
         if folder is not None:
             self.add_paths([folder])
 
-    def _pick_output(self) -> None:
+    def _pick_output(self) -> bool:
         folder = dialogs.open_folder(self, "Dossier de sortie", self.controller.output_dir)
-        if folder is not None:
-            self.output_edit.setText(str(folder))
-            self._output_edited()
+        if folder is None:
+            return False
+        self.output_edit.setText(str(folder))
+        return self._output_edited()
 
     def set_output_dir(self, path: Path) -> bool:
         self.output_edit.setText(str(path))
@@ -276,7 +348,7 @@ class ProcessingPage(QWidget):
         error = self.controller.set_output_dir(Path(text) if text else None)
         if error:
             self.controller.output_dir = None
-            self.output_error.setText(error)
+            self.output_error.setText(typo(error))
             self.output_error.setStyleSheet("color: palette(bright-text);")
             self.output_error.show()
         else:
@@ -290,20 +362,52 @@ class ProcessingPage(QWidget):
             for i in self.table.selectionModel().selectedRows()
             if self.model.data(i, Qt.ItemDataRole.UserRole + 1)
         }
-        if roots:
-            if any(r.is_dir() for r in roots) and not dialogs.confirm(
-                self,
-                "Retirer les éléments sélectionnés ? Un fichier issu d'un dossier ajouté retire "
-                "le dossier entier.",
-                ok_label="Retirer",
-            ):
-                return
-            self.controller.remove_inputs(roots)
+        if not roots:
+            return
+        if any(r.is_dir() for r in roots) and not dialogs.confirm(
+            self,
+            "Retirer les éléments sélectionnés ? Un fichier issu d'un dossier ajouté retire "
+            "le dossier entier.",
+            title="Retirer de la liste",
+            ok_label="Retirer",
+        ):
+            return
+        if self._keep_decisions("Modifier la liste des fichiers", "Modifier la liste"):
+            return
+        self.controller.remove_inputs(roots)
+
+    def _clear(self) -> None:
+        if self._keep_decisions("Vider la liste", "Vider la liste"):
+            return
+        self.controller.clear_inputs()
 
     def _cancel(self) -> None:
         self.controller.cancel()
         self.stage_label.setText("Annulation en cours…")
         self.cancel_button.setEnabled(False)
+
+    # -- drops anywhere on the page --------------------------------------------------
+
+    @override
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if DropArea.paths(event) and not self.controller.busy:
+            event.acceptProposedAction()
+            self.drop_area.set_active(True)
+        else:
+            event.ignore()
+
+    @override
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
+        self.drop_area.set_active(False)
+        super().dragLeaveEvent(event)
+
+    @override
+    def dropEvent(self, event: QDropEvent) -> None:
+        self.drop_area.set_active(False)
+        found = DropArea.paths(event)
+        if found:
+            event.acceptProposedAction()
+            self.add_paths(found)
 
     # -- flows ----------------------------------------------------------------------
 
@@ -321,21 +425,44 @@ class ProcessingPage(QWidget):
                 self.output_error.text()
                 if self.output_error.isVisible()
                 else "Choisissez d'abord un dossier de sortie.",
+                title="Dossier de sortie",
             )
             return False
         out = self.controller.output_dir
         if not replacing and out.is_dir() and any(out.iterdir()):
-            return dialogs.confirm(
+            if dialogs.confirm(
                 self,
                 "Le dossier de sortie n'est pas vide. Les fichiers existants ne seront pas "
                 "écrasés : les nouveaux fichiers recevront un suffixe numéroté.",
-                ok_label="Continuer",
-            )
+                title="Dossier de sortie",
+                ok_label="Écrire dans ce dossier",
+                cancel_label="Choisir un autre dossier",
+                warn=True,
+            ):
+                return True
+            return self._pick_output() and self._check_output()
         return True
+
+    def _primary_shortcut(self) -> None:
+        if self.run_button.isEnabled():
+            self.run_primary()
+
+    def applies_decisions(self) -> bool:
+        """The primary button applies the review decisions instead of starting over."""
+        c = self.controller
+        return c.analysis is not None and c.decision_count() > 0
+
+    def run_primary(self) -> None:
+        if self.applies_decisions():
+            self.start_apply()
+        else:
+            self.start_one_click()
 
     def start_analyze(self) -> None:
         if not self.controller.inputs:
             self.banner.show_message("Ajoutez d'abord des fichiers ou des dossiers.", "warning")
+            return
+        if self._keep_decisions("Relancer l'analyse", "Relancer l'analyse"):
             return
         self.banner.clear()
         self.controller.analyze()
@@ -351,14 +478,16 @@ class ProcessingPage(QWidget):
             self,
             "Les réglages de détection ont changé depuis l'analyse. Appliquer quand même avec "
             "l'analyse existante ?",
+            title=APPLY_LABEL,
             ok_label="Appliquer",
         ):
             return
         pending = c.pending_review_count()
         if pending and not dialogs.confirm(
             self,
-            f"{pending} entité(s) incertaine(s) n'ont pas été revues. Les fichiers concernés "
-            "seront marqués « À revoir ». Appliquer quand même ?",
+            f"{plural(pending, "entité incertaine n'a", "entités incertaines n'ont")} pas été "
+            "revues. Les fichiers concernés seront marqués « À revoir ». Appliquer quand même ?",
+            title=APPLY_LABEL,
             ok_label="Appliquer",
         ):
             return
@@ -370,6 +499,7 @@ class ProcessingPage(QWidget):
                 "par la nouvelle version.",
                 title="Réappliquer",
                 ok_label="Remplacer",
+                warn=True,
             ):
                 return
             replacing = True
@@ -388,6 +518,8 @@ class ProcessingPage(QWidget):
         if not c.inputs:
             self.banner.show_message("Ajoutez d'abord des fichiers ou des dossiers.", "warning")
             return
+        if self._keep_decisions("Relancer l'analyse", "Relancer l'analyse"):
+            return
         if not self._check_output():
             return
         ok, passphrase = self._ask_passphrase()
@@ -398,31 +530,44 @@ class ProcessingPage(QWidget):
 
     # -- controller events -------------------------------------------------------------
 
+    def _phase_changed(self, phase: str) -> None:
+        if phase != Phase.IDLE.value:
+            self._started = time.monotonic()
+            self._last_event = None
+            self.stage_label.setText(STAGE_LABELS.get(phase, "") + "…")
+            self.time_label.setText("")
+            self.progress_bar.setRange(0, 0)
+            self._clock.start()
+        else:
+            self._clock.stop()
+            self.stage_label.setText("")
+            self.time_label.setText("")
+        self.refresh()
+
     def _on_progress(self, event: ProgressEvent) -> None:
+        self._last_event = event
         label = STAGE_LABELS.get(event.stage, event.stage)
-        self.stage_label.setText(f"{label} : {event.done} / {event.total}")
+        self.stage_label.setText(typo(f"{label} : {event.done} / {event.total}"))
         self.progress_bar.setRange(0, max(event.total, 1))
         self.progress_bar.setValue(event.done)
+        self._update_times()
         if event.index is not None:
-            if event.stage == "analyse":
-                self.model.update_row(event.index, status="Analysé", level="info", progress=50)
-            else:
-                self.model.update_row(event.index, status="Écrit", level="info", progress=100)
+            status = "Analysé" if event.stage == "analyse" else "Écrit"
+            self.model.update_row(event.index, status=status, level="info")
+
+    def _update_times(self) -> None:
+        if not self.controller.busy:
+            return
+        elapsed = time.monotonic() - self._started
+        text = f"{duration(elapsed)} écoulées"
+        event = self._last_event
+        if event is not None and 0 < event.done < event.total:
+            remaining = elapsed / event.done * (event.total - event.done)
+            text += f" · environ {duration(remaining)} restantes"
+        self.time_label.setText(text)
 
     def _on_analysis(self) -> None:
         self.refresh()
-        analysis = self.controller.analysis
-        if analysis is None:
-            return
-        pending = self.controller.pending_review_count()
-        files = len(analysis.documents)
-        text = (
-            f"Analyse terminée : {files} fichier(s), {len(analysis.clusters)} entité(s) "
-            f"distincte(s), {len(analysis.entities)} occurrence(s)."
-        )
-        if pending:
-            text += f" {pending} incertaine(s) à revoir."
-        self.stage_label.setText(text)
 
     def _on_result(self) -> None:
         self.refresh()
@@ -434,40 +579,45 @@ class ProcessingPage(QWidget):
         review = statuses.count(DocumentStatus.NEEDS_REVIEW)
         bad = len(statuses) - ok - review
         quarantined = sum(1 for r in result.results if is_quarantined(r, result.output_dir))
-        text = f"Terminé : {ok} fichier(s) anonymisé(s)"
+        parts = [plural(ok, "fichier anonymisé", "fichiers anonymisés")]
         if review:
-            text += f", {review} à revoir"
+            parts.append(f"{review} à revoir")
         if bad:
-            text += f", {bad} en échec ou non pris en charge"
-        text += "."
+            parts.append(f"{bad} en échec ou non pris en charge")
+        text = "Terminé : " + ", ".join(parts) + "."
         if quarantined:
             folder = quarantine_dir(result.output_dir)
-            text += f" {quarantined} fichier(s) placé(s) en quarantaine dans « {folder} »."
+            placed = "placé" if quarantined < 2 else "placés"
+            text += (
+                f" {plural(quarantined, 'fichier')} {placed} en quarantaine dans le dossier "
+                f"voisin « {folder.name} »."
+            )
         level = "success" if not bad and not review else "warning"
         self.banner.show_message(text, level, [("Voir le rapport", self.report_requested.emit)])
-        self.stage_label.setText("Traitement terminé.")
 
     def _on_failed(self, message: str) -> None:
-        self.stage_label.setText("Échec du traitement.")
-        self.banner.show_message(message, "error")
-        dialogs.error(self, message)
+        self.stage_label.setText("Le traitement a échoué.")
+        dialogs.error(self, message, title="Traitement")
+        self._update_progress_visibility()
 
     def _on_cancelled(self) -> None:
-        self.stage_label.setText("Traitement annulé.")
-        self.banner.show_message(
-            "Traitement annulé : les fichiers non traités sont marqués « Annulé ».", "warning"
+        self.stage_label.setText(
+            typo("Traitement annulé : les fichiers non traités sont marqués « Annulé ».")
         )
+        self._update_progress_visibility()
 
     def _on_review_required(self, count: int) -> None:
+        entities = plural(count, "entité")
         if self.controller.review_policy() == "systematique":
             text = (
-                f"Relecture systématique : {count} entité(s) à contrôler dans « Revue », puis "
-                "cliquez sur « Appliquer »."
+                f"Relecture systématique : {entities} à contrôler dans « Revue », puis "
+                f"cliquez sur « {APPLY_LABEL} »."
             )
         else:
+            uncertain = plural(count, "entité incertaine", "entités incertaines")
             text = (
-                f"{count} entité(s) incertaine(s) nécessitent votre revue avant l'écriture. "
-                "Vérifiez-les dans « Revue », puis cliquez sur « Appliquer »."
+                f"{uncertain} à vérifier avant l'écriture. Vérifiez-les dans « Revue », "
+                f"puis cliquez sur « {APPLY_LABEL} »."
             )
         self.banner.show_message(text, "warning")
         self.review_requested.emit()
@@ -489,16 +639,14 @@ class ProcessingPage(QWidget):
         if c.analysis is None:
             for i, q in enumerate(c.queue):
                 if running and i in c.done_items:
-                    status, level, progress = "Analysé", "info", 50
+                    status, level = "Analysé", "info"
                 elif running:
-                    status, level, progress = running, "info", 0
+                    status, level = running, "info"
                 elif q.format is None:
-                    status, level, progress = "Non pris en charge", "neutral", 0
+                    status, level = "Non pris en charge", "neutral"
                 else:
-                    status, level, progress = "En attente", "neutral", 0
-                rows.append(
-                    QueueRow(q.name, q.format or "—", status, level, "—", progress, str(q.root))
-                )
+                    status, level = "En attente", "neutral"
+                rows.append(QueueRow(q.name, q.format or "—", status, level, "—", str(q.root)))
         else:
             effective = c.effective()
             for i, doc in enumerate(c.analysis.documents):
@@ -509,16 +657,11 @@ class ProcessingPage(QWidget):
                     count = sum(len(c.index.by_document.get(d, [])) for d in ids)
                 result = c.result_for(doc.id)
                 status_enum = result.status if result is not None else doc.status
-                progress = 100 if result is not None else 50
                 if result is not None:
                     count = _count_tree(result)
-                if status_enum is DocumentStatus.CANCELLED:
-                    progress = 0
                 if phase is Phase.APPLYING:
-                    done = i in c.done_items
-                    status = "Écrit" if done else "Écriture…"
+                    status = "Écrit" if i in c.done_items else "Écriture…"
                     level = "info"
-                    progress = 100 if done else 50
                 else:
                     status = status_label(status_enum)
                     level = STATUS_LEVELS.get(status_enum, "neutral")
@@ -529,16 +672,23 @@ class ProcessingPage(QWidget):
                         status,
                         level,
                         str(count),
-                        progress,
                         self._root_for(doc.source),
                         doc.id,
                     )
                 )
         self.model.set_rows(rows)
-        if not c.busy and self.progress_bar.maximum() <= 1 and c.analysis is None:
-            self.progress_bar.setValue(0)
+        empty = not c.inputs and not c.queue_loading
+        self.queue_stack.setCurrentWidget(self.drop_area if empty else self.table)
+        self.queue_bar.setVisible(not empty)
         self._update_summary()
         self._update_buttons()
+        self._update_progress_visibility()
+
+    def _update_progress_visibility(self) -> None:
+        busy = self.controller.busy
+        self.progress_bar.setVisible(busy)
+        self.time_label.setVisible(busy)
+        self.progress_box.setVisible(busy or bool(self.stage_label.text()))
 
     def _update_summary(self) -> None:
         c = self.controller
@@ -547,17 +697,19 @@ class ProcessingPage(QWidget):
                 self.summary.setText("Inventaire des fichiers en cours…")
                 return
             n = len(c.queue)
-            self.summary.setText(f"{n} fichier(s) dans la file." if n else "La file est vide.")
+            self.summary.setText(f"{plural(n, 'fichier')} dans la liste." if n else "")
             return
         pending = c.pending_review_count()
         decided, total = c.decided_counts()
-        text = (
-            f"{len(c.analysis.documents)} fichier(s) · {total} entité(s) · "
-            f"{len(c.analysis.entities)} occurrence(s) · {decided} / {total} décidées"
-        )
+        parts = [
+            plural(len(c.analysis.documents), "fichier"),
+            plural(total, "entité"),
+            plural(len(c.analysis.entities), "occurrence"),
+            f"{decided}{NBSP}/{NBSP}{total} décidées",
+        ]
         if pending:
-            text += f" · {pending} à revoir"
-        self.summary.setText(text)
+            parts.append(f"{pending}{NBSP}à revoir")
+        self.summary.setText(" · ".join(parts))
 
     def _update_buttons(self) -> None:
         c = self.controller
@@ -567,6 +719,7 @@ class ProcessingPage(QWidget):
             self.drop_area,
             self.add_files_button,
             self.add_folder_button,
+            self.add_button,
             self.output_edit,
             self.output_button,
             self.remove_button,
@@ -575,8 +728,18 @@ class ProcessingPage(QWidget):
             w.setEnabled(not busy)
         self.clear_button.setEnabled(not busy and has_inputs)
         self.analyze_button.setEnabled(not busy and has_inputs)
-        self.run_button.setEnabled(not busy and has_inputs)
         self.review_button.setEnabled(c.analysis is not None)
-        self.apply_button.setEnabled(not busy and c.analysis is not None)
         self.report_button.setEnabled(c.result is not None and not busy)
+        self.cancel_button.setVisible(busy)
         self.cancel_button.setEnabled(busy)
+        applying = self.applies_decisions()
+        self.run_button.setText(APPLY_LABEL if applying else RUN_LABEL)
+        self.run_button.setEnabled(not busy and (has_inputs or applying))
+        if applying:
+            self.run_button.setToolTip(
+                "Écrire les fichiers avec les décisions de revue, sans relancer l'analyse "
+                "(Ctrl+Entrée)."
+            )
+        else:
+            gloss = REVIEW_POLICY_GLOSSES[c.review_policy()]
+            self.run_button.setToolTip(typo(f"{gloss} (Ctrl+Entrée)"))

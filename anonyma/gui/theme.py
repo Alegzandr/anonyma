@@ -46,6 +46,14 @@ class Tokens:
     info: str
     neutral: str
     control_border: str
+    #: Badge text per level, drawn on a ``badge_fill`` alpha of the level colour
+    #: (contrast >= 4.5:1, WCAG AA).
+    badge_success: str
+    badge_warning: str
+    badge_danger: str
+    badge_info: str
+    badge_neutral: str
+    badge_fill: float
 
 
 LIGHT = Tokens(
@@ -70,7 +78,13 @@ LIGHT = Tokens(
     danger="#b3322c",
     info="#2f5f98",
     neutral="#6b7280",
-    control_border="#9aa2b1",
+    control_border="#7d8696",
+    badge_success="#1e5a37",
+    badge_warning="#7a4c00",
+    badge_danger="#922520",
+    badge_info="#24497a",
+    badge_neutral="#4b5263",
+    badge_fill=0.14,
 )
 
 DARK = Tokens(
@@ -95,7 +109,13 @@ DARK = Tokens(
     danger="#e0706a",
     info="#6c9bd4",
     neutral="#9aa3b2",
-    control_border="#6b7385",
+    control_border="#737b8d",
+    badge_success="#8fd6ad",
+    badge_warning="#ecc47a",
+    badge_danger="#f3a29d",
+    badge_info="#a5c4ea",
+    badge_neutral="#c3c9d3",
+    badge_fill=0.22,
 )
 
 _current: Tokens = LIGHT
@@ -229,7 +249,7 @@ def _field_rules(t: Tokens, down: str, up: str) -> str:
     """Text fields, combo boxes and spin boxes: same height, radius and focus as buttons."""
     return f"""
 QLineEdit, QComboBox, QAbstractSpinBox {{
-    border: 1px solid {t.control_border}; border-radius: 5px; padding: 4px 8px;
+    border: 1px solid {t.control_border}; border-radius: 4px; padding: 4px 8px;
     background: {t.base}; color: {t.text}; min-height: 20px;
     selection-background-color: {t.selection}; selection-color: {t.text};
 }}
@@ -255,9 +275,9 @@ QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
     subcontrol-origin: border; width: 20px; border: none; border-left: 1px solid {t.border};
     background: transparent;
 }}
-QAbstractSpinBox::up-button {{ subcontrol-position: top right; border-top-right-radius: 5px; }}
+QAbstractSpinBox::up-button {{ subcontrol-position: top right; border-top-right-radius: 4px; }}
 QAbstractSpinBox::down-button {{
-    subcontrol-position: bottom right; border-bottom-right-radius: 5px;
+    subcontrol-position: bottom right; border-bottom-right-radius: 4px;
 }}
 QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{
     background: {t.alt_base};
@@ -306,42 +326,52 @@ QToolTip {{ color: {t.text}; background: {t.surface}; border: 1px solid {t.borde
     background: transparent; border: none; border-radius: 0;
     color: {t.sidebar_text}; outline: 0; padding: 4px 0;
 }}
-#Sidebar::item {{ padding: 10px 14px; margin: 1px 8px; border-radius: 6px; }}
+#Sidebar::item {{
+    padding: 10px 14px; margin: 1px 8px; border-radius: 4px; border: 2px solid transparent;
+}}
 #Sidebar::item:selected {{ background: {t.sidebar_selected}; color: {t.text}; }}
 #Sidebar::item:hover:!selected {{ background: {t.sidebar_hover}; }}
+#Sidebar::item:focus {{ border-color: {t.accent}; }}
 #AppTitle {{ font-size: 13pt; font-weight: 600; color: {t.text}; }}
 #SidebarFooter {{ color: {t.muted}; font-size: 9pt; }}
 #PageTitle {{ font-size: 15pt; font-weight: 600; color: {t.text}; }}
 #PageSubtitle, .muted, QLabel[muted="true"] {{ color: {t.muted}; }}
 #SectionTitle {{ font-weight: 600; color: {t.text}; }}
+#Verdict {{ font-size: 12pt; font-weight: 600; color: {t.text}; }}
 QFrame#Card {{
-    background: {t.surface}; border: 1px solid {t.border}; border-radius: 8px;
+    background: {t.surface}; border: 1px solid {t.border}; border-radius: 4px;
 }}
 QFrame#DropArea {{
-    background: {t.alt_base}; border: 1.5px dashed {t.border}; border-radius: 8px;
+    background: {t.alt_base}; border: 1.5px dashed {t.border}; border-radius: 4px;
 }}
 QFrame#DropArea[active="true"] {{ border-color: {t.accent}; background: {t.selection}; }}
-QFrame#Banner {{ border-radius: 6px; border: 1px solid {t.border}; background: {t.alt_base}; }}
+QFrame#Banner {{ border-radius: 4px; border: 1px solid {t.border}; background: {t.alt_base}; }}
 QFrame#Banner[level="warning"] {{ border-color: {t.warning}; }}
 QFrame#Banner[level="error"] {{ border-color: {t.danger}; }}
 QFrame#Banner[level="success"] {{ border-color: {t.success}; }}
 QPushButton {{
-    padding: 5px 14px; border-radius: 5px; border: 1px solid {t.border};
+    padding: 5px 14px; border-radius: 4px; border: 1px solid {t.control_border};
     background: {t.surface}; color: {t.text}; min-height: 20px;
 }}
 QPushButton:hover {{ border-color: {t.muted}; background: {t.alt_base}; }}
 QPushButton:pressed {{ background: {t.sidebar_selected}; }}
-QPushButton:focus {{ border-color: {t.accent}; }}
+QPushButton:focus {{ border: 2px solid {t.accent}; padding: 4px 13px; }}
+/* Segmented toggles (« Texte » / « Visuel »). */
+QPushButton:checked {{
+    background: {t.selection}; border-color: {t.accent}; color: {t.text}; font-weight: 600;
+}}
 QPushButton:disabled {{ color: {t.muted}; background: {t.alt_base}; border-color: {t.border}; }}
 QPushButton:flat {{ border-color: transparent; background: transparent; }}
 QPushButton:flat:hover {{ background: {t.alt_base}; }}
 /* Menu buttons (« Actions groupées »): the push-button look plus a chevron. */
 QToolButton[popupMode="2"] {{
-    padding: 5px 22px 5px 12px; border-radius: 5px; border: 1px solid {t.border};
+    padding: 5px 22px 5px 12px; border-radius: 4px; border: 1px solid {t.control_border};
     background: {t.surface}; color: {t.text}; min-height: 20px;
 }}
 QToolButton[popupMode="2"]:hover {{ border-color: {t.muted}; background: {t.alt_base}; }}
-QToolButton[popupMode="2"]:focus {{ border-color: {t.accent}; }}
+QToolButton[popupMode="2"]:focus {{
+    border: 2px solid {t.accent}; padding: 4px 21px 4px 11px;
+}}
 QToolButton[popupMode="2"]:disabled {{
     color: {t.muted}; background: {t.alt_base}; border-color: {t.border};
 }}
@@ -355,14 +385,14 @@ QPushButton[primary="true"] {{
 QPushButton[primary="true"]:hover {{
     background: {t.accent_hover}; border-color: {t.accent_hover};
 }}
-QPushButton[primary="true"]:focus {{ border-color: {t.text}; }}
+QPushButton[primary="true"]:focus {{ border: 2px solid {t.text}; }}
 QPushButton[primary="true"]:disabled {{
     background: {t.border}; border-color: {t.border}; color: {t.muted};
 }}
 QPushButton[danger="true"] {{ color: {t.danger}; }}
 QPushButton[danger="true"]:disabled {{ color: {t.muted}; }}
 QGroupBox {{
-    border: 1px solid {t.border}; border-radius: 8px; margin-top: 14px; padding: 12px 10px 8px;
+    border: 1px solid {t.border}; border-radius: 4px; margin-top: 14px; padding: 12px 10px 8px;
     background: {t.surface};
 }}
 QGroupBox::title {{
@@ -373,7 +403,7 @@ QHeaderView::section {{
     border-bottom: 1px solid {t.border}; padding: 5px 8px; font-weight: 600;
 }}
 QTableView, QTreeView, QListView, QPlainTextEdit, QTextEdit {{
-    border: 1px solid {t.border}; border-radius: 6px; background: {t.base};
+    border: 1px solid {t.border}; border-radius: 4px; background: {t.base};
     selection-background-color: {t.selection}; selection-color: {t.text};
 }}
 QProgressBar {{
@@ -474,4 +504,10 @@ BADGE_LEVELS = ("success", "warning", "danger", "info", "neutral")
 
 
 def badge_color(level: str) -> QColor:
+    """Level colour (badge fill, before ``Tokens.badge_fill`` alpha)."""
     return QColor(getattr(_current, level if level in BADGE_LEVELS else "neutral"))
+
+
+def badge_text(level: str) -> QColor:
+    """Readable text colour of a badge of ``level`` on its tinted fill."""
+    return QColor(getattr(_current, "badge_" + (level if level in BADGE_LEVELS else "neutral")))

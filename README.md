@@ -75,28 +75,33 @@ passe en local : aucune donnée ne quitte le poste.
 
 - **Traitement** : déposez des fichiers ou des dossiers, choisissez un dossier de sortie
   distinct des originaux, puis cliquez sur « Anonymiser ». Le réglage **Relecture** décide
-  si ce bouton s'arrête pour une revue : *aucune* (écriture directe), *entités incertaines
-  seulement* (par défaut) ou *systématique*. « Analyser », « Revoir » et « Appliquer »
-  restent disponibles pour garder la main. En pseudonymisation, une phrase secrète protège
-  la table de correspondance chiffrée.
+  si ce bouton s'arrête pour une revue : *aucune* (écriture directe), *entités incertaines*
+  (par défaut) ou *systématique*. Dès que des décisions de revue existent, le même bouton
+  devient « Appliquer les décisions » ; relancer l'analyse, qui les effacerait, demande
+  d'abord confirmation. « Analyser » (sans rien écrire) et « Revoir » restent disponibles.
+  En pseudonymisation, une phrase secrète protège la table de correspondance chiffrée.
 - **Revue** (facultative) : une ligne par entité, par exemple « Bérénice Lagarde —
-  PERSONNE — 14 occurrences dans 6 fichiers », les plus incertaines d'abord, avec le motif
-  de détection. Une décision (valider, rejeter, changer le type) s'applique à toutes les
-  occurrences du lot. Dépliez une ligne pour voir chaque occurrence dans son contexte et y
-  accéder dans la vue côte à côte : texte (en-têtes de courriel regroupés), ou rendu
-  visuel des PDF et des images avec les zones encadrées. Un compteur « 12 / 40 décidées »,
-  le bouton « Suivante non décidée », la recherche et les actions groupées accélèrent la
-  relecture. Sélectionnez du texte pour ajouter une entité oubliée. Anonyma propose
-  ensuite d'ajouter un faux positif à la liste blanche, ou de toujours masquer un ajout
-  (modification annulable). Raccourcis : N / P naviguer, Maj+N suivante non décidée,
-  V valider, R rejeter, T type, A ajouter.
-- **Rapport** : bilan du lot, exportable en JSON, Markdown ou HTML. Les fichiers en
+  Personne — 14 occurrences dans 6 fichiers », les plus incertaines d'abord, avec le
+  niveau de confiance et le détecteur. Une décision (masquer, ne pas masquer, changer le
+  type) s'applique à toutes les occurrences du lot. Dépliez une ligne pour voir chaque
+  occurrence dans son contexte et y accéder dans la vue côte à côte : texte (en-têtes de
+  courriel regroupés), ou rendu visuel des PDF et des images avec les zones encadrées. Un
+  compteur « 12 / 40 décidées », le bouton « Suivante non décidée », la recherche, les
+  filtres et les actions groupées accélèrent la relecture. Sélectionnez du texte pour
+  ajouter une entité oubliée. Anonyma propose ensuite de ne plus jamais masquer un faux
+  positif, ou de toujours masquer un ajout (modification annulable). Raccourcis, affichés
+  sur les boutons : N / P naviguer, Maj+N suivante non décidée, V masquer, R ne pas
+  masquer, O ne pas masquer l'occurrence, T changer le type, U retirer la décision,
+  A ajouter, Ctrl+Entrée appliquer les décisions. Partout : Ctrl+1 à Ctrl+5 changent de
+  page (Traitement, Revue, Rapport, Modèles, Réglages), Ctrl+O ajoute des fichiers.
+- **Rapport** : verdict du lot, exportable en JSON, Markdown ou HTML. Les fichiers en
   quarantaine (dossier `<sortie>_quarantaine`, à côté du dossier de sortie) sont expliqués et ne doivent pas être diffusés. Chaque
   résidu s'ouvre à son emplacement dans le fichier produit, et « Corriger et réappliquer »
   ramène à la revue puis remplace les fichiers produits précédemment.
 - **Modèles** et **Réglages** : matériel détecté, modèles installés (le téléchargement est
   la seule action réseau, toujours à votre demande) et réglages enregistrés dans
-  `data/config.json`.
+  `data/config.json`, en onglets : Détection, Remplacement, Listes (valeurs à ne jamais
+  masquer, valeurs à toujours masquer, listes métier), Organisations, Avancé et Système.
 
 Statuts d'un fichier : **Anonymisé** (vérifié, rien à signaler) ; **À revoir** (vérifié,
 mais des entités incertaines ont été masquées par précaution ou un détecteur statistique

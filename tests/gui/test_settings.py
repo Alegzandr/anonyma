@@ -63,7 +63,7 @@ def test_settings_round_trip(window: MainWindow, tmp_path: Path) -> None:
     page.load()
     assert page.profile.currentData() == Profile.STANDARD.value
     assert page.business_lists.count() == 1
-    assert "2 terme(s)" in page.business_lists.item(0).text()
+    assert "2 termes" in page.business_lists.item(0).text()
 
     # Removing the list deletes the portable copy on save.
     page.business_lists.setCurrentRow(0)
