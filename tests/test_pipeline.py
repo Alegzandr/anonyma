@@ -367,3 +367,43 @@ def test_broken_pool_finishes_inline(
     events: list[object] = []
     results = pipeline._map(_crash_in_worker, jobs, "analyse", events.append, None)
     assert results == [j[0] for j in jobs]
+
+
+def test_job_title_is_verified_in_its_own_file_only(tmp_path: Path) -> None:
+    """A job title found next to a person is not a residue of every other file."""
+    from anonyma.resolver import resolve
+
+    inputs = tmp_path / "in"
+    inputs.mkdir()
+    (inputs / "a.txt").write_text("Mme Vidal, présidente, a signé.\n", encoding="utf-8")
+    (inputs / "b.txt").write_text("La présidente du club est absente.\n", encoding="utf-8")
+    config = Config(profile=Profile.LIGHT, workers=1)
+    pipeline = Pipeline(config)
+    analysis = pipeline.analyze([inputs / "a.txt", inputs / "b.txt"])
+    try:
+        doc_a = next(d for d in analysis.documents if d.name.endswith("a.txt"))
+        body = next(s for s in doc_a.segments if "présidente" in s.text)
+        start = body.text.index("présidente")
+        title = Entity("FONCTION", "présidente", doc_a.id, body.id, start, start + 10, 0.8, "test")
+        analysis.entities, analysis.clusters = resolve(
+            [*analysis.entities, title], config, analysis.clusters
+        )
+        result = pipeline.apply(analysis, tmp_path / "out")
+    finally:
+        pipeline.close(analysis)
+    by_name = {r.output_name: r for r in result.results}
+    assert by_name["b.txt"].status is DocumentStatus.ANONYMIZED
+    assert "présidente" in (tmp_path / "out" / "b.txt").read_text(encoding="utf-8")
+    assert "présidente" not in (tmp_path / "out" / "a.txt").read_text(encoding="utf-8")
+
+
+def test_person_file_name_keeps_one_substitute(tmp_path: Path) -> None:
+    folder = tmp_path / "in" / "Ophélie GAUTHIER"
+    folder.mkdir(parents=True)
+    (folder / "CV Ophélie Gauthier.txt").write_text("Rien.\n", encoding="utf-8")
+    pipeline = Pipeline(Config(profile=Profile.LIGHT, workers=1))
+    result = pipeline.run([tmp_path / "in"], tmp_path / "out")
+    names = [r.output_name for r in result.results]
+    assert len(names) == 1
+    folder_part, file_part = names[0].split("/")[-2:]
+    assert file_part == f"CV {folder_part}.txt"  # same tag, extension intact

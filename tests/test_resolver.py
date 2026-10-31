@@ -242,3 +242,49 @@ def test_propagation_scales_to_many_segments() -> None:
     doc = _doc(*((f"ligne {i} Nom{i % 300:04d} fin", SegmentKind.CELL) for i in range(3000)))
     extra = propagate([doc], clusters, kept, config)
     assert len(extra) == 3000
+
+
+# -- leak classes found by the benchmark (tests/benchmark) ------------------------
+
+
+def test_longer_form_around_a_partial_mention_is_propagated() -> None:
+    """``Kowalczyk Jean-Baptiste`` (a JSON key) where only ``Jean-Baptiste`` was found."""
+    config = Config()
+    doc = _doc(("Kowalczyk Jean-Baptiste", SegmentKind.ATTRIBUTE))
+    partial = Entity("PERSONNE", "Jean-Baptiste", doc.id, "s0", 10, 23, 0.65, "regex_fr")
+    seed = ent("Jean-Baptiste Kowalczyk", seg="other")
+    kept, clusters = resolve([partial, seed], config)
+    extra = propagate([doc], clusters, kept, config)
+    assert ("s0", "Kowalczyk Jean-Baptiste") in {(e.segment_id, e.value) for e in extra}
+    # Forms inside an existing mention add nothing.
+    assert not any(e.segment_id == "s0" and e.start >= 10 for e in extra)
+
+
+def test_initials_are_propagated() -> None:
+    config = Config()
+    doc = _doc(
+        ("Signé F.D.V. ; le badge de J.-B. Kowalczyk ; J.-B. K.", SegmentKind.BODY),
+    )
+    seeds = [ent("Firmin Delacroix-Vasseur", seg="a"), ent("Jean-Baptiste Kowalczyk", seg="b")]
+    kept, clusters = resolve(seeds, config)
+    values = {e.value for e in propagate([doc], clusters, kept, config)}
+    assert {"F.D.V.", "J.-B. Kowalczyk", "J.-B. K."} <= values
+
+
+def test_names_glued_by_ocr_are_propagated() -> None:
+    config = Config()
+    doc = _doc(("responsable RH—TransportsValmontSAS", SegmentKind.OCR))
+    kept, clusters = resolve([ent("Transports Valmont SAS", "ORGANISATION", seg="z")], config)
+    values = [e.value for e in propagate([doc], clusters, kept, config)]
+    assert values == ["TransportsValmontSAS"]
+
+
+def test_job_titles_stay_in_their_file() -> None:
+    """« présidente » next to Mme Vidal is not masked in every other file of the batch."""
+    config = Config()
+    first = _doc(("Mme Vidal, présidente. La présidente a signé.", SegmentKind.BODY))
+    other = _doc(("La présidente du club est absente.", SegmentKind.BODY), name="autre.txt")
+    seed = Entity("FONCTION", "présidente", first.id, "s0", 11, 21, 0.8, "gliner")
+    kept, clusters = resolve([seed], config)
+    extra = propagate([first, other], clusters, kept, config)
+    assert {e.document_id for e in extra} == {first.id}

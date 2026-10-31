@@ -58,7 +58,7 @@ from anonyma.models import (
     new_id,
 )
 from anonyma.replacer import Replacer, SubstitutionTable, build_plan
-from anonyma.resolver import propagate, resolve
+from anonyma.resolver import DOCUMENT_LOCAL_TYPES, propagate, resolve
 from anonyma.textutils import find_all, normalize, safe_filename
 from anonyma.verifier import Verifier
 
@@ -861,18 +861,32 @@ class Pipeline:
         resolved = self.resolve_decisions(analysis, decisions)
         entities, active = resolved.entities, resolved.clusters
         table = Replacer(self.config, self.store).assign(active, entities)
-        sensitive = sorted({(v, c.entity_type) for c in active.values() for v in c.variants})
+        local = {cid for cid, c in active.items() if c.entity_type in DOCUMENT_LOCAL_TYPES}
+        batch_wide = sorted(
+            {
+                (v, c.entity_type)
+                for cid, c in active.items()
+                if cid not in local
+                for v in c.variants
+            }
+        )
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)
         review = {cid for cid, c in active.items() if c.needs_review}
 
         jobs: list[tuple[Any, ...]] = []
         for doc in analysis.documents:
             tree = {d.id for d in doc.walk()}
+            doc_entities = [e for e in entities if e.document_id in tree]
+            # Document-local values (job titles) are only searched in their own file.
+            here = {e.cluster_id for e in doc_entities if e.cluster_id in local}
+            sensitive = batch_wide + sorted(
+                {(v, active[cid].entity_type) for cid in here for v in active[cid].variants}
+            )
             jobs.append(
                 (
                     _WriteJob(
                         document=doc,
-                        entities=[e for e in entities if e.document_id in tree],
+                        entities=doc_entities,
                         table=table,
                         sensitive=sensitive,
                         allowed=allowed,
