@@ -189,15 +189,6 @@ def pending_review(analysis: BatchAnalysis, decisions: ReviewDecisions) -> list[
     return [c for c in analysis.review_clusters() if c.id not in decided]
 
 
-def order_documents(documents: Sequence[Document]) -> dict[str, int]:
-    """Depth-first position of every document (to sort rows across the batch)."""
-    order: dict[str, int] = {}
-    for root in documents:
-        for doc in root.walk():
-            order[doc.id] = len(order)
-    return order
-
-
 # ---------------------------------------------------------------------------
 # Preview text
 # ---------------------------------------------------------------------------

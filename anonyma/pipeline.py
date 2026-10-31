@@ -139,9 +139,6 @@ class BatchAnalysis:
                 return doc
         raise KeyError(document_id)
 
-    def entities_for(self, document_id: str) -> list[Entity]:
-        return [e for e in self.entities if e.document_id == document_id]
-
     def review_clusters(self) -> list[EntityCluster]:
         return [c for c in self.clusters.values() if c.needs_review]
 

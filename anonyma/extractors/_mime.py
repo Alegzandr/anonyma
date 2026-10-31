@@ -39,7 +39,6 @@ import io
 import re
 import uuid
 from collections.abc import Mapping, Sequence
-from concurrent.futures import CancelledError
 from dataclasses import dataclass, field
 from email.generator import BytesGenerator
 from email.message import Message
@@ -57,7 +56,6 @@ from anonyma.extractors._html import (
     plan_edits,
 )
 from anonyma.models import (
-    ArchiveBombError,
     ChildOutput,
     Document,
     ExtractionContext,
@@ -804,12 +802,6 @@ def build_eml(
     )
     head += f"MIME-Version: 1.0{nl}"
     return head.encode("utf-8") + body
-
-
-def reraise_fatal(exc: BaseException) -> None:
-    """Re-raise exceptions that must cross plugin ``except`` clauses."""
-    if isinstance(exc, (ArchiveBombError, CancelledError)):
-        raise exc
 
 
 __all__ = [

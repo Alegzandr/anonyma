@@ -75,11 +75,6 @@ class HardwareInfo:
     machine: str = ""
     onnxruntime_version: str = ""
 
-    @property
-    def accelerated(self) -> bool:
-        """True when onnxruntime offers a GPU/NPU execution provider."""
-        return any(p in ACCELERATED_PROVIDERS for p in self.providers)
-
 
 # ---------------------------------------------------------------------------
 # Detection

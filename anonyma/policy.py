@@ -200,9 +200,6 @@ class OrgList:
         label = organization_label(host)
         return label is not None and label.replace("-", "") in self.compacts
 
-    def matches_exact_name(self, value: str) -> bool:
-        return _compact(value) in self.compacts if value.strip() else False
-
 
 @lru_cache(maxsize=16)
 def compile_list(entries: tuple[str, ...]) -> OrgList:

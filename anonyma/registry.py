@@ -116,11 +116,6 @@ def supported_extensions() -> dict[str, str]:
     return dict(_extensions)
 
 
-def detector_classes() -> dict[str, type[Detector]]:
-    load_plugins()
-    return dict(_detectors)
-
-
 def build_detectors(config: Config, profile: Profile | None = None) -> list[Detector]:
     """Instantiate every detector enabled for ``profile`` and available."""
     load_plugins()

@@ -101,11 +101,6 @@ WHITE_LEVEL = 245
 FILLED_OR_STROKED = pymupdf.mupdf.FZ_STEXT_FILLED | pymupdf.mupdf.FZ_STEXT_STROKED
 
 
-def open_pdf(source: Path) -> pymupdf.Document:
-    """Open ``source`` with every layer visible (see ``open_document``)."""
-    return open_document(source)[0]
-
-
 @dataclass(slots=True)
 class PageText:
     """Text layer of one page."""

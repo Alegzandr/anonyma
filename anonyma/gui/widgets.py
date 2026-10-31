@@ -57,12 +57,6 @@ def page_header(title: str, subtitle: str = "") -> QWidget:
     return box
 
 
-def section_title(text: str) -> QLabel:
-    label = QLabel(text)
-    label.setObjectName("SectionTitle")
-    return label
-
-
 def muted(text: str) -> QLabel:
     label = QLabel(text)
     label.setProperty("muted", True)
@@ -316,40 +310,6 @@ class BadgeDelegate(QStyledItemDelegate):
     def sizeHint(self, option: QStyleOptionViewItem, index: IndexLike) -> QSize:
         size = super().sizeHint(option, index)
         return QSize(size.width() + 20, max(size.height(), 26))
-
-
-class EntityTypeDelegate(QStyledItemDelegate):
-    """Draws an entity type as a pill in its highlight colour."""
-
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: IndexLike) -> None:
-        entity_type = index.data(Qt.ItemDataRole.UserRole)
-        if not entity_type:
-            super().paint(painter, option, index)
-            return
-        self.initStyleOption(option, index)
-        option.text = ""
-        style = option.widget.style() if option.widget else None
-        if style is not None:
-            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.widget)
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        bg, fg = theme.entity_colors(str(entity_type))
-        metrics = QFontMetrics(painter.font())
-        text = str(index.data(Qt.ItemDataRole.DisplayRole) or entity_type)
-        rect = option.rect
-        width = min(rect.width() - 6, metrics.horizontalAdvance(text) + 14)
-        height = min(rect.height() - 6, metrics.height() + 4)
-        pill = QRectF(rect.x() + 4, rect.center().y() - height / 2 + 1, width, height)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(bg)
-        painter.drawRoundedRect(pill, 4, 4)
-        painter.setPen(fg)
-        painter.drawText(
-            pill,
-            Qt.AlignmentFlag.AlignCenter,
-            metrics.elidedText(text, Qt.TextElideMode.ElideRight, int(width) - 6),
-        )
-        painter.restore()
 
 
 class ProgressDelegate(QStyledItemDelegate):

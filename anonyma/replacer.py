@@ -540,21 +540,6 @@ def _dates(
     return out
 
 
-def _simple(make: Callable[[str, random.Random], str]) -> Generator:
-    def generate(
-        st: _Realistic, cluster: EntityCluster, rng: random.Random, known: str | None
-    ) -> dict[str, str]:
-        if known is not None:
-            return _same_for_all(cluster, known)
-        out = {v: make(v, rng.__class__(hash((rng.random(), v)))) for v in cluster.variants}
-        base = make(cluster.canonical, rng)
-        out[cluster.canonical] = base
-        out[""] = base
-        return out
-
-    return generate
-
-
 def _shared(make: Callable[[str, random.Random], str]) -> Generator:
     """One substitute for the cluster, case mirrored per variant."""
 

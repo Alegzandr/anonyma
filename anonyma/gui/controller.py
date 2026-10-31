@@ -265,15 +265,6 @@ class BatchController(QObject):
         task.failed.connect(ko)
         task.start()
 
-    def queued_files(self) -> list[tuple[Path, str, Path]]:
-        """``(file, logical name, input root)`` of the inventoried files."""
-        return [(q.path, q.name, q.root) for q in self.queue]
-
-    @staticmethod
-    def format_for(path: Path) -> str | None:
-        """Format id by extension (cheap, for display before analysis)."""
-        return registry.supported_extensions().get(path.suffix.lower())
-
     # -- output folder -----------------------------------------------------------
 
     def check_output_dir(self, path: Path) -> str:
@@ -309,9 +300,6 @@ class BatchController(QObject):
 
     def store_path(self) -> Path:
         return default_store_path(self.context.config)
-
-    def needs_passphrase(self) -> bool:
-        return self.context.config.regime is Regime.PSEUDONYMIZATION
 
     def review_policy(self) -> str:
         return review_policy(self.context.config)
@@ -528,17 +516,6 @@ class BatchController(QObject):
     def effective_is_current(self) -> bool:
         return self._effective is not None and self._effective_for == self._effective_generation
 
-    def effective_now(self) -> EffectiveState | None:
-        """Synchronous, always current preview (small batches, tests)."""
-        if self.analysis is None:
-            return None
-        if not self.effective_is_current():
-            self._effective = compute_effective(
-                self.analysis, self.decisions, self.context.config.mode
-            )
-            self._effective_for = self._effective_generation
-        return self._effective
-
     def request_effective(self) -> None:
         """Recompute the preview in the background (coalesced)."""
         if self.analysis is None or self._effective_running:
@@ -753,10 +730,6 @@ class BatchController(QObject):
         task.start()
 
     # -- shutdown -------------------------------------------------------------------------
-
-    def wait_idle(self, msecs: int = 30_000) -> bool:
-        """Wait for background tasks (tests)."""
-        return self._runner.wait_all(msecs)
 
     def shutdown(self, wait_ms: int = 30_000) -> None:
         """Cancel running work, wait for it, and delete the batch temporary folder."""
