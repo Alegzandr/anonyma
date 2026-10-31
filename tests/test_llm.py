@@ -303,6 +303,10 @@ def test_type_sanity_of_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
         _seg("d", "le 3 mars 2024"),
         _seg("e", "Mme Soizic Le Goff, née le 12/07/1984, demeure 3 impasse des Mouettes."),
         _seg("f", "Le fils du maire de Plouha et la mairie de Pont-Aven."),
+        _seg("g", "Pièce jointe"),
+        _seg("h", "Rendez-vous au moulin de l'Aven, rue des lilas."),
+        _seg("i", "Quimper"),
+        _seg("j", "Envoyé de mon iPhone"),
     ]
     answer = [
         ("Re: Réunion", "IDENTIFIANT_INDIRECT"),
@@ -313,13 +317,21 @@ def test_type_sanity_of_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
         ("3 impasse des Mouettes", "ADRESSE"),
         ("fils du maire de Plouha", "IDENTIFIANT_INDIRECT"),
         ("mairie de Pont-Aven", "ORGANISATION"),
+        ("Pièce jointe", "LIEU"),
+        ("À l'attention de", "ADRESSE"),
+        ("moulin de l'Aven", "LIEU"),
+        ("rue des lilas", "ADRESSE"),
+        ("Quimper", "LIEU"),
+        ("Envoyé de mon iPhone", "ORGANISATION"),
     ]
     found, _ = _detect(monkeypatch, segments, answer)
     assert sorted(e.value for e in found) == [
         "12/07/1984",
         "3 impasse des Mouettes",
+        "Quimper",
         "fils du maire de Plouha",
         "mairie de Pont-Aven",
+        "moulin de l'Aven",
     ]
 
 

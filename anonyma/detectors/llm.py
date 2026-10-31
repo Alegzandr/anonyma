@@ -23,6 +23,7 @@ from anonyma.data import lexicon
 from anonyma.detectors._filters import (
     CALENDAR_WORDS,
     COMMON_WORD_SCORE,
+    FUNCTION_WORDS,
     mid_sentence,
     plausible,
     skip_segment,
@@ -229,6 +230,8 @@ def _keep(segment: Segment, entity_type: str, value: str, start: int) -> bool:
         return any(c.isdigit() for c in value) and _born(segment.text)
     if entity_type == EntityType.INDIRECT and not PERSON_CUES.search(normalize(value)):
         return False
+    if entity_type in _PROPER_TYPES and not _proper(value, segment.text, start):
+        return False  # « À l'attention de » as ADRESSE, « Pièce jointe » as LIEU
     text = segment.text
     filename = segment.context.kind is SegmentKind.FILENAME
     capitalized = not filename and value[:1].isupper() and mid_sentence(text, start)
@@ -245,6 +248,30 @@ def _keep(segment: Segment, entity_type: str, value: str, start: int) -> bool:
         ocr=segment.context.kind is SegmentKind.OCR,
         capitalized_mid_sentence=capitalized,
     )
+
+
+_PROPER_TYPES = frozenset({EntityType.ORGANIZATION, EntityType.LOCATION, EntityType.ADDRESS})
+_WORD = regex.compile(r"[\p{L}]+(?:['’][\p{L}]+)*")
+
+
+def _proper(value: str, text: str, start: int) -> bool:
+    """A digit, or a capitalized word that is not a grammatical one (``l'Aven`` counts)
+    and owes its capital to more than its place: a single word (« Quimper »), a word
+    after the first, or a sentence-case phrase in the middle of a sentence
+    (« Pièce jointe » or « Envoyé de mon iPhone » alone are no place)."""
+    if any(c.isdigit() for c in value):
+        return True
+    words = [
+        (w.start(), regex.split(r"['’]", w.group())[-1])
+        for w in _WORD.finditer(value)
+        if normalize(w.group()) not in FUNCTION_WORDS
+    ]
+    if not words:
+        return False
+    if any(core[:1].isupper() for _, core in words[1:]):
+        return True
+    offset, first = words[0]
+    return first[:1].isupper() and (len(words) == 1 or mid_sentence(text, start + offset))
 
 
 def _born(text: str) -> bool:
