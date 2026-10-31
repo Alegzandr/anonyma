@@ -19,7 +19,7 @@ from __future__ import annotations
 import enum
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
@@ -693,9 +693,26 @@ class Detector(ABC):
     deterministic: ClassVar[bool] = True
     #: False when the verifier must not run it again on outputs (slow LLM).
     verify: ClassVar[bool] = True
+    #: True: runs after the other detectors and receives their entities
+    #: (:meth:`detect_after`), to skip what they already cover.
+    uses_prior: ClassVar[bool] = False
 
     def __init__(self, config: Config) -> None:
         self.config = config
+        #: Set by the pipeline for long detections: ``(done, total)`` within the
+        #: current document. Counts only, never values.
+        self.on_progress: Callable[[int, int], None] | None = None
+
+    def report(self, done: int, total: int) -> None:
+        if self.on_progress is not None:
+            self.on_progress(done, total)
+
+    def detect_after(
+        self, segments: Sequence[Segment], document_id: str, prior: Sequence[Entity]
+    ) -> list[Entity]:
+        """:meth:`detect` for a detector with ``uses_prior``: ``prior`` holds the
+        entities the other detectors found in these segments."""
+        return self.detect(segments, document_id)
 
     @classmethod
     def is_available(cls, config: Config) -> bool:

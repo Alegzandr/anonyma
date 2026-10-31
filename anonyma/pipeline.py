@@ -127,6 +127,12 @@ class ProgressEvent:
     #: Index of the item just finished, in input order (``BatchAnalysis.documents``
     #: order); None for start/global events.
     index: int | None = None
+    #: Progress inside the file being analysed (single-process runs only): segments
+    #: done out of ``item_total`` and the detector at work (French label). Counts
+    #: and labels only, never a value or a name.
+    item_done: int = 0
+    item_total: int = 0
+    item_step: str = ""
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
@@ -583,10 +589,19 @@ def _extract_into(
 # ---------------------------------------------------------------------------
 
 
+#: ``(done, total, step)`` progress inside the file being analysed, set by
+#: :meth:`Pipeline._map` around each item of a single-process run.
+ItemProgress = Callable[[int, int, str], None]
+_item_progress: ItemProgress | None = None
+
+
 def detect_tree(root: Document, config: Config) -> list[Entity]:
-    """Run the detector chain on a document and all its descendants."""
+    """Run the detector chain on a document and all its descendants. Detectors with
+    ``uses_prior`` run last and receive what the others found."""
     entities: list[Entity] = []
-    detectors = detectors_for(config)
+    chain = detectors_for(config)
+    detectors = [d for d in chain if not d.uses_prior] + [d for d in chain if d.uses_prior]
+    hook = _item_progress
     atomic = AtomicIndex()
     for doc in root.walk():
         # Unreadable items still get their name analysed: it shows up in reports.
@@ -600,9 +615,16 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
         # (``Contrat_jean_DUPONT.pdf`` -> ``Contrat jean DUPONT pdf``); offsets and
         # values still refer to the real name.
         view = [_name_view(s) if s.id == FILENAME_SEGMENT_ID else s for s in segments]
+        first = len(entities)
         for detector in detectors:
+            if hook is not None:
+                step = _detector_label(detector.name)
+                detector.on_progress = lambda d, t, step=step: hook(d, t, step)
             try:
-                found = detector.detect(view, doc.id)
+                if detector.uses_prior:
+                    found = detector.detect_after(view, doc.id, entities[first:])
+                else:
+                    found = detector.detect(view, doc.id)
             except Exception as exc:
                 log.warning(
                     "detector %s failed on %s: %s", detector.name, doc.id, type(exc).__name__
@@ -629,6 +651,7 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
                 e.value = text[e.start : e.end]
                 e.document_id = doc.id
                 entities.append(e)
+            detector.on_progress = None
     return entities
 
 
@@ -1381,13 +1404,22 @@ class Pipeline:
         if progress:
             progress(ProgressEvent(stage, 0, total))
         if self._workers(total) == 1:
+            global _item_progress
+
+            def item(done_: int, total_: int, step: str) -> None:
+                if progress is not None:
+                    progress(ProgressEvent(stage, len(finished), total, None, done_, total_, step))
+
             for i, job in enumerate(jobs):
                 if cancel and cancel.cancelled:
                     break
+                _item_progress = item if progress is not None else None
                 try:
                     done(i, fn(*job))
                 except CancelledError:  # raised inside the item (inline extraction)
                     break
+                finally:
+                    _item_progress = None
             return results
         try:
             self._pool(fn, jobs, list(range(total)), self._workers(total), cancel, done)

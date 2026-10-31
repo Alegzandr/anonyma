@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from anonyma import registry
-from anonyma.frenchtext import NBSP, plural, typo
+from anonyma.frenchtext import NBSP, item_progress, plural, typo
 from anonyma.gui import dialogs
 from anonyma.gui.controller import REVIEW_POLICIES, REVIEW_POLICY_GLOSSES, BatchController, Phase
 from anonyma.gui.itemmodels import QueueModel, QueueRow
@@ -556,7 +556,10 @@ class ProcessingPage(QWidget):
     def _on_progress(self, event: ProgressEvent) -> None:
         self._last_event = event
         label = STAGE_LABELS.get(event.stage, event.stage)
-        self.stage_label.setText(typo(f"{label} : {event.done} / {event.total}"))
+        text = f"{label} : {event.done} / {event.total}"
+        if event.item_total and event.done < event.total:
+            text += " · " + item_progress(event.item_done, event.item_total, event.item_step)
+        self.stage_label.setText(typo(text))
         self.progress_bar.setRange(0, max(event.total, 1))
         self.progress_bar.setValue(event.done)
         self._update_times()

@@ -23,7 +23,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from anonyma.frenchtext import plural
+from anonyma.frenchtext import item_progress, plural
 from anonyma.models import DocumentStatus, Profile, Regime, ReplacementMode, Severity
 
 if TYPE_CHECKING:
@@ -705,11 +705,17 @@ class Heartbeat:
         self._started = self._clock()
         self._last = self._started
         self._state: tuple[str, int, int] | None = None
+        #: Progress inside the current file (``ProgressEvent.item_*``), if any.
+        self._item = ""
 
     def update(self, event: ProgressEvent) -> None:
         with self._lock:
             previous = self._state
             self._state = (event.stage, event.done, event.total)
+            if event.item_total:
+                self._item = item_progress(event.item_done, event.item_total, event.item_step)
+            elif previous != self._state:
+                self._item = ""  # a file finished: its inner progress is over
             now = self._clock()
             changed = previous is None or previous[0] != event.stage
             finished = 0 < event.total <= event.done and previous != self._state
@@ -735,7 +741,8 @@ class Heartbeat:
         else:
             files = "fichier" if total < 2 else "fichiers"
             ending = ", terminé" if total and done >= total else "…"
-            self._write(f"{label} : {done}/{total} {files}{ending} ({elapsed})")
+            inner = f" · {self._item}" if self._item and done < total else ""
+            self._write(f"{label} : {done}/{total} {files}{ending}{inner} ({elapsed})")
         self._last = now
 
 
@@ -792,11 +799,15 @@ def progress_display(enabled: bool) -> Iterator[Callable[[ProgressEvent], None] 
         tasks: dict[str, Any] = {}
 
         def update(event: ProgressEvent) -> None:
+            label = labels.get(event.stage, event.stage)
             if event.stage not in tasks:
-                tasks[event.stage] = bar.add_task(
-                    labels.get(event.stage, event.stage), total=event.total
-                )
-            bar.update(tasks[event.stage], completed=event.done, total=event.total)
+                tasks[event.stage] = bar.add_task(label, total=event.total)
+            if event.item_total and event.done < event.total:
+                inner = item_progress(event.item_done, event.item_total, event.item_step)
+                label = f"{label} · {inner}"
+            bar.update(
+                tasks[event.stage], completed=event.done, total=event.total, description=label
+            )
 
         yield update
 

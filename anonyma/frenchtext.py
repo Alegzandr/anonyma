@@ -20,6 +20,20 @@ def plural(count: int, singular: str, plural_form: str | None = None) -> str:
     return f"{count}{NBSP}{word}"
 
 
+def grouped(count: int) -> str:
+    """« 7 217 »: thousands separated by a narrow no-break space."""
+    return f"{count:,}".replace(",", NNBSP)
+
+
+def item_progress(done: int, total: int, step: str) -> str:
+    """Progress inside the file being analysed: « fichier en cours : 1 240/7 217
+    segments · modèle de langue ». Counts and a detector label only."""
+    step = step[:1].lower() + step[1:]
+    noun = "segment" if total < 2 else "segments"
+    text = f"fichier en cours : {grouped(done)}/{grouped(total)} {noun}"
+    return f"{text} · {step}" if step else text
+
+
 def typo(text: str) -> str:
     """Replace the ordinary spaces French typography requires to be unbreakable (before
     « : ; ? ! » and inside « guillemets »), so Qt and terminals never wrap there."""
