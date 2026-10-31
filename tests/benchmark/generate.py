@@ -2690,6 +2690,69 @@ def letter_canvas(doc: Doc, image_id: str, p: Person, lines_extra: list[str]) ->
     return canvas
 
 
+def doc_pdf_signed() -> Doc:
+    """The e-signed PDF incident (``tests/fixtures/generators/signed_pdf.py``)."""
+    from tests.benchmark.common import norm_compact
+    from tests.fixtures.generators import signed_pdf as sig
+
+    doc = Doc(
+        "25_pdf_signe",
+        "pdf",
+        "PDF signé électroniquement : tampons de signature en images (nom en casse "
+        "mixte, horodatage vertical), référence hexadécimale en image et en QR code, "
+        "identifiant de transaction en texte invisible, signature numérique, nom de "
+        "fichier nominatif, éditeur en liste blanche (nom, URL, logo) à conserver",
+    )
+    doc.dir.mkdir(parents=True)
+    (doc.dir / sig.PDF_NAME).write_bytes(sig.signed_pdf())
+    doc.images["page2"] = {"kind": "pdf_page", "file": sig.PDF_NAME, "page": 1}
+    regions = sig.cert_page_regions()
+    entry = doc.add(
+        "PERSONNE",
+        sig.SIGNER,
+        "corps, champ de formulaire, tampon image (casse mixte), signature numérique, "
+        "métadonnées, XMP, nom de fichier",
+        sig.SIGNER,
+        sig.STAMP_NAME,
+        renderings=[
+            {"mode": "text", "text": sig.SIGNER},
+            {"mode": "text", "text": f"{sig.SURNAME} {sig.GIVEN}"},
+            {"mode": "text", "text": sig.SURNAME},
+            {"mode": "text", "text": "Quintavalle"},
+            {"mode": "text", "text": "Brezac"},
+        ],
+    )
+    entry["partial"].append({"mode": "word", "text": sig.GIVEN})
+    doc.region("PERSONNE", sig.SIGNER, "page2", regions["name"])
+    doc.add("EMAIL", sig.SIGNER_EMAIL, "corps, certificat de signature")
+    doc.add(
+        "HORODATAGE",
+        sig.TIMESTAMP,
+        "tampon image (vertical), date de signature, XMP",
+        renderings=[
+            {"mode": "text", "text": sig.TIMESTAMP.removesuffix(" UTC")},
+            {"mode": "compact", "text": "20260314104207"},
+        ],
+    )
+    doc.region("HORODATAGE", sig.TIMESTAMP, "page2", regions["timestamp"])
+    doc.add(
+        "IDENTIFIANT_TECHNIQUE",
+        sig.HEX_REF,
+        "image, QR code, mots-clés",
+        renderings=[{"mode": "compact", "text": sig.HEX_REF}],
+    )
+    doc.region("IDENTIFIANT_TECHNIQUE", sig.HEX_REF, "page2", regions["reference"])
+    doc.region("IDENTIFIANT_TECHNIQUE", sig.HEX_REF, "page2", regions["qr"])
+    doc.add(
+        "IDENTIFIANT_TECHNIQUE",
+        sig.TRANSACTION_ID,
+        "texte invisible, mots-clés",
+        renderings=[{"mode": "compact", "text": norm_compact(sig.TRANSACTION_ID)}],
+    )
+    doc.keep += [f"Document émis via {sig.PUBLISHER}", sig.PUBLISHER_URL]
+    return doc
+
+
 def doc_pdf_scan() -> Doc:
     import pymupdf
 
@@ -3103,6 +3166,7 @@ BUILDERS: list[Callable[[], Doc]] = [
     doc_named_folders,
     doc_negatives,
     doc_english,
+    doc_pdf_signed,
 ]
 
 

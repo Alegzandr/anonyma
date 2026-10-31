@@ -14,6 +14,10 @@ modification), corrections, mesure finale.
 | `standard` — référence | 94,4 % (304/322) | 87,0 % | 44,2 % |
 | `standard` — final | **100,0 %** (322/322) | 92,4 % | 88,4 % |
 
+Depuis, le **correctif global n°1** (incident du PDF signé, voir la section dédiée) a
+ajouté un 25e document ; en `leger` : 99,7 % (323/324) de rappel direct, 94,2 % de
+précision, 93,3 % de phrases témoins intactes (`standard` non remesuré, modèles absents).
+
 La cible (≥ 99 % de rappel sur les identifiants directs en profil `standard`) est
 atteinte sur ce corpus ; voir les limites plus bas : 322 valeurs ne permettent pas de
 garantir 99 % sur des documents réels.
@@ -132,6 +136,7 @@ et TVA générés avec des clés valides.
 | 22_dossiers_nommes | txt, csv | 4 (4) | dossiers et fichiers du système de fichiers nommés d'après la personne, minuscules et majuscules sans accents |
 | 23_txt_temoins | txt | 4 (0) | témoin négatif : homonymes courants (petit, boucher, martin-pêcheur, fontaine, chevalier, blanc, marchand), villes, dates de réunion |
 | 24_txt_anglais | txt | 23 (19) | anglais : +44, +353, +49, IBAN DE/BE, IPv6, date US, apostrophe (« O'Callaghan »), tréma en majuscules |
+| 25_pdf_signe | pdf | 5 (2) | ajouté avec le correctif « PDF signé » : tampon de signature en image transparente (nom en casse mixte « zéphyrin QUINTAVALLE-BREZAC », horodatage **vertical**), référence hexadécimale de 40 caractères en image et en **QR code**, identifiant de transaction en **texte invisible**, **signature numérique** (certificat au nom du signataire), Info/XMP nominatifs (titre = nom du fichier), **nom de fichier nominatif** ; éditeur fictif « Paraphéo » (nom, URL, logo) déclaré en liste blanche, qui doit rester |
 
 Types directs : personne, e-mail, téléphone (FR et international), IBAN, carte, NIR,
 adresse, plaque, IP, date de naissance, identifiant. Autres : organisation, lieu,
@@ -356,6 +361,112 @@ Faux positifs corrigés (profil `standard`), qui se propageaient à tout le lot 
   cellule ; et une fonction n'est **propagée et vérifiée que dans son propre fichier**
   (« présidente » à côté de Mme Vidal n'est pas masquée dans tous les autres documents,
   et sa présence ailleurs n'envoie plus en quarantaine).
+
+## Correctif global n°1 (incident du PDF signé)
+
+### L'incident
+
+Un vrai PDF signé électroniquement (une page de formulaire, une page de certificat de
+signature) était sorti marqué « Anonymisé » alors qu'il contenait encore : le nom du
+signataire dans une **image de tampon** posée sur une page qui avait pourtant une
+couche texte ; des **horodatages verticaux**, une **référence hexadécimale de
+40 caractères** et un **QR code** dans des images ; un identifiant de transaction en
+**texte invisible** ; un **nom de fichier** identique à l'original et contenant le nom
+de la personne. À l'inverse, l'URL publique et le logo d'un éditeur en liste blanche
+avaient été masqués. Le vérificateur n'avait rien signalé.
+
+### Ce qui a changé
+
+* **OCR de toute image et de toute page**, dans tous les formats : chaque image
+  intégrée est lue (y compris sur les pages qui ont une couche texte), chaque page PDF
+  est aussi rendue et lue entière (tampons, texte vectorisé, champs aplatis), avec
+  déduplication par rapport à la couche texte ; passe verticale pour le texte tourné.
+  Un OCR désactivé, indisponible ou en échec n'est plus silencieux : il produit un
+  problème `ocr…`.
+* **Codes** : QR codes, Data Matrix et codes-barres décodés ; le code est toujours
+  masqué en entier et son contenu passe par la détection.
+* **Texte invisible** (mode de rendu 3, blanc, hors page, taille nulle) : lu,
+  anonymisé et supprimé par défaut.
+* **Signatures numériques** : leur texte (signataire, certificat, dates) est détecté,
+  puis la signature est supprimée ; le PDF est entièrement réécrit (plus d'`/ID`
+  d'origine, plus de mises à jour incrémentales).
+* **Identifiants techniques** (empreintes hexadécimales, base64, UUID, identifiants de
+  transaction) et **horodatages** masqués.
+* **Politique des organisations** : « toutes », « toutes sauf la liste blanche »
+  (défaut, liste fournie d'éditeurs, prestataires de signature et domaines publics)
+  ou « liste noire » ; un éditeur conservé garde son nom, son URL générique et son
+  logo.
+* **Noms de fichiers** : les détecteurs lisent les noms avec `_`, `+` et le point de
+  l'extension comme des espaces ; les valeurs du lot sont recherchées dans les noms,
+  métadonnées, attributs et en-têtes quels que soient les séparateurs
+  (`Contrat_jean_DUPONT`, `DUPONT-Jean`) ; option de noms neutres (`document_0001`,
+  `piece_jointe_0001`, correspondance chiffrée en pseudonymisation).
+* **Vérificateur** : il relit la sortie avec les mêmes extracteurs (donc OCR, codes,
+  texte invisible, signatures, métadonnées et noms) et compare avec toutes les valeurs
+  du lot, y compris leurs formes en casse mixte, sans tiret, collées et leurs formes
+  « OCR » (confusions `0`/`O`, `1`/`l`/`I`…). Il cherche aussi le nom d'origine du
+  fichier, sa racine et ses mots distinctifs. Une image ou une page de la sortie qui
+  n'a pas pu être relue rend la vérification **incomplète** : le fichier n'est jamais
+  « Anonymisé », il est « À revoir » et placé en quarantaine. Une image non lue à
+  l'analyse donne aussi « À revoir ».
+
+### Nouveau cas du corpus : `25_pdf_signe`
+
+Reproduction synthétique de l'incident (générateur partagé avec le test de
+non-régression `tests/test_regression_signed_pdf.py`) : signataire fictif
+« Zéphyrin Quintavalle-Brezac » dans le texte, un champ de formulaire, un tampon en
+image transparente écrit « zéphyrin QUINTAVALLE-BREZAC » avec un horodatage vertical,
+la signature numérique (certificat à son nom), les métadonnées Info/XMP (titre = nom
+du fichier) et le nom du fichier ; référence hexadécimale en image et en QR code ;
+identifiant de transaction en texte invisible ; éditeur fictif « Paraphéo » (nom, URL,
+logo). Pour la mesure, l'éditeur est ajouté à la liste blanche fournie
+(`--organisations-blanches`), comme un utilisateur déclarerait son prestataire.
+
+Résultat (`leger`) : **5 valeurs sur 5 protégées** (personne, e-mail, horodatage,
+référence, identifiant de transaction), y compris dans les images (zones du tampon,
+de l'horodatage vertical, de la référence et du QR code masquées), aucun prénom
+résiduel, signature et `/ID` d'origine absents, nom produit
+`Contrat_[PERSONNE_065]_signe.pdf` ; le nom et l'URL de l'éditeur sont conservés
+(2/2 phrases témoins), statut « Anonymisé ».
+
+### Mesure
+
+Profil `leger` seulement : le dossier `models/` est vide sur cette machine, le profil
+`standard` (GLiNER) n'a pas pu être remesuré. Détail dans `results/correctif1.{json,md}`.
+
+| Mesure (`leger`) | Final précédent (24 documents) | Correctif n°1 (25 documents) |
+|---|---|---|
+| Rappel identifiants directs | 99,7 % (321/322) | **99,7 %** (323/324) |
+| Rappel autres types | 63,2 % (36/57) | **65,0 %** (39/60) |
+| Précision (segments remplacés) | 93,5 % (290/310) | **94,2 %** (291/309) |
+| Précision hors dates non liées à une naissance | 99,3 % (290/292) | 95,1 % (291/306) |
+| Phrases témoins intactes | 93,0 % (40/43) | **93,3 %** (42/45) |
+| Statuts | Anonymisé ×25 | Anonymisé ×26 |
+| Durée du lot | 14 s | 35 s |
+
+Lecture :
+
+* sur les 24 documents d'origine, rien ne change pour le rappel : la seule fuite
+  directe reste `socallaghan` (voir plus bas) ; les 2 identifiants directs et les
+  3 autres valeurs ajoutés par `25_pdf_signe` sont tous protégés ;
+* la baisse de la précision « hors dates » est un effet de mesure : les horodatages
+  désormais masqués (`04 mar 2026 09:00:00 +0100` dans les en-têtes `Date`, « 12 mars
+  2026 à 14 h 30 », « 16 h ») ne sont pas reconnus comme des dates par le filtre de
+  `measure.py` et comptent donc comme faux positifs ; ce sont les mêmes segments
+  qu'avant, élargis à l'heure, plus « 16 h ». La précision globale progresse ;
+* la durée augmente (OCR de chaque page et de chaque image, réécriture complète des
+  PDF) : 35 s au lieu de 14 s pour le lot.
+
+### Limites connues de ce correctif
+
+* les images `data:` intégrées dans du CSS ne sont pas extraites ;
+* les images EMF/WMF/SVG sont remplacées par un contenu vide, pas rastérisées ni lues ;
+* le texte rogné (hors de la zone de découpe) est traité comme visible ;
+* un QR code ou un code-barres qui ne peut pas être décodé est ignoré (il n'est
+  masqué que si l'OCR ou la détection le couvrent) ;
+* la passe OCR verticale perd parfois des espaces entre les mots ;
+* un prénom rare écrit en casse mixte, sans aucun indice (civilité, libellé,
+  autre mention), n'est pas détecté.
 
 ## Limites et fuites connues restantes
 

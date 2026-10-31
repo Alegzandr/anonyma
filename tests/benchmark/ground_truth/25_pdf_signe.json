@@ -1,0 +1,190 @@
+{
+ "slug": "25_pdf_signe",
+ "format": "pdf",
+ "description": "PDF signé électroniquement : tampons de signature en images (nom en casse mixte, horodatage vertical), référence hexadécimale en image et en QR code, identifiant de transaction en texte invisible, signature numérique, nom de fichier nominatif, éditeur en liste blanche (nom, URL, logo) à conserver",
+ "files": [
+  "Contrat_zephyrin_QUINTAVALLE-BREZAC_signe.pdf"
+ ],
+ "entries": [
+  {
+   "id": "25-001",
+   "type": "PERSONNE",
+   "direct": true,
+   "value": "Zéphyrin Quintavalle-Brezac",
+   "where": [
+    "corps, champ de formulaire, tampon image (casse mixte), signature numérique, métadonnées, XMP, nom de fichier"
+   ],
+   "surfaces": [
+    "Zéphyrin Quintavalle-Brezac",
+    "zéphyrin QUINTAVALLE-BREZAC"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "Zéphyrin Quintavalle-Brezac"
+    },
+    {
+     "mode": "text",
+     "text": "Quintavalle-Brezac Zéphyrin"
+    },
+    {
+     "mode": "text",
+     "text": "Quintavalle-Brezac"
+    },
+    {
+     "mode": "text",
+     "text": "Quintavalle"
+    },
+    {
+     "mode": "text",
+     "text": "Brezac"
+    }
+   ],
+   "partial": [
+    {
+     "mode": "word",
+     "text": "Zéphyrin"
+    }
+   ],
+   "regions": [
+    {
+     "image": "page2",
+     "bbox": [
+      0.2017,
+      0.2206,
+      0.6223,
+      0.2435
+     ]
+    }
+   ]
+  },
+  {
+   "id": "25-002",
+   "type": "EMAIL",
+   "direct": true,
+   "value": "zephyrin.quintavalle-brezac@exemple.test",
+   "where": [
+    "corps, certificat de signature"
+   ],
+   "surfaces": [
+    "zephyrin.quintavalle-brezac@exemple.test"
+   ],
+   "renderings": [
+    {
+     "mode": "raw",
+     "text": "zephyrin.quintavalle-brezac@exemple.test"
+    },
+    {
+     "mode": "raw",
+     "text": "zephyrin.quintavalle-brezac@"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  },
+  {
+   "id": "25-003",
+   "type": "HORODATAGE",
+   "direct": false,
+   "value": "2026-03-14 10:42:07 UTC",
+   "where": [
+    "tampon image (vertical), date de signature, XMP"
+   ],
+   "surfaces": [
+    "2026-03-14 10:42:07 UTC"
+   ],
+   "renderings": [
+    {
+     "mode": "text",
+     "text": "2026-03-14 10:42:07"
+    },
+    {
+     "mode": "compact",
+     "text": "20260314104207"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "page2",
+     "bbox": [
+      0.1357,
+      0.1876,
+      0.1546,
+      0.329
+     ]
+    }
+   ]
+  },
+  {
+   "id": "25-004",
+   "type": "IDENTIFIANT_TECHNIQUE",
+   "direct": false,
+   "value": "9f3a7c21e8b04d56a1f2c3e4d5b6a7980c1d2e3f",
+   "where": [
+    "image, QR code, mots-clés"
+   ],
+   "surfaces": [
+    "9f3a7c21e8b04d56a1f2c3e4d5b6a7980c1d2e3f"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "9f3a7c21e8b04d56a1f2c3e4d5b6a7980c1d2e3f"
+    }
+   ],
+   "partial": [],
+   "regions": [
+    {
+     "image": "page2",
+     "bbox": [
+      0.1647,
+      0.3652,
+      0.558,
+      0.3795
+     ]
+    },
+    {
+     "image": "page2",
+     "bbox": [
+      0.121,
+      0.4157,
+      0.3395,
+      0.5701
+     ]
+    }
+   ]
+  },
+  {
+   "id": "25-005",
+   "type": "IDENTIFIANT_TECHNIQUE",
+   "direct": false,
+   "value": "TRX-a8F3k2-xyz-9Qm4Lp",
+   "where": [
+    "texte invisible, mots-clés"
+   ],
+   "surfaces": [
+    "TRX-a8F3k2-xyz-9Qm4Lp"
+   ],
+   "renderings": [
+    {
+     "mode": "compact",
+     "text": "trxa8f3k2xyz9qm4lp"
+    }
+   ],
+   "partial": [],
+   "regions": []
+  }
+ ],
+ "keep": [
+  "Document émis via Paraphéo",
+  "https://www.parapheo.example/verification"
+ ],
+ "images": {
+  "page2": {
+   "kind": "pdf_page",
+   "file": "Contrat_zephyrin_QUINTAVALLE-BREZAC_signe.pdf",
+   "page": 1
+  }
+ }
+}

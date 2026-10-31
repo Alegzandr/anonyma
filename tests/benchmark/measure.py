@@ -58,6 +58,7 @@ from tests.benchmark.common import (
     tokens,
     word_forms,
 )
+from tests.fixtures.generators.signed_pdf import PUBLISHER_WHITELIST
 
 QUARANTINE = "_quarantaine"
 PROFILES = {"leger": "LIGHT", "standard": "STANDARD", "complet": "FULL"}
@@ -651,6 +652,12 @@ def run_anonyma(
     if output.exists():
         shutil.rmtree(output)
     inputs = [str(CORPUS / d) for d in sorted(os.listdir(CORPUS)) if (CORPUS / d).is_dir()]
+    # The fictitious e-signature publisher of 25_pdf_signe is whitelisted on top of the
+    # bundled list, as a user would declare their own provider.
+    organizations = output.parent / f"{output.name}-organisations.txt"
+    bundled = Path(__file__).parents[2] / "anonyma" / "data" / "organizations_whitelist.txt"
+    lines = [bundled.read_text(encoding="utf-8"), *PUBLISHER_WHITELIST, ""]
+    organizations.write_text("\n".join(lines), encoding="utf-8")
     cmd = [
         sys.executable,
         "-m",
@@ -663,6 +670,8 @@ def run_anonyma(
         profile,
         "--rapport",
         str(report),
+        "--organisations-blanches",
+        str(organizations),
         "-q",
         "-j",
         str(workers),
