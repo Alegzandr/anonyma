@@ -17,6 +17,7 @@ import regex
 from anonyma import llm
 from anonyma.config import Config
 from anonyma.data import lexicon
+from anonyma.detectors._filters import skip_segment
 from anonyma.logs import get_logger
 from anonyma.model_catalog import LLM_PREFERENCE, ModelKind, ModelSpec, get_spec
 from anonyma.models import Detector, Entity, Profile, Segment
@@ -111,7 +112,7 @@ class LlmDetector(Detector):
         return any(normalize(m.group()) not in self.lexicon for m in _CAPITALIZED.finditer(text))
 
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
-        todo = [s for s in segments if self.wanted(s.text)]
+        todo = [s for s in segments if not skip_segment(s) and self.wanted(s.text)]
         if not todo:
             return []
         runner = self._runner()

@@ -17,6 +17,7 @@ import regex
 
 from anonyma.config import Config
 from anonyma.data import first_name, lexicon
+from anonyma.detectors._filters import ml_text, skip_segment
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment
 from anonyma.registry import register_detector
 from anonyma.textsearch import MultiMatcher
@@ -128,7 +129,9 @@ class ParanoidDetector(Detector):
             return []
         found: list[Entity] = []
         for segment in segments:
-            text = segment.text
+            if skip_segment(segment):
+                continue
+            text = ml_text(segment)  # file names read as words, same offsets
             spans: list[tuple[int, int, str, float]] = []
             run: list[tuple[int, int]] = []
             for m in _WORD.finditer(text):
@@ -158,14 +161,18 @@ class ParanoidDetector(Detector):
                     )
             for m in _DIGIT_RUN.finditer(text):
                 spans.append((m.start(), m.end(), EntityType.SUSPICIOUS_TOKEN, SCORE_SUSPICIOUS))
-            safe = [(m.start, m.end) for m in self.allowed.find(text)] if len(self.allowed) else []
+            safe = (
+                [(m.start, m.end) for m in self.allowed.find(segment.text)]
+                if len(self.allowed)
+                else []
+            )
             for start, end, entity_type, score in spans:
                 if any(s <= start and end <= e for s, e in safe):
                     continue
                 found.append(
                     Entity(
                         entity_type=entity_type,
-                        value=text[start:end],
+                        value=segment.text[start:end],
                         document_id=document_id,
                         segment_id=segment.id,
                         start=start,
