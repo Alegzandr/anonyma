@@ -753,6 +753,16 @@ QuietOpt = Annotated[
         rich_help_panel=PANEL_OUTPUT,
     ),
 ]
+ReplaceOpt = Annotated[
+    bool,
+    typer.Option(
+        "--remplacer",
+        help="Supprimer d'abord les fichiers qu'une exécution précédente d'Anonyma a écrits "
+        "dans le dossier de sortie et sa quarantaine (s'ils n'ont pas été modifiés depuis) ; "
+        "les autres fichiers ne sont jamais touchés.",
+        rich_help_panel=PANEL_OUTPUT,
+    ),
+]
 NeutralNamesOpt = Annotated[
     bool | None,
     typer.Option(
@@ -997,6 +1007,7 @@ def run(
     report_path: ReportOpt = None,
     as_json: RunJsonOpt = False,
     quiet: QuietOpt = False,
+    replace_previous: ReplaceOpt = False,
     neutral_names: NeutralNamesOpt = None,
     profile: ProfileOpt = None,
     paranoid: ParanoidOpt = None,
@@ -1053,6 +1064,7 @@ def run(
     store = None
     if config.regime is Regime.PSEUDONYMIZATION:
         store = open_store(store_path(config, table), create=True)
+    previous = _prepare_output(output, replace_previous)
     try:
         pipeline = Pipeline(config, store=store)
         with progress_display(not quiet) as progress:
@@ -1073,7 +1085,7 @@ def run(
             report.save(report_path)
         except OSError:
             fail("Impossible d'enregistrer le rapport.", EXIT_PARTIAL)
-    summary = run_summary(report, result, pipeline.config, report_path)
+    summary = run_summary(report, result, pipeline.config, report_path, previous=previous)
     if as_json:
         _print_run_summary(err, report, summary)
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -1083,6 +1095,48 @@ def run(
 
 
 app.command("anonymiser", hidden=True, help="Alias de « run ».")(run)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class OutputState:
+    """The output folder before the run: whether it already held something (after
+    ``--remplacer``) and how many files of earlier runs were deleted."""
+
+    not_empty: bool = False
+    removed: int = 0
+
+
+def _prepare_output(output: Path, replace_previous: bool) -> OutputState:
+    """Apply ``--remplacer`` and warn (stderr) when the output folder is not empty."""
+    from anonyma import outputs
+
+    removed = 0
+    if replace_previous:
+        cleanup = outputs.remove_previous(output)
+        removed = cleanup.removed
+        if cleanup.removed or cleanup.kept:
+            done = "supprimé" if cleanup.removed < 2 else "supprimés"
+            message = f"{plural(cleanup.removed, 'fichier')} d'une exécution précédente {done}."
+            if cleanup.kept:
+                kept = "conservé" if cleanup.kept < 2 else "conservés"
+                message += f" {plural(cleanup.kept, 'fichier modifié', 'fichiers modifiés')}"
+                message += f" depuis, {kept}."
+            err.print(message, markup=False, soft_wrap=True)
+    not_empty = outputs.holds_files(output)
+    if not_empty:
+        advice = (
+            "les fichiers qui ne viennent pas d'Anonyma sont conservés"
+            if replace_previous
+            else "utilisez --remplacer pour supprimer d'abord ce qu'une exécution précédente "
+            "y a écrit"
+        )
+        err.print(
+            "[bold yellow]Attention :[/] le dossier de sortie n'est pas vide. Rien n'est "
+            "écrasé : un fichier produit sous un nom déjà pris reçoit un suffixe numéroté "
+            f"(« (2) ») ; {advice}.",
+            soft_wrap=True,
+        )
+    return OutputState(not_empty, removed)
 
 
 def _check_output_dir(inputs: Sequence[Path], output: Path) -> None:
@@ -1102,6 +1156,8 @@ def run_summary(
     result: BatchResult,
     config: Config,
     report_path: Path | None,
+    *,
+    previous: OutputState | None = None,
 ) -> dict[str, Any]:
     """Machine-readable outcome of ``run`` (``--json``): codes, counts and paths only,
     never an original value or file name (file names are the anonymized ones).
@@ -1112,6 +1168,7 @@ def run_summary(
     from anonyma.pipeline import is_quarantined, quarantine_dir
     from anonyma.report import SCHEMA_VERSION, walk_paths
 
+    previous = previous or OutputState()
     quarantine = quarantine_dir(result.output_dir)
     counts = report.counts()
     text, _ = report.verdict()
@@ -1149,6 +1206,8 @@ def run_summary(
         "residus": counts["residus_certains"] + counts["residus_possibles"],
         "echecs": len(report.failures),
         "dossier_sortie": str(result.output_dir),
+        "dossier_sortie_non_vide": previous.not_empty,
+        "sorties_precedentes_supprimees": previous.removed,
         # Also given when the folder exists (left by an earlier batch, for instance).
         "dossier_quarantaine": str(quarantine) if in_quarantine else None,
         "rapport": str(report_path.resolve()) if report_path is not None else None,

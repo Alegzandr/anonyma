@@ -27,6 +27,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from anonyma import outputs as output_record
 from anonyma import paths, registry
 from anonyma.config import Config
 from anonyma.frenchtext import plural
@@ -1536,6 +1537,8 @@ class Pipeline:
                 if out is not None
                 else DocumentResult(doc.id, "", doc.format, doc.format, DocumentStatus.CANCELLED)
             )
+        # What this batch wrote, so that a later run can replace it (``--remplacer``).
+        output_record.record(output_dir, [r.output_path for r in results if r.output_path])
         return BatchResult(
             analysis.batch_id,
             output_dir,

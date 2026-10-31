@@ -887,3 +887,25 @@ def test_pseudonymized_outputs_are_called_so(
     assert "2 fichiers pseudonymisés et vérifiés." in result.output.splitlines()
     html = report.read_text(encoding="utf-8")
     assert "Pseudonymisé" in html and "anonymisés et vérifiés" not in html
+
+
+def test_rerun_into_a_used_folder_warns_and_replace_removes_only_our_files(
+    tmp_path: Path, corpus: Path, business_list: Path
+) -> None:
+    out = tmp_path / "s"
+    assert invoke(*_run_args(corpus, out, business_list)).exit_code == 0
+    first = sorted(p.relative_to(out) for p in out.rglob("*") if p.is_file())
+    (out / "notes-perso.txt").write_text("à garder", encoding="utf-8")
+
+    result = invoke(*_run_args(corpus, out, business_list, "--json"))
+    assert "le dossier de sortie n'est pas vide" in result.output
+    assert json.loads(result.stdout)["dossier_sortie_non_vide"] is True
+    assert any(" (2)" in p.name for p in out.rglob("*"))
+
+    result = invoke(*_run_args(corpus, out, business_list, "--json", "--remplacer"))
+    data = json.loads(result.stdout)
+    assert data["sorties_precedentes_supprimees"] == 4
+    assert sorted(p.relative_to(out) for p in out.rglob("*") if p.is_file()) == sorted(
+        [*first, Path("notes-perso.txt")]
+    )
+    assert (out / "notes-perso.txt").read_text(encoding="utf-8") == "à garder"
