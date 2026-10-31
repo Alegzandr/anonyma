@@ -112,20 +112,20 @@ def _case_like(original: str, word: str) -> str:
 
 def match_case(original: str, fake: str) -> str:
     """Case of each letter run of ``original`` applied to the matching run of ``fake``
-    (``Claire FONTAINE`` + ``Paul Martin`` -> ``Paul MARTIN``); falls back to
-    :func:`mirror_case` when the runs do not line up."""
+    (``Claire FONTAINE`` + ``Paul Martin`` -> ``Paul MARTIN``). When the run counts
+    differ (``Claire FONTAINE`` + ``Paul Da Silva``), the last run of ``fake`` follows
+    the last run of ``original`` and so do any extra runs: ``Paul DA SILVA``."""
     runs = _RUN.findall(original)
     targets = list(_RUN.finditer(fake))
-    if not runs or len(runs) != len(targets):
-        letters = [c for c in original if c.isalpha()]
-        if any(c.islower() for c in letters) and fake.isupper():
-            return _RUN.sub(lambda m: m.group()[:1] + m.group()[1:].lower(), fake)
+    if not runs or not targets:
         return mirror_case(original, fake)
     out: list[str] = []
     pos = 0
-    for run, m in zip(runs, targets, strict=True):
+    last = len(runs) - 1
+    for i, m in enumerate(targets):
+        source = runs[last] if i == len(targets) - 1 else runs[min(i, last)]
         out.append(fake[pos : m.start()])
-        out.append(_case_like(run, m.group()))
+        out.append(_case_like(source, m.group()))
         pos = m.end()
     out.append(fake[pos:])
     return "".join(out)

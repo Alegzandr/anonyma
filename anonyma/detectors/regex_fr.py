@@ -27,6 +27,7 @@ from anonyma.detectors._custom import (
     PersonRecognizer,
     PlaceRecognizer,
 )
+from anonyma.detectors._filters import skip_segment
 from anonyma.detectors._rules import DATE_RULES, DOB_CONTEXT, LABEL_TYPES, RULES, Rule
 from anonyma.logs import get_logger
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
@@ -166,7 +167,7 @@ class RegexDetector(Detector):
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         found: list[Entity] = []
         for segment in segments:
-            if not segment.text.strip():
+            if not segment.text.strip() or skip_segment(segment):
                 continue
             found.extend(self._segment(segment, document_id))
         return found
@@ -189,6 +190,11 @@ class RegexDetector(Detector):
                 attrs = dict(meta.get("attributes") or {})
                 raw.append((result.entity_type, result.start, result.end, result.score, attrs))
         raw.extend(self._labels(segment, label))
+        value = text.strip()
+        if len(value) == 9 and value.isdigit() and value[0] in "67":
+            # A whole cell/value 6xxxxxxxx: a mobile number stored as a number.
+            start = text.index(value)
+            raw.append((EntityType.PHONE, start, start + 9, 0.65, {"rule": "mobile_sans_zero"}))
         raw = self._dates(raw, text, label)
         return [
             Entity(
@@ -350,7 +356,38 @@ def _dedupe(
                 break
         if not absorbed:
             kept.append(item)
-    return kept
+    return [k for k in kept if not _shadowed(k, kept)]
+
+
+#: Weak number readings dropped when a confident number of another type covers them
+#: (a SIREN-looking run inside a phone number, a 12-digit card inside an IBAN).
+_NUMBER_TYPES = frozenset(
+    {
+        EntityType.PHONE,
+        EntityType.IBAN,
+        EntityType.CREDIT_CARD,
+        EntityType.NIR,
+        EntityType.SIREN,
+        EntityType.SIRET,
+        EntityType.VAT_NUMBER,
+        EntityType.POSTAL_CODE,
+        EntityType.LICENSE_PLATE,
+        EntityType.DATE,
+    }
+)
+
+
+def _shadowed(
+    item: tuple[str, int, int, float, dict[str, str]],
+    kept: list[tuple[str, int, int, float, dict[str, str]]],
+) -> bool:
+    t, s, e, score, _ = item
+    if t not in _NUMBER_TYPES or score >= 0.6:
+        return False
+    return any(
+        kt != t and kt in _NUMBER_TYPES and ks <= s and e <= ke and kscore >= max(0.6, score)
+        for kt, ks, ke, kscore, _ in kept
+    )
 
 
 __all__ = ["DETECTOR_NAME", "RegexDetector"]

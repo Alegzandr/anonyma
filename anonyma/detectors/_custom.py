@@ -302,7 +302,7 @@ CIVILITY = (
     r"(?i:monsieur|madame|mademoiselle|messieurs|mesdames|docteur|professeur|ma[iî]tre|"
     r"monseigneur))"
 )
-_CIVILITY = regex.compile(rf"(?<![\w.]){CIVILITY}(?=[ \t  ]+[{UPPER}dDvVlL])")
+_CIVILITY = regex.compile(rf"(?<![\w.\-]){CIVILITY}(?=[ \t  ]+[{UPPER}dDvVlL])")
 
 
 def _result(entity_type: str, start: int, end: int, score: float, **attrs: str) -> Any:
@@ -702,7 +702,7 @@ _ORG_FORMS = (
 _ORG_WORD = rf"[{UPPER}0-9][\w&'’\-]*(?:\.[\w&'’\-]+)*\.?(?=[\s,;:)]|$)"
 _ORG_NAME = rf"{_ORG_WORD}(?:{SP}+(?:(?:&|et|de|du|des|la|le|les|d'|l'){SP}+)*{_ORG_WORD}){{0,4}}"
 _ORG_LEGAL = regex.compile(
-    rf"(?<![\w])(?:(?:{_ORG_FORMS}){SP}+(?P<a>{_ORG_NAME})|(?P<b>{_ORG_NAME}){SP}*,?{SP}+(?:{_ORG_FORMS}))(?![\w])",
+    rf"(?<![\w\-])(?:(?:{_ORG_FORMS}){SP}+(?P<a>{_ORG_NAME})|(?P<b>{_ORG_NAME}){SP}*,?{SP}+(?:{_ORG_FORMS}))(?![\w\-])",
     regex.MULTILINE,
 )
 _ORG_KEYWORD = regex.compile(

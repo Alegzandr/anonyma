@@ -65,11 +65,17 @@ class SubstitutionTable:
     by_cluster: dict[str, str] = field(default_factory=dict, repr=False)
     #: Variant-specific substitutes: (cluster id, normalized variant) -> substitute.
     by_variant: dict[tuple[str, str], str] = field(default_factory=dict, repr=False)
+    #: Realistic mode: exact rendering of every surface form known at assignment,
+    #: (cluster id, variant as written) -> substitute with the same case pattern.
+    by_surface: dict[tuple[str, str], str] = field(default_factory=dict, repr=False)
 
     def substitute_for(self, entity: Entity) -> str:
         if self.mode is ReplacementMode.BLACKOUT:
             return BLACKOUT_CHAR * max(len(entity.value), 1)
         assert entity.cluster_id is not None
+        exact = self.by_surface.get((entity.cluster_id, entity.value))
+        if exact is not None:
+            return exact
         variant = self.by_variant.get((entity.cluster_id, normalize(entity.value)))
         substitute = variant if variant is not None else self.by_cluster[entity.cluster_id]
         if self.mode is ReplacementMode.REALISTIC:
@@ -78,7 +84,11 @@ class SubstitutionTable:
         return substitute
 
     def all_substitutes(self) -> set[str]:
-        return set(self.by_cluster.values()) | set(self.by_variant.values())
+        return (
+            set(self.by_cluster.values())
+            | set(self.by_variant.values())
+            | set(self.by_surface.values())
+        )
 
 
 class _CollisionError(Exception):
@@ -237,6 +247,8 @@ class _Realistic:
             vkey = normalize(variant)
             if vkey not in chosen or lowers(variant) > lowers(chosen[vkey][0]):
                 chosen[vkey] = (variant, substitute)
+            if variant:
+                self.table.by_surface[(cluster.id, variant)] = substitute
             self.used.add(normalize(substitute))
         for vkey, (_, substitute) in chosen.items():
             if substitute != base:
@@ -300,7 +312,7 @@ Generator = Callable[[_Realistic, EntityCluster, random.Random, str | None], dic
 
 
 def _same_for_all(cluster: EntityCluster, base: str) -> dict[str, str]:
-    out = {v: fk.mirror_case(v, base) for v in cluster.variants}
+    out = {v: fk.match_case(v, base) for v in cluster.variants}
     out[""] = base
     return out
 

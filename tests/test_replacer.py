@@ -111,9 +111,12 @@ def test_case_variants_follow_each_mention() -> None:
         ReplacementMode.REALISTIC,
     )
     a, b = sub(table, kept, "Claire Fontaine"), sub(table, kept, "Claire FONTAINE")
-    given, surname = a.split(" ")
+    given, surname = a.split(" ", 1)  # fake surnames may hold particles ("Da Silva")
     assert b == f"{given} {surname.upper()}"
     assert match_case("Claire FONTAINE", "Paul Martin") == "Paul MARTIN"
+    assert match_case("Claire FONTAINE", "Paul Da Silva") == "Paul DA SILVA"
+    assert match_case("Jean Dupont", "Noé Dos Santos") == "Noé Dos Santos"
+    assert match_case("JEAN DUPONT", "Noé Dos Santos") == "NOÉ DOS SANTOS"
 
 
 def test_no_collision_with_real_values() -> None:

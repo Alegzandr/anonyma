@@ -245,6 +245,16 @@ RULES: tuple[Rule, ...] = (
         validator=_fr_phone,
     ),
     Rule(
+        # Phone stored as a number (spreadsheets, JSON): the leading 0 is lost.
+        "telephone_sans_zero",
+        EntityType.PHONE,
+        r"(?<![\d+.,])[1-9](?:" + SEP + r"?\d){8}(?![\d.,]\d|\d)",
+        0.3,
+        context=("tel", "telephone", "portable", "mobile", "fixe", "fax", "gsm", "phone"),
+        context_score=0.85,
+        needs_context=True,
+    ),
+    Rule(
         "telephone_outremer",
         EntityType.PHONE,
         _NUM_START
