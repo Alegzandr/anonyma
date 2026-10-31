@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
+import re
 import secrets
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -31,7 +32,8 @@ from functools import lru_cache
 
 from anonyma import checksums
 from anonyma.config import Config
-from anonyma.data import first_name
+from anonyma.data import first_name, is_common_word
+from anonyma.detectors._custom import NOT_LONE_GIVEN
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
     Document,
@@ -43,6 +45,9 @@ from anonyma.models import (
 )
 from anonyma.names import (
     PersonName,
+    civility_of,
+    given_like,
+    is_initial,
     login_forms,
     match_login_template,
     needs_capital,
@@ -327,11 +332,13 @@ def resolve(
     kept = sorted(by_span.values(), key=lambda e: e.key)
     known = [e for e in kept if e.cluster_id in clusters]
     fresh = [e for e in kept if e.cluster_id not in clusters]
+    paired = _field_pairs(fresh)
     parsed: dict[int, PersonName | None] = {}
 
     def person_of(e: Entity) -> PersonName | None:
         if id(e) not in parsed:
-            parsed[id(e)] = parse_person(e.value) if e.entity_type == EntityType.PERSON else None
+            value = paired.get(id(e), e.value)
+            parsed[id(e)] = parse_person(value) if e.entity_type == EntityType.PERSON else None
         return parsed[id(e)]
 
     def order(e: Entity) -> tuple[int, int, str, tuple[str, str, int, int]]:
@@ -342,8 +349,9 @@ def resolve(
 
     for entity in [*known, *sorted(fresh, key=order)]:
         cluster: EntityCluster | None = clusters.get(entity.cluster_id or "")
+        combined = paired.get(id(entity))
         if cluster is None:
-            ckey = cluster_key(entity.entity_type, entity.value)
+            ckey = cluster_key(entity.entity_type, combined or entity.value)
             cluster = exact.get(ckey)
             person = person_of(entity)
             if cluster is None and person is not None:
@@ -357,7 +365,19 @@ def resolve(
                 clusters[cid] = cluster
             entity.cluster_id = cluster.id
             exact.setdefault(ckey, cluster)
+            exact.setdefault(cluster_key(entity.entity_type, entity.value), cluster)
         _attach(cluster, entity, span_detectors.get(_span_key(entity), {entity.detector}))
+        if combined is not None and cluster.entity_type == EntityType.PERSON:
+            # « NOM : TOURNESOL  Prénom : Ysaline »: the full name is never written as
+            # such, but its forms (« ysaline tournesol », « ytournesol ») must be found.
+            cluster.variants.add(combined)
+            if _canonical_rank(cluster.entity_type, combined) > _canonical_rank(
+                cluster.entity_type, cluster.canonical
+            ):
+                cluster.canonical = combined
+            full = parse_person(combined)
+            if full is not None:
+                people.add(cluster.id, full)
         if cluster.entity_type == EntityType.PERSON:
             person = person_of(entity) if entity.entity_type == EntityType.PERSON else None
             person = person or parse_person(entity.value)
@@ -372,6 +392,43 @@ def resolve(
     return kept, clusters
 
 
+#: Largest distance between a « Nom : » value and the « Prénom : » value it pairs with.
+FIELD_PAIR_DISTANCE = 160
+
+
+def _field_pairs(entities: Sequence[Entity]) -> dict[int, str]:
+    """Surname and given name read in separate form fields of one segment
+    (« NOM : TOURNESOL   Prénom : Ysaline »): ``id(entity)`` -> full name of the pair.
+
+    Each « Nom » value pairs with the nearest « Prénom » value of its segment (and
+    the other way round) when neither already holds a full name."""
+    fields: dict[tuple[str, str], list[Entity]] = {}
+    for e in entities:
+        if e.entity_type == EntityType.PERSON and e.attributes.get("field") in ("nom", "prenom"):
+            fields.setdefault((e.document_id, e.segment_id), []).append(e)
+    out: dict[int, str] = {}
+    for items in fields.values():
+        surnames = [e for e in items if e.attributes["field"] == "nom" and _name_part(e.value)]
+        givens = [e for e in items if e.attributes["field"] == "prenom" and _name_part(e.value)]
+        for surname in surnames:
+            near = [g for g in givens if abs(g.start - surname.start) <= FIELD_PAIR_DISTANCE]
+            if not near:
+                continue
+            given = min(near, key=lambda g: abs(g.start - surname.start))
+            if id(given) in out:
+                continue
+            combined = f"{given.value.strip()} {surname.value.strip()}"
+            person = parse_person(combined)
+            if person is not None and person.is_full:
+                out[id(surname)] = out[id(given)] = combined
+    return out
+
+
+def _name_part(value: str) -> bool:
+    person = parse_person(value)
+    return person is not None and not person.is_full and not person.civility
+
+
 def _span_key(entity: Entity) -> tuple[str, str, int, int, bool]:
     """Deduplication key: a whole-code entity never absorbs (nor is absorbed by) a
     reading of the decoded content on the same span (an URL that is the whole QR
@@ -380,6 +437,11 @@ def _span_key(entity: Entity) -> tuple[str, str, int, int, bool]:
 
 
 def _better(entity: Entity, previous: Entity) -> bool:
+    # A display name found through the local part of an address (« Zéphyrin
+    # Quintavalle » for ``zephyrin.quintavalle@``) is a person, not an e-mail.
+    kinds = {entity.entity_type, previous.entity_type}
+    if kinds == {EntityType.PERSON, EntityType.EMAIL} and "@" not in entity.value:
+        return entity.entity_type == EntityType.PERSON
     if entity.score != previous.score:
         return entity.score > previous.score
     return TYPE_PRIORITY.get(entity.entity_type, 30) > TYPE_PRIORITY.get(previous.entity_type, 30)
@@ -526,22 +588,64 @@ def _person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
             yield surname, bool(needs_capital(surname))
 
 
-def _email_person_forms(cluster: EntityCluster) -> Iterator[str]:
-    """``jean.dupont@`` -> ``Jean Dupont`` / ``Dupont Jean`` (unknown person)."""
+#: Given names at least this frequent (INSEE births) are not searched alone: too many
+#: people share them (« Jean », « Marie »); rarer ones identify (« Ysaline »).
+DISTINCTIVE_GIVEN_MAX = 20000
+
+
+def distinctive_given(cluster: EntityCluster) -> set[str]:
+    """Given names of a person cluster worth searching alone: neither a common word
+    nor a very frequent given name, nor a place or brand (« Florence »)."""
+    out: set[str] = set()
+    for variant in cluster.variants:
+        person = parse_person(variant)
+        if person is not None and person.is_full:
+            out.update(_distinctive_given(person))
+    return out
+
+
+def _distinctive_given(person: PersonName) -> Iterator[str]:
+    for given in person.given:
+        if is_initial(given) or len(normalize(given)) < 4 or normalize(given) in NOT_LONE_GIVEN:
+            continue
+        record = first_name(given)
+        if record is not None and record.count >= DISTINCTIVE_GIVEN_MAX:
+            continue
+        if any(is_common_word(part) for part in given.split("-") if part):
+            continue
+        yield given
+
+
+def _email_person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
+    """``jean.dupont@`` -> ``Jean Dupont``, ``Dupont Jean``, ``Dupont`` (unknown
+    person): (form, needs capital).
+
+    A known given name tells the order. Otherwise two words that are neither common
+    words nor generic parts (``zephyrin.quintavalle@``) are still a name when they
+    are written as one, capitalized, in the text (« Zéphyrin Quintavalle
+    <zephyrin.quintavalle@…> »): the address is the evidence."""
     local = cluster.canonical.strip("<> ").split("@")[0]
     for sep in (".", "_", "-"):
         parts = [p for p in local.split(sep) if p]
         if len(parts) != 2:
             continue
         given, surname = parts
-        if given.isalpha() and surname.isalpha() and len(surname) >= 2:
-            record = first_name(given)
-            if record is not None and record.count >= 200 and first_name(surname) is None:
-                g, s = given.capitalize(), surname.capitalize()
-                yield f"{g} {s}"
-                yield f"{s} {g}"
-                yield f"{s.upper()} {g}"
-                return
+        if not (given.isalpha() and surname.isalpha() and len(surname) >= 2):
+            continue
+        record = first_name(given)
+        known = record is not None and record.count >= 200 and first_name(surname) is None
+        loose = not known and all(
+            len(p) >= 3 and p.casefold() not in GENERIC_LOCAL_PARTS and not is_common_word(p)
+            for p in parts
+        )
+        if not (known or loose):
+            continue
+        g, s = given.capitalize(), surname.capitalize()
+        for form in (f"{g} {s}", f"{s} {g}", f"{s.upper()} {g}", f"{g} {s.upper()}"):
+            yield form, loose
+        if len(s) >= 4 and not is_common_word(s):
+            yield s, True
+        return
 
 
 def propagate(
@@ -559,6 +663,7 @@ def propagate(
     """
     matcher: MultiMatcher[_Target] = MultiMatcher()
     scores: dict[str | None, float] = {}
+    lone_given: dict[str, dict[str, str]] = {}
     manual: set[str] = set()
     person_keys = {
         cluster_key(EntityType.PERSON, v)
@@ -575,11 +680,21 @@ def propagate(
             manual.add(cluster.id)
         for form, cap in cluster_forms(cluster):
             matcher.add(form, target, require_capital=cap)
+        if cluster.entity_type == EntityType.PERSON:
+            for given in distinctive_given(cluster):
+                lone_given.setdefault(normalize(given), {})[cluster.id] = given
         if cluster.entity_type == EntityType.EMAIL and "person" not in cluster.attributes:
             new = _Target(None, EntityType.PERSON)
-            for form in _email_person_forms(cluster):
+            for form, cap in _email_person_forms(cluster):
                 if cluster_key(EntityType.PERSON, form) not in person_keys:
-                    matcher.add(form, new)
+                    matcher.add(form, new, require_capital=cap)
+    # A distinctive given name alone (« Ysaline ») is searched only when a single
+    # person of the batch bears it: two « Bérénice » leave each lone mention to the
+    # detectors and to the review.
+    for owners in lone_given.values():
+        if len(owners) == 1:
+            ((cluster_id, given),) = owners.items()
+            matcher.add(given, _Target(cluster_id, EntityType.PERSON))
     if not len(matcher):
         return []
     scores[None] = 0.7
@@ -618,14 +733,17 @@ def propagate(
                     if not targets:
                         continue
                     target = _pick(targets)
+                    start, end = match.start, match.end
+                    if target.entity_type == EntityType.PERSON:
+                        start, end = _with_given_names(segment.text, start, end)
                     found.append(
                         Entity(
                             entity_type=target.entity_type,
-                            value=segment.text[match.start : match.end],
+                            value=segment.text[start:end],
                             document_id=doc.id,
                             segment_id=segment.id,
-                            start=match.start,
-                            end=match.end,
+                            start=start,
+                            end=end,
                             score=scores.get(target.cluster_id, 0.7),
                             detector=PROPAGATION_DETECTOR,
                             cluster_id=target.cluster_id,
@@ -637,6 +755,33 @@ def propagate(
                         )
                     )
     return found
+
+
+_WORD_BEFORE = re.compile(r"(?<![\w'’\-.@])([^\W\d_]+(?:-[^\W\d_]+)*)[ \t]$")
+_WORD_AFTER = re.compile(r"^[ \t]([^\W\d_]+(?:-[^\W\d_]+)*)(?![\w\-'’@.]\w)")
+
+
+def _with_given_names(text: str, start: int, end: int) -> tuple[int, int]:
+    """Widen a propagated name over a given name written next to it, in any case
+    (« ludovic braquemart » around a known « Braquemart »): the given name must not
+    stay visible next to its masked surname."""
+    before = _WORD_BEFORE.search(text, max(0, start - 40), start)
+    if before is not None and _adjacent_given(before.group(1)):
+        start = before.start(1)
+    after = _WORD_AFTER.match(text[end : end + 40])
+    if after is not None and _adjacent_given(after.group(1)):
+        end += after.end(1)
+    return start, end
+
+
+def _adjacent_given(word: str) -> bool:
+    key = normalize(word)
+    if len(key) < 3 or key in NOT_LONE_GIVEN or civility_of(word) is not None:
+        return False
+    if not given_like(word) or is_initial(word):
+        return False
+    # « rose », « pierre » in lower case are words; capitalized they are names.
+    return word[:1].isupper() or not is_common_word(word)
 
 
 def _pick(targets: Sequence[_Target]) -> _Target:

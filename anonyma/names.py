@@ -125,7 +125,7 @@ def parse_person(value: str) -> PersonName | None:
         split = _UNDERSCORE_TOKEN.findall(value)
         words = [w for w in split if any(c.isalpha() for c in w)]
         upper = [_is_upper_word(w) for w in words]
-        if (any(upper) and not all(upper)) or any(_given_like(w) for w in words):
+        if (any(upper) and not all(upper)) or any(given_like(w) for w in words):
             tokens = split
     civility: list[str] = []
     gender: str | None = None
@@ -160,17 +160,17 @@ def parse_person(value: str) -> PersonName | None:
             else:
                 given, surname = words[:first_upper], words[first_upper:]
         else:
-            first_is_name = _given_like(words[0])
-            last_is_name = _given_like(words[-1])
+            first_is_name = given_like(words[0])
+            last_is_name = given_like(words[-1])
             if not first_is_name and last_is_name and not is_initial(words[0]):
                 surname_first = True
                 k = len(words) - 1
-                while k > 1 and _given_like(words[k - 1]):
+                while k > 1 and given_like(words[k - 1]):
                     k -= 1
                 surname, given = words[:k], words[k:]
             else:
                 k = 1
-                while k < len(words) - 1 and (_given_like(words[k]) or is_initial(words[k])):
+                while k < len(words) - 1 and (given_like(words[k]) or is_initial(words[k])):
                     if normalize(words[k]) in PARTICLES:
                         break
                     k += 1
@@ -183,7 +183,8 @@ def parse_person(value: str) -> PersonName | None:
     return PersonName(" ".join(civility), tuple(given), tuple(surname), surname_first, gender)
 
 
-def _given_like(token: str) -> bool:
+def given_like(token: str) -> bool:
+    """An initial or a given name of the lexicon (any case, compounds included)."""
     if is_initial(token):
         return True
     record = first_name(token)
@@ -323,6 +324,7 @@ __all__ = [
     "PARTICLES",
     "PersonName",
     "civility_of",
+    "given_like",
     "initials_forms",
     "initials_of",
     "is_initial",

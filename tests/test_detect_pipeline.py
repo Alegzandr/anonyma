@@ -103,3 +103,59 @@ def test_review_and_reject_keep_values(tmp_path: Path) -> None:
     assert top.status is DocumentStatus.ANONYMIZED
     assert top.output_path is not None
     assert "Kervella" in top.output_path.read_text(encoding="utf-8")
+
+
+def _anonymize(tmp_path: Path, files: dict[str, str]) -> dict[str, str]:
+    """Run the LIGHT pipeline in tag mode on text files; output text by input name."""
+    src = tmp_path / "in"
+    src.mkdir()
+    for name, text in files.items():
+        (src / name).write_text(text, encoding="utf-8")
+    pipeline = Pipeline(Config(profile=Profile.LIGHT, workers=1))
+    analysis = pipeline.analyze([src])
+    result = pipeline.apply(analysis, tmp_path / "out")
+    pipeline.close(analysis)
+    out: dict[str, str] = {}
+    for top, name in zip(result.results, sorted(files), strict=True):
+        assert top.output_path is not None, name
+        out[name] = top.output_path.read_text(encoding="utf-8")
+    return out
+
+
+def test_every_form_of_a_form_field_name_is_masked(tmp_path: Path) -> None:
+    """« NOM : X   Prénom : Y » pairs into one person: the lower-case full name, the
+    login (first initial + surname), ``prenom.nom`` and the rare given name alone are
+    all masked, with the same tag."""
+    text = (
+        "NOM : TOURNESOL   Prénom : Ysaline\n"
+        "Matricule 004512 - login ytournesol - poste 4412\n"
+        "Salarié(e) : ysaline tournesol, adresse ysaline.tournesol@exemple.test\n"
+        "Ysaline sera absente lundi.\n"
+    )
+    (out,) = _anonymize(tmp_path, {"fiche.txt": text}).values()
+    for leak in ("tournesol", "ysaline"):
+        assert leak not in out.casefold(), out
+    assert out.startswith("NOM : [PERSONNE_001]   Prénom : [PERSONNE_001]\n"), out
+    assert "login [PERSONNE_001]" in out
+
+
+def test_given_name_next_to_propagated_surname_is_masked(tmp_path: Path) -> None:
+    text = (
+        "Entretien avec M. Braquemart. Mme Vasseur-Delmas absente.\n"
+        "ludovic braquemart en copie. Relance de braquemart demain.\n"
+    )
+    (out,) = _anonymize(tmp_path, {"note.txt": text}).values()
+    assert "braquemart" not in out.casefold() and "ludovic" not in out, out
+    assert "M. [PERSONNE_001]. Mme [PERSONNE_002] absente." in out, out
+
+
+def test_display_name_matching_the_address_is_a_person(tmp_path: Path) -> None:
+    """An unusual given name: the address local part is the evidence."""
+    files = {
+        "a_courriel.txt": "Zéphyrin Quintavalle <zephyrin.quintavalle@exemple.test> a écrit :\n",
+        "b_note.txt": "Dossier transmis par Zéphyrin Quintavalle. Quintavalle rappellera.\n",
+    }
+    outputs = _anonymize(tmp_path, files)
+    for out in outputs.values():
+        assert "quintavalle" not in out.casefold() and "zéphyrin" not in out.casefold(), out
+    assert "[PERSONNE_" in outputs["b_note.txt"] and "EMAIL" not in outputs["b_note.txt"]
