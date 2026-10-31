@@ -8,16 +8,20 @@ The ONNX session is created lazily on the first call, once per process.
 from __future__ import annotations
 
 import importlib.util
+import re
 import threading
 from collections.abc import Sequence
 from pathlib import Path
 
 from anonyma.config import Config
+from anonyma.data import first_name, is_common_word
 from anonyma.detectors._filters import mid_sentence, ml_text, plausible, skip_segment
 from anonyma.logs import get_logger
 from anonyma.model_catalog import DEFAULT_GLINER, ModelKind, ModelSpec, get_spec
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
+from anonyma.names import civility_of
 from anonyma.registry import register_detector
+from anonyma.textutils import normalize
 
 log = get_logger("detectors.gliner")
 
@@ -130,11 +134,14 @@ class GlinerDetector(Detector):
             predictions = model.predict(texts, labels, threshold=self.threshold)
             for segment, text, spans in zip(group, texts, predictions, strict=True):
                 filename = segment.context.kind is SegmentKind.FILENAME
+                kept: list[Entity] = []
                 for span in spans:
                     entity_type = self.labels.get(span.label)
                     if entity_type is None:
                         continue
                     start, end = _tight(text, span.start, span.end)
+                    if entity_type == EntityType.PERSON:
+                        start = _skip_leading_words(text, start, end)
                     value = segment.text[start:end]
                     score = span.score
                     if filename and score < FILENAME_MIN_SCORE:
@@ -150,7 +157,7 @@ class GlinerDetector(Detector):
                         capitalized_mid_sentence=capitalized,
                     ):
                         continue
-                    found.append(
+                    kept.append(
                         Entity(
                             entity_type=entity_type,
                             value=value,
@@ -163,7 +170,63 @@ class GlinerDetector(Detector):
                             attributes={"label": span.label},
                         )
                     )
+                found.extend(_job_titles_near_people(text, kept))
         return found
+
+
+#: A job title identifies someone only next to them: same paragraph, this close.
+JOB_TITLE_WINDOW = 150
+_PARAGRAPH_BREAK = re.compile(r"\n[ \t ]*\n")
+
+
+def _job_titles_near_people(text: str, entities: list[Entity]) -> list[Entity]:
+    """Drop job titles with no person nearby (« le boucher du marché », « comédien »).
+
+    A job title is an indirect identifier only when it describes a given person
+    (« Mme Durand, présidente »); alone it is ordinary text. A title that makes most
+    of its segment (a table cell, a signature line) is kept as it is.
+    """
+    people = [e for e in entities if e.entity_type == EntityType.PERSON]
+    letters = sum(1 for c in text if c.isalpha()) or 1
+    out: list[Entity] = []
+    for e in entities:
+        if e.entity_type != EntityType.JOB_TITLE:
+            out.append(e)
+            continue
+        if 2 * sum(1 for c in e.value if c.isalpha()) >= letters:
+            out.append(e)
+            continue
+        for p in people:
+            lo, hi = (p.end, e.start) if p.end <= e.start else (e.end, p.start)
+            if hi - lo <= JOB_TITLE_WINDOW and not _PARAGRAPH_BREAK.search(text, lo, max(lo, hi)):
+                out.append(e)
+                break
+    return out
+
+
+#: Words a model span may start with that never belong to the name.
+_LEADING = frozenset(
+    {"bonjour", "bonsoir", "salut", "hello", "hi", "dear", "cher", "chere", "chers", "cheres",
+     "merci", "cordialement", "coucou"}
+)  # fmt: skip
+
+
+def _skip_leading_words(text: str, start: int, end: int) -> int:
+    """``Bonjour Rémi`` -> ``Rémi``; ``Rappeler M. Joubert`` -> ``M. Joubert``."""
+    words = list(_WORD.finditer(text, start, end))
+    while len(words) > 1 and normalize(words[0].group()) in _LEADING:
+        words.pop(0)
+    begin = words[0].start() if words else start
+    for i, w in enumerate(words[1:], start=1):
+        if civility_of(w.group()) is not None:
+            leading = words[:i]
+            if all(is_common_word(x.group()) and first_name(x.group()) is None for x in leading):
+                return w.start()
+            break
+    return begin
+
+
+_WORD = re.compile(r"[^\W\d_]+(?:['’\-][^\W\d_]+)*\.?")
 
 
 def _tight(text: str, start: int, end: int) -> tuple[int, int]:

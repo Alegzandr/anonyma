@@ -59,6 +59,13 @@ def test_pdf_operator_segments_are_skipped() -> None:
         ("IP", "poste-12", 0.7),
         ("PLAQUE", "0 0 0 rg /Helv 0 Tf", 0.5),
         ("TELEPHONE", "poste 12", 0.6),
+        # Benchmark false positives: confident model spans on ordinary words.
+        ("PERSONNE", "Mme", 0.94),
+        ("PERSONNE", "Madame, Monsieur", 0.56),
+        ("PERSONNE", "Un martin-pêcheur", 0.96),
+        ("ORGANISATION", "comité de direction", 0.95),
+        ("ORGANISATION", "Le comité", 0.9),
+        ("LIEU", "salle du rez-de-chaussée", 0.91),
     ],
 )
 def test_implausible_spans(entity_type: str, value: str, score: float) -> None:
@@ -78,6 +85,9 @@ def test_implausible_spans(entity_type: str, value: str, score: float) -> None:
         ("LIEU", "Quimper", 0.5),
         ("IP", "192.168.1.20", 0.7),
         ("TELEPHONE", "06 12 34 56 78", 0.9),
+        ("PERSONNE", "ophelie gauthier", 0.9),  # lower-case, but not ordinary words
+        ("PERSONNE", "Mme Petit", 0.9),
+        ("LIEU", "salle Bleue", 0.9),
     ],
 )
 def test_plausible_spans(entity_type: str, value: str, score: float) -> None:
