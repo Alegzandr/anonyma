@@ -220,16 +220,6 @@ def test_cancel_before_start(tmp_path: Path, canary_config: Config) -> None:
     assert result.results[0].status is DocumentStatus.CANCELLED
 
 
-def test_process_pool(tmp_path: Path, canary_config: Config) -> None:
-    src = tmp_path / "in"
-    src.mkdir()
-    for i in range(3):
-        (src / f"{i}.txt").write_text(f"{CANARY_PERSON} {i}\n", encoding="utf-8")
-    canary_config.workers = 2
-    result = Pipeline(canary_config).run([src], tmp_path / "out")
-    assert [r.status for r in result.results] == [DocumentStatus.ANONYMIZED] * 3
-
-
 def test_rejected_mention_survives_manual_propagation(
     tmp_path: Path, canary_config: Config
 ) -> None:
@@ -399,13 +389,13 @@ def test_crashing_document_fails_with_anonymized_name(
 ) -> None:
     from anonyma import pipeline as pipeline_module
 
-    canary_config.workers = 2
     inputs = tmp_path / "in"
     inputs.mkdir()
     (inputs / f"{CANARY_PERSON}.txt").write_text(f"Courrier de {CANARY_PERSON}.", "utf-8")
     (inputs / "b.txt").write_text("Bonjour.", "utf-8")
     pipeline = Pipeline(canary_config)
-    analysis = pipeline.analyze([inputs])
+    analysis = pipeline.analyze([inputs])  # inline: only the writing stage is under test
+    pipeline.config.workers = 2
     # Writing crashes every worker: the documents fail, nothing runs in this process.
     monkeypatch.setattr(pipeline, "_pool", _always_broken)
     monkeypatch.setattr(pipeline, "_serial", lambda fn, jobs, indices, cancel, done: indices[0])
@@ -822,10 +812,18 @@ def test_worker_logs_go_to_the_log_file_not_stderr(
     src = tmp_path / "in"
     src.mkdir()
     (src / "abime.docx").write_bytes(b"PK\x03\x04 pas un document")
-    (src / "a.txt").write_text("Rien.\n", encoding="utf-8")
-    config = Config(profile=Profile.LIGHT, workers=2)
+    for i in range(2):
+        (src / f"{i}.txt").write_text(f"{CANARY_PERSON} {i}\n", encoding="utf-8")
+    mask = [{"value": CANARY_PERSON, "type": "PERSONNE"}]
+    config = Config(profile=Profile.LIGHT, workers=2, always_mask=mask)
     result = Pipeline(config).run([src], tmp_path / "out")
-    assert {r.status for r in result.results} == {DocumentStatus.FAILED, DocumentStatus.ANONYMIZED}
+    statuses = {r.output_name.split("/")[-1]: r.status for r in result.results}
+    assert statuses.pop("abime.docx") is DocumentStatus.FAILED
+    # The other documents went through the worker pool, anonymized as inline.
+    assert set(statuses.values()) == {DocumentStatus.ANONYMIZED} and len(statuses) == 2
+    for r in result.results:
+        if r.output_path is not None:
+            assert "[PERSONNE_001]" in r.output_path.read_text(encoding="utf-8")
     captured = capfd.readouterr()
     assert "extraction failed" not in captured.err + captured.out
     log = (portable_home / "data" / "logs" / "anonyma.log").read_text(encoding="utf-8")
