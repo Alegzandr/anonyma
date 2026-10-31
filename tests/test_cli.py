@@ -292,6 +292,7 @@ def test_pseudonymization_prompts_passphrase(
     tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(cli.PASSPHRASE_ENV, raising=False)
+    monkeypatch.setattr(cli, "_interactive", lambda: True)  # a user at a console
     table = tmp_path / "table.anonyma"
     args = _run_args(corpus, tmp_path / "s1", business_list, "-r", "pseudonymisation")
     result = invoke(*args, "--table", table, input=f"{SECRET}\n{SECRET}\n")
@@ -970,3 +971,51 @@ def test_usage_shows_the_documented_program_name(monkeypatch: pytest.MonkeyPatch
     assert cli.program_name() == "anonyma-cli"
     help_text = " ".join(invoke("run", "--help").output.split())
     assert "interrompu" in help_text
+
+
+def test_passphrase_without_console_fails_at_once(
+    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(cli.PASSPHRASE_ENV, raising=False)
+    monkeypatch.setattr(cli, "_interactive", lambda: False)
+    args = _run_args(corpus, tmp_path / "s", business_list, "-r", "pseudonymisation")
+    result = invoke(*args, "--table", tmp_path / "t.anonyma", "--json")
+    assert result.exit_code == 2 and result.stdout == ""
+    assert cli.PASSPHRASE_ENV in result.output
+    assert not (tmp_path / "s").exists()
+
+
+def test_reidentifier_restores_the_exact_text_and_names_ignored_files(
+    tmp_path: Path, business_list: Path
+) -> None:
+    folder = tmp_path / "e"
+    folder.mkdir()
+    texts = {
+        "a.txt": "Signé Zéphyrin Quintavalle.\n",
+        "b.txt": "Signé ZÉPHYRIN QUINTAVALLE.\n",  # another form of the same person
+    }
+    for name, text in texts.items():
+        (folder / name).write_text(text, encoding="utf-8")
+    table = tmp_path / "t.anonyma"
+    env = {cli.PASSPHRASE_ENV: SECRET}
+    out = tmp_path / "s"
+    args = _run_args(folder, out, business_list, "-r", "pseudonymisation", "-m", "realiste")
+    assert invoke(*args, "--table", table, env=env).exit_code == 0
+    (out / "e" / "image.png").write_bytes(b"PNG image")
+    result = invoke("reidentifier", out, "-o", tmp_path / "r", "--table", table, env=env)
+    assert result.exit_code == 1
+    for name, text in texts.items():  # as written, not the canonical form
+        assert (tmp_path / "r" / "s" / "e" / name).read_text(encoding="utf-8") == text
+    output = " ".join(result.output.split())
+    assert "« s/e/image.png » ignoré" in output
+    assert "2 fichiers ré-identifiés" in output and "1 fichier ignoré" in output
+
+
+@pytest.mark.parametrize("width", [80, 200])
+def test_models_list_never_cuts_identifiers(monkeypatch: pytest.MonkeyPatch, width: int) -> None:
+    monkeypatch.setattr(cli.out, "_width", width)
+    output = invoke("modeles", "liste").output
+    for spec in model_catalog.CATALOG:
+        assert spec.id in output.split(), spec.id
+        assert spec.revision in output  # needed for an offline import
+    assert "…" not in output

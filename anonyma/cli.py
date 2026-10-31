@@ -619,6 +619,12 @@ def read_passphrase(*, confirm: bool) -> str:
     _env_passphrase = None
     if env:
         return env
+    if not _interactive():
+        # A prompt nobody can answer would hang a script or an agent.
+        fail(
+            "Phrase secrète requise, mais aucune console interactive pour la saisir : "
+            f"définissez la variable d'environnement {PASSPHRASE_ENV}."
+        )
     try:
         # On stderr: stdout stays free for --json.
         value: str = typer.prompt(
@@ -633,6 +639,14 @@ def read_passphrase(*, confirm: bool) -> str:
     if not value:
         fail("La phrase secrète ne peut pas être vide.")
     return value
+
+
+def _interactive() -> bool:
+    """Whether a user can answer a prompt (standard input is a terminal)."""
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (ValueError, OSError):
+        return False
 
 
 def open_store(path: Path, *, create: bool) -> EncryptedMappingStore:
@@ -1592,7 +1606,9 @@ def reidentify(
             else:
                 out.print(f"{_markup_escape(tag)} → {_markup_escape(original)}")
         if inputs and output is not None:
-            mapping = {e.substitute: e.original for e in store.items()}
+            from anonyma.store import reidentification_map
+
+            mapping = reidentification_map(store.items())
             items = collect_inputs(inputs)
             _check_reidentify_output(inputs, output)
             if _reidentify_files(items, output, mapping) != EXIT_OK:
@@ -1608,7 +1624,7 @@ def _print_names(entries: Sequence[Any]) -> None:
         return
     listing = Table(show_edge=False)
     for column in ("Lot", "Nom produit", "Nom d'origine"):
-        listing.add_column(column)
+        listing.add_column(column, overflow="fold")  # names are never cut
     for entry in entries:
         listing.add_row(entry.batch_id, entry.output_name, _markup_escape(entry.original))
     out.print(listing)
@@ -1667,21 +1683,27 @@ def _reidentify_files(items: list[tuple[Path, str]], output: Path, mapping: dict
 
     code = EXIT_OK
     total = 0
-    for index, (path, name) in enumerate(items, start=1):
+    done = ignored = 0
+
+    def skip(name: str, reason: str) -> None:
+        # ``name``: a pseudonymized output name (what the user gave), safe to show.
+        nonlocal code, ignored
+        out.print(f"[yellow]« {_markup_escape(name)} » ignoré : {reason}.[/]", soft_wrap=True)
+        code = EXIT_PARTIAL
+        ignored += 1
+
+    for path, name in items:
         if path.suffix.lower() not in REIDENTIFY_EXTENSIONS:
-            out.print(f"[yellow]Fichier n°{index} ignoré : format non pris en charge.[/]")
-            code = EXIT_PARTIAL
+            skip(name, "format non pris en charge (fichiers texte seulement)")
             continue
         try:
             data = path.read_bytes()
         except OSError:
-            out.print(f"[yellow]Fichier n°{index} ignoré : lecture impossible.[/]")
-            code = EXIT_PARTIAL
+            skip(name, "lecture impossible")
             continue
         decoded = _decode(data)
         if decoded is None:
-            out.print(f"[yellow]Fichier n°{index} ignoré : encodage non reconnu.[/]")
-            code = EXIT_PARTIAL
+            skip(name, "encodage non reconnu")
             continue
         text, encoding = decoded
         restored, count = reidentify_text(text, mapping)
@@ -1695,13 +1717,16 @@ def _reidentify_files(items: list[tuple[Path, str]], output: Path, mapping: dict
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(restored.encode(encoding))
         except OSError:
-            out.print(f"[yellow]Fichier n°{index} non écrit : écriture impossible.[/]")
-            code = EXIT_PARTIAL
+            skip(name, "écriture impossible")
             continue
         total += count
-    files = plural(len(items), "fichier traité", "fichiers traités")
+        done += 1
+    files = plural(done, "fichier ré-identifié", "fichiers ré-identifiés")
     substitutes = plural(total, "substitut remplacé", "substituts remplacés")
-    out.print(f"{files}, {substitutes}.", soft_wrap=True)
+    line = f"{files}, {substitutes}"
+    if ignored:
+        line += f" ; {plural(ignored, 'fichier ignoré', 'fichiers ignorés')}"
+    out.print(f"{line}.", soft_wrap=True)
     _print_path(out, "Dossier de sortie", output)
     return code
 
@@ -1737,23 +1762,54 @@ def models_list() -> None:
     if not statuses:
         out.print("Le catalogue de modèles est vide.")
         raise typer.Exit()
+    from anonyma.model_catalog import ModelKind
+
     recommended = hardware.recommend_llm(hardware.detect_hardware())
+    if not engine_available("llm"):
+        recommended = None
+    engines = {ModelKind.LLM: "llm", ModelKind.GLINER: "gliner"}
+    # Identifiers and revisions are typed or copied: never cut. On a narrow terminal
+    # the licence and the revision (to download by hand for an offline import) are
+    # listed under the table instead of in columns.
+    wide = out.width >= WIDE_MODEL_LIST
     table = Table(show_edge=False)
-    for column in ("Identifiant", "Type", "Titre", "Licence", "Taille", "État"):
-        table.add_column(column)
+    longest = max(len(s.spec.id) for s in statuses)
+    table.add_column("Identifiant", no_wrap=True, min_width=longest)
+    table.add_column("Type", no_wrap=True)
+    table.add_column("Titre", min_width=14)
+    if wide:
+        table.add_column("Licence", no_wrap=True)
+    table.add_column("Taille", no_wrap=True)
+    table.add_column("État", min_width=12)
+    if wide:
+        table.add_column("Révision", no_wrap=True)
     for status in statuses:
         spec = status.spec
         size = sum(f.size for f in spec.files)
-        title = spec.title + (" [cyan](conseillé)[/]" if spec.id == recommended else "")
-        table.add_row(
-            spec.id,
-            spec.kind.value,
-            title,
-            spec.license,
-            hardware.format_bytes(size) if size else "?",
-            _status_label(status, manager.partial_bytes(spec.id)),
-        )
+        title = _markup_escape(spec.title)
+        if spec.id == recommended:
+            title += " [cyan](conseillé)[/]"
+        state = _status_label(status, manager.partial_bytes(spec.id))
+        engine = engines.get(spec.kind)
+        if status.installed and engine and not engine_available(engine):
+            state += f" [yellow]({_ENGINE_MISSING[engine]})[/]"
+        size_text = hardware.format_bytes(size) if size else "?"
+        if wide:
+            table.add_row(
+                spec.id, spec.kind.value, title, spec.license, size_text, state, spec.revision
+            )
+        else:
+            table.add_row(spec.id, spec.kind.value, title, size_text, state)
     out.print(table)
+    if not wide:
+        out.print("Licence et révision (import hors ligne) :")
+        for status in statuses:
+            spec = status.spec
+            out.print(f"• {spec.id} : {spec.license}, révision {spec.revision}", soft_wrap=True)
+
+
+#: Terminal width from which ``modeles liste`` shows licences and revisions as columns.
+WIDE_MODEL_LIST = 150
 
 
 def _spec_or_fail(model_id: str) -> Any:

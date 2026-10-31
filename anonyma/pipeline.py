@@ -812,6 +812,26 @@ def store_neutral_names(
                 )
 
 
+def store_surfaces(
+    store: MappingStore, entities: Sequence[Entity], table: SubstitutionTable
+) -> None:
+    """Keep, for each substitute written in the outputs, the exact text it replaces
+    (``[PERSONNE_001]`` for « DUPONT » only), so that re-identification restores the
+    text as it was; a substitute standing for several texts gets an empty original
+    (the canonical value is restored), which also clears an older exact form."""
+    from anonyma.store import SURFACE_TYPE
+
+    if table.mode is ReplacementMode.BLACKOUT:
+        return
+    texts: dict[str, set[str]] = {}
+    for e in entities:
+        if e.cluster_id in table.by_cluster:
+            texts.setdefault(table.substitute_for(e), set()).add(e.value)
+    for substitute, values in sorted(texts.items()):
+        original = next(iter(values)) if len(values) == 1 else ""
+        store.save(SURFACE_TYPE, substitute, original, substitute)
+
+
 def original_names(root: Document) -> list[str]:
     """Every original name of a top-level document's tree (sensitive)."""
     return sorted({d.name for d in root.walk() if d.name})
@@ -1492,6 +1512,8 @@ class Pipeline:
         resolved = resolve_decisions(analysis, decisions)
         entities, active = resolved.entities, resolved.clusters
         table = Replacer(self.config, self.store).assign(active, entities, analysis.documents)
+        if self.store is not None and self.config.regime is Regime.PSEUDONYMIZATION:
+            store_surfaces(self.store, entities, table)
         local = {cid for cid, c in active.items() if c.entity_type in DOCUMENT_LOCAL_TYPES}
         batch_wide = sorted(
             {
