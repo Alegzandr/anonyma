@@ -325,7 +325,12 @@ uv run ruff check . && uv run ruff format . && uv run mypy && uv run pytest
 uv run python packaging/build.py          # dossier portable complet + tests de fumée + zip
 uv run python packaging/build.py --sans-libreoffice   # archive légère, sans LibreOffice
 uv run python packaging/gen_licenses.py   # régénère LICENSES.md
+uv run python -m tests.benchmark.measure  # banc d'essai : rappel et précision mesurés
 ```
+
+Le banc d'essai (`tests/benchmark/`) anonymise un corpus synthétique de 24 documents
+pièges et relit les sorties par des moyens indépendants ; méthode et résultats dans
+[tests/benchmark/RESULTS.md](tests/benchmark/RESULTS.md).
 
 L'intégration continue (`.github/workflows/ci.yml`) lance l'analyse statique et les
 tests sous Windows, macOS et Linux (avec LibreOffice installé sur les machines de test,

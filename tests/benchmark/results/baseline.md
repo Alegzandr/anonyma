@@ -5,7 +5,7 @@
 - Durée du lot : 16.8 s pour 24 documents
 - Rappel identifiants directs : **91.0 %** (293/322)
 - Rappel autres types : 38.6 % (22/57)
-- Précision (segments remplacés correspondant à une valeur de référence) : 94.1 % (304/323)
+- Précision (segments remplacés correspondant à une valeur de référence) : 94.1 % (304/323) ; hors dates non liées à une naissance : 99.7 %
 - Phrases témoins intactes : 93.0 % (40/43)
 
 | Type | Rappel | Valeurs |
@@ -138,7 +138,7 @@
 - Durée du lot : 49.9 s pour 24 documents
 - Rappel identifiants directs : **94.4 %** (304/322)
 - Rappel autres types : 93.0 % (53/57)
-- Précision (segments remplacés correspondant à une valeur de référence) : 87.0 % (289/332)
+- Précision (segments remplacés correspondant à une valeur de référence) : 87.0 % (289/332) ; hors dates non liées à une naissance : 91.7 %
 - Phrases témoins intactes : 44.2 % (19/43)
 
 | Type | Rappel | Valeurs |

@@ -777,7 +777,7 @@ class Doc:
 
     @property
     def dir(self) -> Path:
-        return CORPUS / self.slug
+        return OUTPUT["corpus"] / self.slug
 
     def add(
         self,
@@ -860,8 +860,9 @@ class Doc:
             "keep": self.keep,
             "images": self.images,
         }
-        TRUTH.mkdir(parents=True, exist_ok=True)
-        (TRUTH / f"{self.slug}.json").write_text(
+        truth = OUTPUT["truth"]
+        truth.mkdir(parents=True, exist_ok=True)
+        (truth / f"{self.slug}.json").write_text(
             json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
         )
 
@@ -936,6 +937,13 @@ def mark(doc: Doc, canvas: Canvas, image: str, kind: str, value: str, sub: str) 
 # ---------------------------------------------------------------------------
 # Office builders (raw XML, like tests/fixtures/generators/office.py)
 # ---------------------------------------------------------------------------
+
+
+def zip_entry(zf: zipfile.ZipFile, name: str, data: str | bytes) -> None:
+    """Archive member with a fixed date (deterministic archives)."""
+    info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+    info.compress_type = zipfile.ZIP_DEFLATED
+    zf.writestr(info, data.encode("utf-8") if isinstance(data, str) else data)
 
 
 def ooxml_core(title: str, creator: str, last_by: str, keywords: str = "") -> str:
@@ -1110,13 +1118,19 @@ def odf_package_bytes(mimetype: str, body: str, *, meta: str, header: str, foote
 # ---------------------------------------------------------------------------
 
 P: dict[str, Person] = {}
-COMPANY = {
-    "valmont": ("Transports Valmont SAS", siren()),
-    "lerouge": ("Cabinet Lerouge & Associés", siren()),
-    "hauts": ("Mutuelle des Hauts-Plateaux", siren()),
-    "bellerive": ("Assurances Bellerive", siren()),
-    "orme": ("Clinique de l'Orme-Rond", siren()),
-}
+COMPANY: dict[str, tuple[str, str]] = {}
+#: Output folders (``main(root)`` may redirect them, e.g. to check determinism).
+OUTPUT = {"corpus": CORPUS, "truth": TRUTH}
+
+
+def build_companies() -> dict[str, tuple[str, str]]:
+    return {
+        "valmont": ("Transports Valmont SAS", siren()),
+        "lerouge": ("Cabinet Lerouge & Associés", siren()),
+        "hauts": ("Mutuelle des Hauts-Plateaux", siren()),
+        "bellerive": ("Assurances Bellerive", siren()),
+        "orme": ("Clinique de l'Orme-Rond", siren()),
+    }
 
 
 def company(doc: Doc, key: str, where: str, *, with_ids: bool = False) -> tuple[str, str, str, str]:
@@ -1691,7 +1705,8 @@ def doc_eml_encoded() -> Doc:
     )
     zbuf = io.BytesIO()
     with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
+        zip_entry(
+            zf,
             f"{m.last} - constat.txt",
             f"Constat amiable signé par {m.full} le 4 mars 2026.\r\n"
             f"Véhicule adverse : {P['kowalczyk'].plate}\r\n",
@@ -2803,7 +2818,8 @@ def doc_zip_nested() -> Doc:
     folder = f"Dossier {f.first} {f.last}"
     inner_zip = io.BytesIO()
     with zipfile.ZipFile(inner_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
+        zip_entry(
+            zf,
             "contrat.docx",
             simple_docx(
                 [
@@ -2816,8 +2832,8 @@ def doc_zip_nested() -> Doc:
                 author=i.full,
             ),
         )
-        zf.writestr(
-            f"RIB_{f.last}.txt", f"Titulaire : {f.full}\nIBAN : {fmt_iban(f.iban, 'dashes')}\n"
+        zip_entry(
+            zf, f"RIB_{f.last}.txt", f"Titulaire : {f.full}\nIBAN : {fmt_iban(f.iban, 'dashes')}\n"
         )
     mail = EmailMessage(policy=SMTP)
     mail["From"] = formataddr((i.full, i.email))
@@ -2834,14 +2850,16 @@ def doc_zip_nested() -> Doc:
     outer = io.BytesIO()
     with zipfile.ZipFile(outer, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.comment = f"Archive constituée par {i.full}".encode()
-        zf.writestr(
+        zip_entry(
+            zf,
             f"{folder}/CV_{f.first}_{f.last}.txt",
             f"Curriculum vitae\n{f.full}\n{f.address.line1}\n{f.address.line2}\n"
             f"{f.email} — {fmt_phone(f.phone, 'intl')}\nNé le {fmt_date(f.born, 'slash')}\n"
             f"{NEGATIVES[6]}\n",
         )
-        zf.writestr(f"{folder}/courriels/echange_{f.username}.eml", mail.as_bytes(policy=SMTP))
-        zf.writestr(
+        zip_entry(zf, f"{folder}/courriels/echange_{f.username}.eml", mail.as_bytes(policy=SMTP))
+        zip_entry(
+            zf,
             f"{folder}/notes.csv",
             f"date;auteur;note\n2026-03-01;{i.full};Entretien avec {f.last.upper()}\n",
         )
@@ -2911,8 +2929,8 @@ def doc_7z() -> Doc:
     )
     inner = io.BytesIO()
     with zipfile.ZipFile(inner, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("courriel_cotisations.eml", mail.as_bytes(policy=SMTP))
-        zf.writestr("lisezmoi.txt", NEGATIVES[0] + "\n")
+        zip_entry(zf, "courriel_cotisations.eml", mail.as_bytes(policy=SMTP))
+        zip_entry(zf, "lisezmoi.txt", NEGATIVES[0] + "\n")
     doc.dir.mkdir(parents=True)
     target = doc.dir / "sauvegarde.7z"
     with py7zr.SevenZipFile(target, "w") as sz:
@@ -3096,17 +3114,24 @@ def check_numbers() -> None:
         assert luhn_ok(sn)
 
 
-def main() -> None:
+def main(root: Path | None = None) -> None:
+    """Write the corpus and its ground truth (to ``root`` instead of this folder)."""
+    OUTPUT["corpus"] = root / "corpus" if root else CORPUS
+    OUTPUT["truth"] = root / "ground_truth" if root else TRUTH
+    RNG.seed(SEED)
+    COMPANY.clear()
+    COMPANY.update(build_companies())
+    P.clear()
     P.update(build_people())
     check_numbers()
-    for target in (CORPUS, TRUTH):
+    for target in OUTPUT.values():
         if target.exists():
             shutil.rmtree(target)
-    CORPUS.mkdir(parents=True)
+    OUTPUT["corpus"].mkdir(parents=True)
     for build in BUILDERS:
         doc = build()
         doc.save()
-    total = sum(f.stat().st_size for f in CORPUS.rglob("*") if f.is_file())
+    total = sum(f.stat().st_size for f in OUTPUT["corpus"].rglob("*") if f.is_file())
     print(f"{len(BUILDERS)} documents, {total / 1024:.0f} Kio")
 
 

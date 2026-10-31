@@ -425,6 +425,7 @@
       "spans": 26,
       "vrais": 25,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "4 mars 2026"
       ]
@@ -1720,6 +1721,7 @@
       "spans": 47,
       "vrais": 47,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 4,
@@ -2008,6 +2010,7 @@
       "spans": 19,
       "vrais": 18,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "2026 02 01"
       ]
@@ -2175,6 +2178,7 @@
       "spans": 1,
       "vrais": 1,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 1,
@@ -2354,6 +2358,7 @@
       "spans": 10,
       "vrais": 10,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 2,
@@ -2682,6 +2687,7 @@
       "spans": 64,
       "vrais": 58,
       "faux": 6,
+      "faux_dates": 6,
       "faux_exemples": [
        "4 mar 2026",
        "04 mar 2026",
@@ -2808,6 +2814,7 @@
       "spans": 12,
       "vrais": 11,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "05 mar 2026"
       ]
@@ -3029,6 +3036,7 @@
       "spans": 23,
       "vrais": 19,
       "faux": 4,
+      "faux_dates": 4,
       "faux_exemples": [
        "09 mar 2026",
        "10 mar 2026",
@@ -3167,6 +3175,7 @@
       "spans": 18,
       "vrais": 17,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "9 mar 2026"
       ]
@@ -3450,6 +3459,7 @@
       "spans": 16,
       "vrais": 16,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 2,
@@ -3730,6 +3740,7 @@
       "spans": 10,
       "vrais": 10,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 2,
@@ -3890,6 +3901,7 @@
       "spans": 10,
       "vrais": 10,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 1,
@@ -4056,6 +4068,7 @@
       "spans": 10,
       "vrais": 9,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "12 mars 2026"
       ]
@@ -4155,6 +4168,7 @@
       "spans": 6,
       "vrais": 6,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 1,
@@ -4327,6 +4341,7 @@
       "spans": 5,
       "vrais": 5,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 1,
@@ -4461,6 +4476,7 @@
       "spans": 1,
       "vrais": 1,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 0,
@@ -4572,6 +4588,7 @@
       "spans": 0,
       "vrais": 0,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 0,
@@ -4679,6 +4696,7 @@
       "spans": 0,
       "vrais": 0,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 0,
@@ -4750,6 +4768,7 @@
       "spans": 0,
       "vrais": 0,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 0,
@@ -4918,6 +4937,7 @@
       "spans": 16,
       "vrais": 15,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "06 mar 2026"
       ]
@@ -5039,6 +5059,7 @@
       "spans": 4,
       "vrais": 4,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 1,
@@ -5114,6 +5135,7 @@
       "spans": 4,
       "vrais": 4,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 1,
@@ -5196,6 +5218,7 @@
       "spans": 3,
       "vrais": 1,
       "faux": 2,
+      "faux_dates": 1,
       "faux_exemples": [
        "12 mars 2026",
        "fontaine"
@@ -5535,6 +5558,7 @@
       "spans": 18,
       "vrais": 17,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "12 march 2026"
       ]
@@ -6417,6 +6441,10 @@
      304,
      323
     ],
+    "precision_without_dates": [
+     304,
+     305
+    ],
     "keep": [
      40,
      43
@@ -6845,6 +6873,7 @@
       "spans": 30,
       "vrais": 26,
       "faux": 4,
+      "faux_dates": 1,
       "faux_exemples": [
        "4 mars 2026",
        "monsieur",
@@ -8071,6 +8100,7 @@
       "spans": 34,
       "vrais": 33,
       "faux": 1,
+      "faux_dates": 0,
       "faux_exemples": [
        "salle du rez de chaussee"
       ]
@@ -8355,6 +8385,7 @@
       "spans": 20,
       "vrais": 19,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "2026 02 01"
       ]
@@ -8512,6 +8543,7 @@
       "spans": 3,
       "vrais": 2,
       "faux": 1,
+      "faux_dates": 0,
       "faux_exemples": [
        "le boucher du marche couvert"
       ]
@@ -8683,6 +8715,7 @@
       "spans": 11,
       "vrais": 10,
       "faux": 1,
+      "faux_dates": 0,
       "faux_exemples": [
        "salle du rez de chaussee"
       ]
@@ -8999,6 +9032,7 @@
       "spans": 62,
       "vrais": 54,
       "faux": 8,
+      "faux_dates": 6,
       "faux_exemples": [
        "4 mar 2026",
        "04 mar 2026",
@@ -9129,6 +9163,7 @@
       "spans": 12,
       "vrais": 11,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "05 mar 2026"
       ]
@@ -9346,6 +9381,7 @@
       "spans": 22,
       "vrais": 16,
       "faux": 6,
+      "faux_dates": 4,
       "faux_exemples": [
        "09 mar 2026",
        "10 mar 2026",
@@ -9486,6 +9522,7 @@
       "spans": 20,
       "vrais": 17,
       "faux": 3,
+      "faux_dates": 1,
       "faux_exemples": [
        "9 mar 2026",
        "comite de direction",
@@ -9767,6 +9804,7 @@
       "spans": 15,
       "vrais": 14,
       "faux": 1,
+      "faux_dates": 0,
       "faux_exemples": [
        "le boucher du marche couvert"
       ]
@@ -10051,6 +10089,7 @@
       "spans": 7,
       "vrais": 7,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 2,
@@ -10208,6 +10247,7 @@
       "spans": 11,
       "vrais": 10,
       "faux": 1,
+      "faux_dates": 0,
       "faux_exemples": [
        "projet hermine"
       ]
@@ -10365,6 +10405,7 @@
       "spans": 13,
       "vrais": 10,
       "faux": 3,
+      "faux_dates": 1,
       "faux_exemples": [
        "le comite",
        "12 mars 2026",
@@ -10467,6 +10508,7 @@
       "spans": 6,
       "vrais": 6,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 1,
@@ -10629,6 +10671,7 @@
       "spans": 7,
       "vrais": 6,
       "faux": 1,
+      "faux_dates": 0,
       "faux_exemples": [
        "salle du rez de chaussee"
       ]
@@ -10764,6 +10807,7 @@
       "spans": 1,
       "vrais": 1,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 0,
@@ -10875,6 +10919,7 @@
       "spans": 0,
       "vrais": 0,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 0,
@@ -10982,6 +11027,7 @@
       "spans": 0,
       "vrais": 0,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 0,
@@ -11053,6 +11099,7 @@
       "spans": 0,
       "vrais": 0,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 0,
@@ -11208,6 +11255,7 @@
       "spans": 18,
       "vrais": 17,
       "faux": 1,
+      "faux_dates": 1,
       "faux_exemples": [
        "06 mar 2026"
       ]
@@ -11329,6 +11377,7 @@
       "spans": 6,
       "vrais": 5,
       "faux": 1,
+      "faux_dates": 0,
       "faux_exemples": [
        "comite de direction"
       ]
@@ -11408,6 +11457,7 @@
       "spans": 4,
       "vrais": 4,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 1,
@@ -11484,6 +11534,7 @@
       "spans": 12,
       "vrais": 3,
       "faux": 9,
+      "faux_dates": 1,
       "faux_exemples": [
        "comite de direction",
        "salle du rez de chaussee un martin pecheur",
@@ -11813,6 +11864,7 @@
       "spans": 18,
       "vrais": 18,
       "faux": 0,
+      "faux_dates": 0,
       "faux_exemples": []
      },
      "keep_total": 2,
@@ -12692,6 +12744,10 @@
     "precision": [
      289,
      332
+    ],
+    "precision_without_dates": [
+     289,
+     315
     ],
     "keep": [
      19,

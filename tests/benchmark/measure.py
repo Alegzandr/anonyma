@@ -644,7 +644,10 @@ def load_truth() -> list[dict[str, Any]]:
     return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(TRUTH.glob("*.json"))]
 
 
-def run_anonyma(profile: str, output: Path, report: Path, workers: int) -> float:
+def run_anonyma(
+    profile: str, output: Path, report: Path, workers: int, home: Path | None = None
+) -> float:
+    """Run the command line on the whole corpus (one batch); ``home``: ANONYMA_HOME."""
     if output.exists():
         shutil.rmtree(output)
     inputs = [str(CORPUS / d) for d in sorted(os.listdir(CORPUS)) if (CORPUS / d).is_dir()]
@@ -664,9 +667,18 @@ def run_anonyma(profile: str, output: Path, report: Path, workers: int) -> float
         "-j",
         str(workers),
     ]
+    env = dict(os.environ)
+    if home is not None:
+        env["ANONYMA_HOME"] = str(home)
     start = time.perf_counter()
     proc = subprocess.run(
-        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        env=env,
     )
     elapsed = time.perf_counter() - start
     if proc.returncode not in (0, 1):
@@ -741,7 +753,7 @@ def precision(orig_text: str, out_text: str, entries: list[dict[str, Any]]) -> d
     a, b = tokens(orig_text), tokens(out_text)
     marked = mark_truth(a, entries)
     matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
-    tp, fp = 0, 0
+    tp, fp, fp_dates = 0, 0, 0
     fp_spans: list[str] = []
     for op, i1, i2, _j1, _j2 in matcher.get_opcodes():
         if op != "replace":
@@ -750,8 +762,24 @@ def precision(orig_text: str, out_text: str, entries: list[dict[str, Any]]) -> d
             tp += 1
         else:
             fp += 1
-            fp_spans.append(" ".join(a[i1:i2])[:80])
-    return {"spans": tp + fp, "vrais": tp, "faux": fp, "faux_exemples": fp_spans}
+            span = " ".join(a[i1:i2])
+            fp_dates += 1 if _DATE_SPAN.match(span) else 0
+            fp_spans.append(span[:80])
+    return {
+        "spans": tp + fp,
+        "vrais": tp,
+        "faux": fp,
+        "faux_dates": fp_dates,
+        "faux_exemples": fp_spans,
+    }
+
+
+#: A replaced span that is only a date (meeting, sending date): masked by the date
+#: policy, not by a detection error; reported apart.
+_DATE_SPAN = re.compile(
+    r"^(?:\d{1,2} (?:janv|fevr|mars|avr|mai|juin|juil|aout|sept|oct|nov|dec|jan|feb|mar|apr|"
+    r"may|jun|jul|aug|sep)[a-z]* \d{4}|\d{4} \d{2} \d{2}|\d{1,2} \d{1,2} \d{2,4})$"
+)
 
 
 def evaluate_doc(truth: dict[str, Any], out_root: Path) -> dict[str, Any]:
@@ -840,11 +868,14 @@ def aggregate(docs: list[dict[str, Any]]) -> dict[str, Any]:
                 bucket[1] += 1
     prec: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     total_prec = [0, 0]
+    no_dates = [0, 0]
     for doc in docs:
         p = doc["precision"]
         for bucket in (prec[doc["format"]], total_prec):
             bucket[0] += p["vrais"]
             bucket[1] += p["spans"]
+        no_dates[0] += p["vrais"]
+        no_dates[1] += p["spans"] - p.get("faux_dates", 0)
     return {
         "direct": direct,
         "indirect": indirect,
@@ -852,6 +883,7 @@ def aggregate(docs: list[dict[str, Any]]) -> dict[str, Any]:
         "by_format_type": {f: dict(v) for f, v in by_fmt_type.items()},
         "precision_by_format": dict(prec),
         "precision": total_prec,
+        "precision_without_dates": no_dates,
         "keep": [sum(d["keep_ok"] for d in docs), sum(d["keep_total"] for d in docs)],
     }
 
@@ -874,7 +906,8 @@ def markdown(results: dict[str, Any]) -> str:
             f"- Rappel autres types : {pct(agg['indirect'])} "
             f"({agg['indirect'][0]}/{agg['indirect'][1]})",
             f"- Précision (segments remplacés correspondant à une valeur de référence) : "
-            f"{pct(agg['precision'])} ({agg['precision'][0]}/{agg['precision'][1]})",
+            f"{pct(agg['precision'])} ({agg['precision'][0]}/{agg['precision'][1]}) ; "
+            f"hors dates non liées à une naissance : {pct(agg['precision_without_dates'])}",
             f"- Phrases témoins intactes : {pct(agg['keep'])} ({agg['keep'][0]}/{agg['keep'][1]})",
             "",
             "| Type | Rappel | Valeurs |",
@@ -920,12 +953,14 @@ def markdown(results: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def evaluate_profile(profile: str, work: Path, workers: int, reuse: bool) -> dict[str, Any]:
+def evaluate_profile(
+    profile: str, work: Path, workers: int, reuse: bool, home: Path | None = None
+) -> dict[str, Any]:
     out = work / profile
     report_path = work / f"rapport-{profile}.json"
     seconds = 0.0
     if not (reuse and out.exists() and report_path.exists()):
-        seconds = run_anonyma(profile, out, report_path, workers)
+        seconds = run_anonyma(profile, out, report_path, workers, home)
         (work / f"duree-{profile}.txt").write_text(f"{seconds}", encoding="utf-8")
     elif (work / f"duree-{profile}.txt").exists():
         seconds = float((work / f"duree-{profile}.txt").read_text(encoding="utf-8"))
@@ -954,12 +989,15 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         "--reutiliser", action="store_true", help="réutiliser les sorties existantes"
     )
     parser.add_argument("--sans-ecrire", action="store_true")
+    parser.add_argument(
+        "--accueil", type=Path, default=None, help="dossier ANONYMA_HOME d'Anonyma (modèles)"
+    )
     args = parser.parse_args(argv)
     args.travail.mkdir(parents=True, exist_ok=True)
     results: dict[str, Any] = {"name": args.nom, "profiles": {}}
     for profile in args.profil:
         results["profiles"][profile] = evaluate_profile(
-            profile, args.travail, args.processus, args.reutiliser
+            profile, args.travail, args.processus, args.reutiliser, args.accueil
         )
         agg = results["profiles"][profile]["aggregate"]
         print(
@@ -972,9 +1010,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         (RESULTS / f"{args.nom}.json").write_text(
             json.dumps(results, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n"
         )
-        (RESULTS / f"{args.nom}.md").write_text(
-            markdown(results), encoding="utf-8", newline="\n"
-        )
+        (RESULTS / f"{args.nom}.md").write_text(markdown(results), encoding="utf-8", newline="\n")
     return results
 
 
