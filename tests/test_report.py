@@ -152,3 +152,67 @@ def test_incomplete_verification_is_reported(tmp_path: Path) -> None:
     ]
     assert "## Vérification incomplète" in report.to_markdown()
     assert "Vérification incomplète" in report.to_html()
+
+
+def _batch(tmp_path: Path, *results: DocumentResult) -> BatchReport:
+    return BatchReport.from_result(
+        BatchResult(
+            "lot",
+            tmp_path,
+            list(results),
+            started_at=datetime(2026, 1, 1, 10, 0, 0),
+            finished_at=datetime(2026, 1, 1, 10, 1, 0),
+        )
+    )
+
+
+def _doc(status: DocumentStatus, output_path: Path | None = None) -> DocumentResult:
+    return DocumentResult("d", "a.txt", "txt", "txt", status, output_path=output_path)
+
+
+def test_verdict(tmp_path: Path) -> None:
+    ok = _doc(DocumentStatus.ANONYMIZED)
+    assert _batch(tmp_path, ok).verdict() == ("1 fichier anonymisé et vérifié.", "ok")
+    assert _batch(tmp_path, ok, ok).verdict()[0] == "2 fichiers anonymisés et vérifiés."
+    review = _doc(DocumentStatus.NEEDS_REVIEW)
+    report = _batch(tmp_path, ok, ok, review)
+    assert report.verdict() == ("2 anonymisés · 1 à revoir", "warn")
+    assert report.verdict_code() == "a_revoir"
+    # Unverified images: NEEDS_REVIEW, but in quarantine (a sibling of the output).
+    unread = _doc(DocumentStatus.NEEDS_REVIEW, tmp_path.parent / f"{tmp_path.name}_quarantaine/x")
+    failed = _doc(DocumentStatus.FAILED)
+    report = _batch(tmp_path, ok, review, unread, failed)
+    assert report.quarantined == 1
+    assert report.verdict() == (
+        "1 anonymisé · 1 à revoir · 1 en quarantaine (ne pas diffuser) · 1 en échec",
+        "ko",
+    )
+    assert report.verdict_code() == "quarantaine"
+    assert report.to_dict()["quarantaine"] == 1
+    assert _batch(tmp_path).verdict() == ("Aucun fichier traité.", "warn")
+    assert _batch(tmp_path, failed).verdict_code() == "echec"
+
+
+def test_wording_occurrences_labels_dates(tmp_path: Path) -> None:
+    report = BatchReport.from_result(_result(tmp_path))
+    markdown = report.to_markdown()
+    html = report.to_html()
+    for text in (markdown, html):
+        # The issue message comes from the verifier, not from the report.
+        assert "(s)" not in text.replace("1 résidu(s) détecté(s).", "")
+        assert "Nombre" not in text
+        assert "Occurrences" in text
+        assert "Personne" in text and "PERSONNE" in text  # GUI label and code
+        assert "Le 01/01/2026, de 10:00:00 à 10:01:00" in text
+    assert "**1 anonymisé · 1 en quarantaine (ne pas diffuser)**" in markdown
+    assert '<p class="verdict ko">' in html
+    assert "2 fichiers · 3 occurrences masquées" in html
+    incomplete = DocumentResult(
+        "d3",
+        "x.pdf",
+        "pdf",
+        "pdf",
+        DocumentStatus.NEEDS_REVIEW,
+        verification=VerificationResult(verified=True, unread=1),
+    )
+    assert "1 image ou page non relue" in _batch(tmp_path, incomplete).to_markdown()

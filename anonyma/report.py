@@ -6,12 +6,14 @@ from __future__ import annotations
 import html
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from anonyma.brand import app_svg_data_uri
+from anonyma.frenchtext import NBSP, plural, typo
 from anonyma.models import DocumentResult, DocumentStatus, Severity, UserError
-from anonyma.pipeline import BatchResult
+from anonyma.pipeline import BatchResult, is_quarantined
 
 STATUS_LABELS = {
     DocumentStatus.ANONYMIZED: "Anonymisé",
@@ -35,6 +37,8 @@ REVIEW_INTRO = (
     "de fausses détections. Retrouvez-les dans le fichier produit grâce à leur remplacement."
 )
 
+_QUARANTINED = "en quarantaine (ne pas diffuser)"
+
 #: Extensions accepted by :meth:`BatchReport.save`.
 REPORT_EXTENSIONS = (".json", ".md", ".markdown", ".html", ".htm")
 
@@ -56,6 +60,8 @@ class BatchReport:
     incomplete: list[dict[str, Any]] = field(default_factory=list)
     #: Non-sensitive batch settings (profile, mode, regime...), French labels.
     settings: dict[str, str] = field(default_factory=dict)
+    #: Top-level files placed in the quarantine folder (never to be shared).
+    quarantined: int = 0
 
     @classmethod
     def from_result(cls, result: BatchResult) -> BatchReport:
@@ -66,6 +72,7 @@ class BatchReport:
         )
         for top in result.results:
             report.status_counts[top.status] = report.status_counts.get(top.status, 0) + 1
+            report.quarantined += is_quarantined(top, result.output_dir)
             report.files.append(_file_entry(top))
             report.review += [
                 {"fichier": top.output_name, "type": t, "remplacement": substitute}
@@ -102,11 +109,71 @@ class BatchReport:
                     )
         return report
 
+    # -- verdict ----------------------------------------------------------------
+
+    def _outcomes(self) -> dict[str, int]:
+        """Top-level files by outcome; a quarantined file counts only as such."""
+        counts = self.status_counts
+        quarantined = self.quarantined
+        review = counts.get(DocumentStatus.NEEDS_REVIEW, 0)
+        residue = counts.get(DocumentStatus.RESIDUE, 0)
+        # Quarantined files have the RESIDUE status or (unverified images or pages)
+        # NEEDS_REVIEW: whatever is not a residue comes out of the review count.
+        review = max(0, review - max(0, quarantined - residue))
+        return {
+            "anonymise": counts.get(DocumentStatus.ANONYMIZED, 0),
+            "a_revoir": review,
+            "quarantaine": max(quarantined, residue),
+            "echec": counts.get(DocumentStatus.FAILED, 0)
+            + counts.get(DocumentStatus.PENDING, 0)
+            + counts.get(DocumentStatus.EXTRACTED, 0),
+            "non_supporte": counts.get(DocumentStatus.UNSUPPORTED, 0),
+            "annule": counts.get(DocumentStatus.CANCELLED, 0),
+        }
+
+    def verdict_code(self) -> str:
+        """``anonymise``, ``a_revoir``, ``echec``, ``quarantaine`` or ``vide``."""
+        outcomes = self._outcomes()
+        if not self.files:
+            return "vide"
+        if outcomes["quarantaine"]:
+            return "quarantaine"
+        if outcomes["echec"] or outcomes["non_supporte"] or outcomes["annule"]:
+            return "echec"
+        if outcomes["a_revoir"]:
+            return "a_revoir"
+        return "anonymise"
+
+    def verdict(self) -> tuple[str, str]:
+        """One-line French verdict and its level (``ok``, ``warn`` or ``ko``):
+        « 8 fichiers anonymisés et vérifiés. » or
+        « 6 anonymisés · 1 à revoir · 1 en quarantaine (ne pas diffuser) »."""
+        outcomes = self._outcomes()
+        total = len(self.files)
+        if not total:
+            return "Aucun fichier traité.", "warn"
+        if outcomes["anonymise"] == total:
+            text = plural(total, "fichier anonymisé et vérifié", "fichiers anonymisés et vérifiés")
+            return text + ".", "ok"
+        parts = [
+            plural(outcomes["anonymise"], "anonymisé"),
+            plural(outcomes["a_revoir"], "à revoir", "à revoir"),
+            plural(outcomes["quarantaine"], _QUARANTINED, _QUARANTINED),
+            plural(outcomes["echec"], "en échec", "en échec"),
+            plural(outcomes["non_supporte"], "non pris en charge", "non pris en charge"),
+            plural(outcomes["annule"], "annulé"),
+        ]
+        shown = [part for part in parts if not part.startswith(f"0{NBSP}")]
+        level = "warn" if self.verdict_code() == "a_revoir" else "ko"
+        return " · ".join(shown), level
+
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
             "lot": self.batch_id,
             "debut": self.started_at,
             "fin": self.finished_at,
+            "verdict": self.verdict_code(),
+            "quarantaine": self.quarantined,
             "statuts": self.status_counts,
             "entites_par_type": self.entity_counts,
             "fichiers": self.files,
@@ -125,27 +192,41 @@ class BatchReport:
     # -- Markdown -------------------------------------------------------------
 
     def to_markdown(self) -> str:
+        from anonyma.gui.labels import entity_type_label
+
         c = _md_cell
+        verdict, _ = self.verdict()
         lines = [
             f"# Rapport du lot {self.batch_id}",
             "",
-            f"Début : {self.started_at} · Fin : {self.finished_at}",
+            f"**{c(verdict)}**",
+            "",
+            _period(self.started_at, self.finished_at),
             "",
         ]
         if self.settings:
-            lines += [f"- {c(k)} : {c(v)}" for k, v in self.settings.items()] + [""]
+            lines += [f"- {c(k)}{NBSP}: {c(v)}" for k, v in self.settings.items()] + [""]
         lines += [
             "## Fichiers",
             "",
-            "| Fichier | Statut | Entités | Résidus |",
+            "| Fichier | Statut | Occurrences | Résidus |",
             "|---|---|---|---|",
         ]
         for f in self.files:
             lines.append(
                 f"| {c(f['fichier'])} | {c(f['statut'])} | {f['entites']} | {f['residus']} |"
             )
-        lines += ["", "## Entités par type", "", "| Type | Nombre |", "|---|---|"]
-        lines += [f"| {c(t)} | {n} |" for t, n in sorted(self.entity_counts.items())]
+        lines += [
+            "",
+            "## Occurrences masquées par type",
+            "",
+            "| Type | Code | Occurrences |",
+            "|---|---|---|",
+        ]
+        lines += [
+            f"| {c(entity_type_label(t))} | {c(t)} | {n} |"
+            for t, n in sorted(self.entity_counts.items())
+        ]
         if self.residues:
             lines += [
                 "",
@@ -159,24 +240,21 @@ class BatchReport:
                 for r in self.residues
             ]
         if self.review:
-            lines += ["", "## À revoir", "", REVIEW_INTRO, ""]
+            lines += ["", "## À revoir", "", typo(REVIEW_INTRO), ""]
             lines += ["| Fichier | Type | Remplacé par |", "|---|---|---|"]
             lines += [
                 f"| {c(r['fichier'])} | {c(r['type'])} | {c(r['remplacement'])} |"
                 for r in self.review
             ]
         if self.incomplete:
-            lines += ["", "## Vérification incomplète", "", INCOMPLETE_INTRO, ""]
-            lines += [
-                f"- **{c(f['fichier'])}** : {f['non_relus']} image(s) ou page(s) non relue(s)"
-                for f in self.incomplete
-            ]
+            lines += ["", "## Vérification incomplète", "", typo(INCOMPLETE_INTRO), ""]
+            lines += [f"- **{c(f['fichier'])}**{NBSP}: {_unread(f)}" for f in self.incomplete]
         if self.failures:
             lines += ["", "## Échecs", ""]
             for f in self.failures:
-                lines.append(
-                    f"- **{c(f['fichier'])}** ({f['statut']}) : " + " ; ".join(f["problemes"])
-                )
+                problems = " ; ".join(f["problemes"])
+                detail = f"{NBSP}: {problems}" if problems else ""
+                lines.append(f"- **{c(f['fichier'])}** ({f['statut']}){detail}")
         return "\n".join(lines) + "\n"
 
     def save_markdown(self, path: Path) -> None:
@@ -186,8 +264,14 @@ class BatchReport:
 
     def to_html(self) -> str:
         """Self-contained HTML page: inline CSS, no script, no external resource."""
+        from anonyma.gui.labels import entity_type_label
+
         e = _esc
-        total_entities = sum(self.entity_counts.values())
+        verdict, level = self.verdict()
+        files_count = plural(len(self.files), "fichier")
+        occurrences = plural(
+            sum(self.entity_counts.values()), "occurrence masquée", "occurrences masquées"
+        )
         status_rows = "".join(
             f"<tr><td>{e(_status_label(s))}</td><td class=n>{n}</td></tr>"
             for s, n in sorted(self.status_counts.items())
@@ -200,7 +284,8 @@ class BatchReport:
             for f in self.files
         )
         entity_rows = "".join(
-            f"<tr><td>{e(t)}</td><td class=n>{n}</td></tr>"
+            f"<tr><td>{e(entity_type_label(t))}</td><td><code>{e(t)}</code></td>"
+            f"<td class=n>{n}</td></tr>"
             for t, n in sorted(self.entity_counts.items())
         )
         parts = [
@@ -212,8 +297,9 @@ class BatchReport:
             f"<style>{_CSS}</style></head><body><main>",
             f'<p class=brand><img src="{app_svg_data_uri()}" width=28 height=28 alt="">Anonyma</p>',
             f"<h1>Rapport du lot <code>{e(self.batch_id)}</code></h1>",
-            f"<p class=meta>Début : {e(self.started_at)} · Fin : {e(self.finished_at)} · "
-            f"{len(self.files)} fichier(s) · {total_entities} entité(s) masquée(s)</p>",
+            f'<p class="verdict {level}">{e(verdict)}</p>',
+            f"<p class=meta>{e(_period(self.started_at, self.finished_at))} · "
+            f"{e(files_count)} · {e(occurrences)}</p>",
         ]
         if self.settings:
             items = "".join(
@@ -224,10 +310,12 @@ class BatchReport:
             _section("Statuts", ["Statut", "#Fichiers"], status_rows),
             _section(
                 "Fichiers",
-                ["Fichier", "Format", "Statut", "#Entités", "#Résidus", "#À revoir"],
+                ["Fichier", "Format", "Statut", "#Occurrences", "#Résidus", "#À revoir"],
                 file_rows,
             ),
-            _section("Entités par type", ["Type", "#Nombre"], entity_rows),
+            _section(
+                "Occurrences masquées par type", ["Type", "Code", "#Occurrences"], entity_rows
+            ),
         ]
         if self.residues:
             rows = "".join(
@@ -242,8 +330,8 @@ class BatchReport:
                     ["Emplacement", "Zone", "Type", "Origine", "Détecteur"],
                     rows,
                     intro="Ces fichiers ont été placés en quarantaine (dossier "
-                    "<code>…_quarantaine</code> à côté du dossier de sortie) et ne doivent "
-                    "pas être diffusés.",
+                    f"<code>…_quarantaine</code> à côté du dossier de sortie){NBSP}: ils ne "
+                    "doivent pas être diffusés.",
                 )
             )
         if self.review:
@@ -254,7 +342,10 @@ class BatchReport:
             )
             parts.append(
                 _section(
-                    "À revoir", ["Fichier", "Type", "Remplacé par"], rows, intro=e(REVIEW_INTRO)
+                    "À revoir",
+                    ["Fichier", "Type", "Remplacé par"],
+                    rows,
+                    intro=e(typo(REVIEW_INTRO)),
                 )
             )
         if self.incomplete:
@@ -267,7 +358,7 @@ class BatchReport:
                     "Vérification incomplète",
                     ["Fichier", "#Images ou pages non relues"],
                     rows,
-                    intro=e(INCOMPLETE_INTRO),
+                    intro=e(typo(INCOMPLETE_INTRO)),
                 )
             )
         if self.failures:
@@ -284,7 +375,7 @@ class BatchReport:
             parts.append(f"<section><h2>Échecs</h2><ul class=failures>{items}</ul></section>")
         parts += [
             "<footer>Rapport généré par Anonyma. Il ne contient que des noms anonymisés, "
-            "des nombres et des codes : aucune donnée d'origine.</footer>",
+            f"des nombres et des codes{NBSP}: aucune donnée d'origine.</footer>",
             "</main></body></html>",
         ]
         return "\n".join(parts) + "\n"
@@ -320,6 +411,8 @@ _CSS = (
     "h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 8px}"
     ".brand{display:flex;align-items:center;gap:10px;margin:0 0 16px;font-weight:600}"
     ".meta{color:#5b6573;margin:0 0 8px}"
+    ".verdict{font-size:1.1rem;font-weight:600;margin:8px 0}"
+    ".verdict.ok{color:#1f7a3a}.verdict.warn{color:#9a6700}.verdict.ko{color:#b42318}"
     ".settings{display:flex;flex-wrap:wrap;gap:4px 24px;margin:12px 0}"
     ".settings dt{font-size:.8rem;color:#5b6573}.settings dd{margin:0;font-weight:600}"
     ".scroll{overflow-x:auto}"
@@ -334,8 +427,34 @@ _CSS = (
     "@media (prefers-color-scheme:dark){body{background:#15181c;color:#e3e6ea}"
     "table{background:#1c2026;border-color:#2c323a}th{background:#232830}"
     "th,td{border-color:#2c323a}.meta,footer,.settings dt{color:#9aa4b1}"
-    "tr.ok .st{color:#5cc27a}tr.warn .st{color:#e0b341}tr.ko .st{color:#f97066}}"
+    "tr.ok .st{color:#5cc27a}tr.warn .st{color:#e0b341}tr.ko .st{color:#f97066}"
+    ".verdict.ok{color:#5cc27a}.verdict.warn{color:#e0b341}.verdict.ko{color:#f97066}}"
 )
+
+
+def _human_date(iso: str) -> tuple[str, str]:
+    """(« 01/01/2026 », « 10:00:00 ») from an ISO timestamp, ("", "") if unparsable."""
+    try:
+        moment = datetime.fromisoformat(iso)
+    except ValueError:
+        return "", ""
+    return moment.strftime("%d/%m/%Y"), moment.strftime("%H:%M:%S")
+
+
+def _period(started_at: str, finished_at: str) -> str:
+    """« Le 01/01/2026, de 10:00:00 à 10:01:00 » (both dates when they differ)."""
+    start_day, start_time = _human_date(started_at)
+    end_day, end_time = _human_date(finished_at)
+    if not (start_day and end_day):
+        return typo(f"Début : {started_at} · Fin : {finished_at}")
+    if start_day == end_day:
+        return f"Le {start_day}, de {start_time} à {end_time}"
+    return f"Du {start_day} à {start_time} au {end_day} à {end_time}"
+
+
+def _unread(entry: dict[str, Any]) -> str:
+    count = int(entry["non_relus"])
+    return plural(count, "image ou page non relue", "images ou pages non relues")
 
 
 def _esc(value: object) -> str:
