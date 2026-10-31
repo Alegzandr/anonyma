@@ -295,6 +295,8 @@ def keeps(entity_type: str, value: str, config: Config) -> bool:
     addresses (generic mailbox of a kept domain) and name-like values (person,
     place, login...) that are a whitelisted organization name can be kept.
     """
+    if is_mail_placeholder(entity_type, value):
+        return True
     policy = config.organization_policy
     if policy == POLICY_ALL or not value.strip():
         return False
@@ -316,6 +318,32 @@ def keeps(entity_type: str, value: str, config: Config) -> bool:
         known = bool(white) and white.matches_name(value)
         return known and _name_kept(value, white, black, policy)
     return False
+
+
+#: Placeholders of the mail writers (``anonyma.extractors._mailheaders``): a tag-like
+#: local part in the reserved ``.invalid`` domain (``EMAIL_001@anonyme.invalid``,
+#: ``<ID_MESSAGE_001@anonyme.invalid>``, ``cid:CONTENU_001@anonyme.invalid``) and the
+#: neutral date of an anonymized ``Date:`` header. They hold no original value.
+_PLACEHOLDER_ADDRESS = re.compile(
+    r"(?:mailto:|cid:)?<?[A-Z][A-Z_]{1,40}_(?:[0-9]{3,}|(?=[A-Z0-9]{0,4}[0-9])[A-Z0-9]{4,5})"
+    r"@anonyme\.invalid>?"
+)
+_PLACEHOLDER_DATE = re.compile(r"(?:[A-Z][a-z]{2},\s*)?0?1 Mar 1970 00:[0-5][0-9]:00 \+0000")
+_DATE_TYPES = frozenset({EntityType.DATE, EntityType.DATE_OF_BIRTH})
+#: What the paranoid detector reads in the neutral date (year and hour).
+_PLACEHOLDER_DATE_TOKEN = "1970 00"
+
+
+def is_mail_placeholder(entity_type: str, value: str) -> bool:
+    """``value`` is a placeholder written by the mail writers (never a residue)."""
+    text = value.strip()
+    if entity_type in _DATE_TYPES:
+        return bool(_PLACEHOLDER_DATE.fullmatch(text))
+    if entity_type == EntityType.SUSPICIOUS_TOKEN:
+        return text == _PLACEHOLDER_DATE_TOKEN
+    if text.strip("<>\"'").lower() == "anonyme.invalid":  # the domain alone (URL)
+        return True
+    return bool(_PLACEHOLDER_ADDRESS.fullmatch(text))
 
 
 _GENERIC_MAILBOXES = GENERIC_LOCAL_PARTS | {

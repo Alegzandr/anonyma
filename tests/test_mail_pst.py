@@ -74,7 +74,7 @@ def test_pst_output_is_folder_of_anonymized_eml(tmp_path: Path, canary_config: C
     data = (top.output_path / "Dossier [PERSONNE_001]" / "message-0001.eml").read_bytes()
     assert b"uintavalle" not in data.lower()
     parsed = email.message_from_bytes(data, policy=compat32)
-    assert parsed["From"] == "[PERSONNE_001] <[EMAIL_001]>"
+    assert parsed["From"] == '"[PERSONNE_001]" <EMAIL_001@anonyme.invalid>'
 
 
 def test_embedded_pst_is_packed_as_zip(tmp_path: Path, canary_config: Config) -> None:

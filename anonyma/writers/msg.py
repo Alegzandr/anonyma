@@ -16,7 +16,22 @@ from pathlib import Path, PurePosixPath
 from anonyma.codec import chunk_text
 from anonyma.extractors._cfb import CfbEntry, Entry, read_cfb, write_cfb
 from anonyma.extractors._html import HtmlSource, plan_edits
-from anonyma.extractors._mime import DROPPED_HEADERS, encode_header_text, fold_header
+from anonyma.extractors._mailheaders import (
+    apply_tracked,
+    content_id_key,
+    new_content_id,
+    safe_address,
+    safe_header,
+    safe_message_ids,
+    thread_depth,
+)
+from anonyma.extractors._mime import (
+    DROPPED_HEADERS,
+    cid_values,
+    decode_header_value,
+    encode_header_text,
+    fold_header,
+)
 from anonyma.extractors._msgfile import (
     ATTACH_BY_VALUE,
     ATTACH_OLE,
@@ -44,6 +59,7 @@ from anonyma.extractors._msgfile import (
     PropObject,
     TextItem,
     build_props,
+    decode_string,
     encode_string,
     html_codec,
     parse_name,
@@ -65,12 +81,30 @@ from anonyma.registry import register_writer
 
 #: Attachment string properties replaced by the anonymized child file name.
 _NAME_PROPS = (PR_ATTACH_LONG_FILENAME, PR_ATTACH_FILENAME, PR_DISPLAY_NAME)
+#: PR_ATTACH_CONTENT_ID: regenerated, the ``cid:`` URLs of the HTML body follow.
+PR_ATTACH_CONTENT_ID = 0x3712
+#: Address properties (sender, on behalf of, recipients, received by): a bare
+#: ``addr-spec`` that mail clients parse, kept valid.
+_ADDRESS_PROPS = frozenset(
+    {0x0C1F, 0x0065, 0x5D01, 0x5D02, 0x3003, 0x39FE, 0x0076, 0x0078, 0x5D07, 0x5D08}
+)
+#: PR_INTERNET_MESSAGE_ID, PR_IN_REPLY_TO_ID, PR_INTERNET_REFERENCES.
+_MESSAGE_ID_PROPS = frozenset({0x1035, 0x1042, 0x1039})
 
 
-def _new_text(item: TextItem, segments: Sequence[Segment], plan: ReplacementPlan) -> str:
+def _new_text(
+    item: TextItem,
+    segments: Sequence[Segment],
+    plan: ReplacementPlan,
+    content_ids: Mapping[str, str] | None = None,
+) -> str:
     if item.kind == "html":
         source = HtmlSource(item.text)
-        return source.rewrite(plan_edits(source, segments, plan))
+        edits = plan_edits(source, segments, plan)
+        values = cid_values(source, content_ids or {})
+        for unit in values:
+            edits.pop(unit, None)
+        return source.rewrite(edits, values)
     if item.kind in ("body", "rtf"):
         by_offset = {int(s.locator[1]): s for s in segments}
         return "".join(
@@ -81,12 +115,15 @@ def _new_text(item: TextItem, segments: Sequence[Segment], plan: ReplacementPlan
         by_index = {int(s.locator[1]): s for s in segments}
         prefix, headers = split_headers(item.text)
         lines = [prefix + "\r\n"] if prefix else []
+        depth = thread_depth((name, decode_header_value(raw)) for name, raw in headers)
         for i, (name, raw) in enumerate(headers):
             segment = by_index.get(i)
             if name.lower() in DROPPED_HEADERS:
                 continue
-            if segment is not None and plan.for_segment(segment.id):
-                lines.append(fold_header(name, encode_header_text(plan.apply(segment)), "\r\n"))
+            replacements = plan.for_segment(segment.id) if segment is not None else []
+            if segment is not None and replacements:
+                new = safe_header(name, segment.text, replacements, depth)
+                lines.append(fold_header(name, encode_header_text(new), "\r\n"))
             else:
                 lines.append(f"{name}: {re.sub(r'\r?\n', '\r\n', raw.strip('\r\n'))}\r\n")
         return "".join(lines) + "\r\n"
@@ -112,6 +149,17 @@ class _Rewriter:
             base = segment.id.split("|", 1)[0]
             self.segments.setdefault(base, []).append(segment)
         self.dropped: set[Entry] = set()  # storages removed with their subtree
+        #: Message object -> original Content-ID (comparable) -> regenerated one.
+        self.content_ids: dict[Entry, dict[str, str]] = {}
+        for obj in tree.attachments():
+            for ptype in STRING_TYPES:
+                data = obj.stream(PR_ATTACH_CONTENT_ID, ptype)
+                if data is None:
+                    continue
+                key = content_id_key(decode_string(data, ptype, tree.codec))
+                ids = self.content_ids.setdefault(obj.path[:-1], {})
+                if key and key not in ids:
+                    ids[key] = new_content_id(len(ids) + 1)
         self.data: dict[Entry, bytes | None] = {}  # stream path -> new data (None: drop)
         self.added: list[CfbEntry] = []
 
@@ -200,12 +248,23 @@ class _Rewriter:
                 continue
             if item is None:
                 continue  # GUIDs, multi-valued fixed types, embedded storages...
+            segments = self.segments.get(item.segment_id, [])
             if child_name is not None and pid in _NAME_PROPS:
                 new = child_name
             elif child_name is not None and pid == PR_ATTACH_EXTENSION:
                 new = PurePosixPath(child_name).suffix
+            elif obj.kind == "attachment" and pid == PR_ATTACH_CONTENT_ID:
+                ids = self.content_ids.get(obj.path[:-1], {})
+                new = ids.get(content_id_key(item.text)) or new_content_id(0)
+            elif item.kind == "string" and pid in _ADDRESS_PROPS and segments:
+                new = safe_address(self.plan.apply(segments[0]))
+            elif item.kind == "string" and pid in _MESSAGE_ID_PROPS and segments:
+                replacements = self.plan.for_segment(segments[0].id)
+                new = segments[0].text
+                if replacements:
+                    new = safe_message_ids(*apply_tracked(segments[0].text, replacements))
             else:
-                new = _new_text(item, self.segments.get(item.segment_id, []), self.plan)
+                new = _new_text(item, segments, self.plan, self.content_ids.get(obj.path))
             if item.kind == "html" and ptype == PT_BINARY:
                 codec = html_codec(obj)
                 encoding = decode_html(entry.data or b"")[1]
