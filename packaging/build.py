@@ -63,9 +63,11 @@ SMOKE_FIXTURES = (
     "scan.png",
     "note.txt",
 )
-#: Documented format conversions of the writers (no MSG writer exists: Outlook
-#: messages come out as .eml; PST stores as a zip of .eml).
-CONVERTED = {".msg": ".eml", ".pst": ".zip"}
+#: Documented output shape changes: a PST becomes a folder of .eml (no extension).
+#: Every other format, .msg included, keeps its original extension.
+CONVERTED = {".pst": ""}
+#: Report statuses meaning "verified clean" (uncertain entities masked and flagged).
+CLEAN_STATUSES = frozenset({"Anonymisé", "À revoir"})
 #: Legacy formats, round-tripped through the bundled LibreOffice.
 LEGACY_FIXTURES = (
     ("rapport.doc", "rapport.docx", "doc:MS Word 97"),
@@ -260,7 +262,7 @@ def smoke_test(folder: Path, with_libreoffice: bool) -> None:
             entry = files.get(Path(name).stem + CONVERTED.get(suffix, suffix))
             if entry is None:
                 problems.append(f"{name} : absent du rapport (nom ou extension modifiés)")
-            elif entry["statut"] != "Anonymisé":
+            elif entry["statut"] not in CLEAN_STATUSES:
                 problems.append(f"{name} : {entry['statut']}")
         for path in output.rglob("*"):
             if path.is_file() and "uintavalle" in path.name.casefold():
