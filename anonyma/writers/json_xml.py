@@ -21,19 +21,30 @@ from typing import Any, cast
 from lxml import etree
 
 from anonyma.codec import TextEncoding, decode_bytes
+from anonyma.extractors._embedded import PROPERTY as EMBEDDED
+from anonyma.extractors._embedded import EmbeddedRef, masked, rebuild
+from anonyma.extractors._html import HtmlSource, plan_edits
 from anonyma.extractors._tabular import encode_json_string, tokenize_json
 from anonyma.extractors._xml import drop_doctype, parse_xml
 from anonyma.extractors._xmlscan import Unit, apply_unit
-from anonyma.extractors.json_xml import DOCTYPE_SEGMENT, xml_tree_units
+from anonyma.extractors.json_xml import (
+    DOCTYPE_SEGMENT,
+    HTML_VALUES,
+    SIZES,
+    xml_tree_units,
+)
 from anonyma.models import (
     Document,
     Issue,
+    Replacement,
     ReplacementPlan,
+    Segment,
     WriteContext,
     Writer,
     apply_replacements,
 )
 from anonyma.registry import register_writer
+from anonyma.writers.html import data_uri_values
 
 
 @register_writer
@@ -50,20 +61,54 @@ class JsonWriter(Writer):
     ) -> list[Issue]:
         text, detected = decode_bytes(document.source.read_bytes())
         encoding: TextEncoding = document.properties.get("encoding", detected)
+        embedded: dict[int, list[EmbeddedRef]] = document.properties.get(EMBEDDED, {})
+        html_values: dict[int, dict[int, str]] = document.properties.get(HTML_VALUES, {})
+        sizes: dict[int, str] = document.properties.get(SIZES, {})
+        html_segments: dict[int, list[Segment]] = {}
+        for segment in document.segments:
+            head, _, rest = segment.id.partition("|h")
+            if rest and head[1:].isdigit():
+                html_segments.setdefault(int(head[1:]), []).append(segment)
+        issues: list[Issue] = []
         out: list[str] = []
         cursor = 0
         for i, token in enumerate(tokenize_json(text)):
-            reps = plan.for_segment(f"j{i}")
-            if not reps:
+            if i in sizes:
+                # Size of an embedded file, now the size of its anonymized version.
+                output = ctx.child_outputs.get(sizes[i])
+                size = output.path.stat().st_size if output and output.path else 0
+                out.append(text[cursor : token.start])
+                out.append(str(size))
+                cursor = token.end
                 continue
+            if i in html_values:
+                source = HtmlSource(token.value)
+                edits = plan_edits(source, html_segments.get(i, []), plan)
+                values = data_uri_values(html_values[i], ctx.child_outputs)
+                if not edits and not values:
+                    continue
+                out.append(text[cursor : token.start])
+                out.append(encode_json_string(source.rewrite(edits, values), token.ascii_escaped))
+                cursor = token.end
+                continue
+            reps = plan.for_segment(f"j{i}")
+            refs = embedded.get(i)
+            if not reps and not refs:
+                continue
+            if refs:
+                # Embedded files: always rewritten (anonymized child, or nothing).
+                value, lost = rebuild(
+                    apply_replacements(masked(token.value, refs), reps), refs, ctx.child_outputs
+                )
+                issues.extend(lost)
+            else:
+                value = apply_replacements(token.value, reps)
             out.append(text[cursor : token.start])
-            out.append(
-                encode_json_string(apply_replacements(token.value, reps), token.ascii_escaped)
-            )
+            out.append(encode_json_string(value, token.ascii_escaped))
             cursor = token.end
         out.append(text[cursor:])
         destination.write_bytes(encoding.encode("".join(out)))
-        return []
+        return issues
 
 
 def _is_cdata(unit: Unit) -> bool:
@@ -177,13 +222,23 @@ class XmlWriter(Writer):
         tree = parse_xml(data, doctype=True)
         drop_doctype(tree, keep_ids=not plan.for_segment(DOCTYPE_SEGMENT))
         units = xml_tree_units(tree)
+        embedded: dict[int, list[EmbeddedRef]] = document.properties.get(EMBEDDED, {})
+        issues: list[Issue] = []
         cdata: list[Unit] = []
         for i, unit in enumerate(units):
             reps = plan.for_segment(f"x{i}")
-            if not reps:
+            refs = embedded.get(i)
+            if not reps and not refs:
                 continue
             if _is_cdata(unit):
                 cdata.append(unit)
+            if refs:
+                # Embedded files: the whole value is rewritten (anonymized child, or "").
+                value, lost = rebuild(
+                    apply_replacements(masked(unit.text, refs), reps), refs, ctx.child_outputs
+                )
+                issues.extend(lost)
+                reps = [Replacement(0, len(unit.text), unit.text, value, "", "")]
             apply_unit(unit, reps)
         for unit in cdata:
             unit.anchor.text = etree.CDATA(unit.anchor.text or "")
@@ -194,10 +249,10 @@ class XmlWriter(Writer):
         same = _same_layout(data, bom, tree, encoding)
         if same is not None:
             destination.write_bytes(same)
-            return []
+            return issues
         if info.standalone:
             body = etree.tostring(tree, xml_declaration=True, encoding=encoding, standalone=True)
         else:
             body = etree.tostring(tree, xml_declaration=has_declaration, encoding=encoding)
         destination.write_bytes(bom + (body if isinstance(body, bytes) else body.encode()))
-        return []
+        return issues

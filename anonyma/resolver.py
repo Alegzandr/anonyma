@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 from anonyma import checksums
+from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.data import first_name, is_common_word
 from anonyma.detectors._custom import NOT_LONE_GIVEN
@@ -826,6 +827,8 @@ def propagate(
         if e.entity_type in DOCUMENT_LOCAL_TYPES and e.cluster_id:
             local_roots.setdefault(e.cluster_id, set()).add(root_of.get(e.document_id, ""))
 
+    atomic = AtomicIndex()
+
     def scan(needles: MultiMatcher[_Target], known: Sequence[Entity]) -> list[Entity]:
         taken: dict[tuple[str, str], list[tuple[int, int]]] = {}
         for e in known:
@@ -868,10 +871,15 @@ def propagate(
             ]
             if not targets:
                 continue
+            # Never inside a GUID or a token (``…4e8a-b93c…`` holds no initials).
+            if atomic.fit(segment.text, match.start, match.end) != (match.start, match.end):
+                continue
             target = _pick(targets)
             start, end = match.start, match.end
             if target.entity_type == EntityType.PERSON:
                 start, end = _with_given_names(segment.text, start, end)
+                if atomic.fit(segment.text, start, end) != (start, end):
+                    start, end = match.start, match.end
             yield Entity(
                 entity_type=target.entity_type,
                 value=segment.text[start:end],

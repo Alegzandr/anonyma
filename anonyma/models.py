@@ -194,6 +194,12 @@ class SegmentContext:
     label: str = ""
     page: int | None = None  # 0-based page / slide / sheet index when relevant
     bbox: BBox | None = None  # region of the whole segment (OCR, PDF)
+    #: Precise location shown in reports when it differs from ``label`` (the real
+    #: JSON path ``$.value[27].description``, a column name...). Never read by
+    #: detectors; must not contain sensitive values either (structural names only).
+    where: str = ""
+    #: 1-based line of the segment start in its file (text formats), for reports.
+    line: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

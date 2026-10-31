@@ -207,42 +207,48 @@ class OpaqueIdDetector(Detector):
 
     @staticmethod
     def _spans(text: str) -> list[tuple[int, int, str]]:
-        spans: list[tuple[int, int, str]] = []
+        return opaque_spans(text)
 
-        def free(start: int, end: int) -> bool:
-            return not any(s < end and start < e for s, e, _ in spans)
 
-        for m in _UUID.finditer(text):
-            spans.append((m.start(), m.end(), "uuid"))
-        for m in _HEX.finditer(text):
-            value = m.group().removeprefix("0x").removeprefix("0X")
-            digits = sum(c.isdigit() for c in value)
-            if digits >= 2 and len(value) - digits >= 2 and free(m.start(), m.end()):
-                spans.append((m.start(), m.end(), "hexadecimal"))
-        for m in _HEX_PAIRS.finditer(text):
-            pairs = m.group().split(m.group("sep"))
-            with_letter = sum(any(c.isalpha() for c in p) for p in pairs)
-            if m.group("sep") == " " and with_letter * 4 < len(pairs):
-                continue  # spaced digit pairs: phone or account numbers
-            if free(m.start(), m.end()):
-                spans.append((m.start(), m.end(), "empreinte"))
-        for m in _BASE64.finditer(text):
-            token = m.group()
-            if not any(c in token for c in "+/="):
-                continue  # plain tokens: next rule
-            parts = [p for p in regex.split(r"[+/]", token.rstrip("=")) if p]
-            if any(len(p) >= 3 and p.isalpha() and is_common_word(p) for p in parts):
-                continue  # a path or an expression made of words
-            if free(m.start(), m.end()) and looks_opaque(token):
-                spans.append((m.start(), m.end(), "base64"))
-        for m in _TOKEN.finditer(text):
-            token = m.group()
-            # looks_opaque needs 10 alphanumerics, and 20 without a digit: skip words.
-            if len(token) < 10 or (len(token) < 20 and not _DIGIT.search(token)):
-                continue
-            if free(m.start(), m.end()) and looks_opaque(token):
-                spans.append((m.start(), m.end(), "jeton"))
-        return [s for s in spans if not _software_build(text, s[0])]
+def opaque_spans(text: str) -> list[tuple[int, int, str]]:
+    """``(start, end, rule)`` of every opaque identifier of ``text``, whether or not
+    they are masked: :mod:`anonyma.atomic` keeps them whole."""
+    spans: list[tuple[int, int, str]] = []
+
+    def free(start: int, end: int) -> bool:
+        return not any(s < end and start < e for s, e, _ in spans)
+
+    for m in _UUID.finditer(text):
+        spans.append((m.start(), m.end(), "uuid"))
+    for m in _HEX.finditer(text):
+        value = m.group().removeprefix("0x").removeprefix("0X")
+        digits = sum(c.isdigit() for c in value)
+        if digits >= 2 and len(value) - digits >= 2 and free(m.start(), m.end()):
+            spans.append((m.start(), m.end(), "hexadecimal"))
+    for m in _HEX_PAIRS.finditer(text):
+        pairs = m.group().split(m.group("sep"))
+        with_letter = sum(any(c.isalpha() for c in p) for p in pairs)
+        if m.group("sep") == " " and with_letter * 4 < len(pairs):
+            continue  # spaced digit pairs: phone or account numbers
+        if free(m.start(), m.end()):
+            spans.append((m.start(), m.end(), "empreinte"))
+    for m in _BASE64.finditer(text):
+        token = m.group()
+        if not any(c in token for c in "+/="):
+            continue  # plain tokens: next rule
+        parts = [p for p in regex.split(r"[+/]", token.rstrip("=")) if p]
+        if any(len(p) >= 3 and p.isalpha() and is_common_word(p) for p in parts):
+            continue  # a path or an expression made of words
+        if free(m.start(), m.end()) and looks_opaque(token):
+            spans.append((m.start(), m.end(), "base64"))
+    for m in _TOKEN.finditer(text):
+        token = m.group()
+        # looks_opaque needs 10 alphanumerics, and 20 without a digit: skip words.
+        if len(token) < 10 or (len(token) < 20 and not _DIGIT.search(token)):
+            continue
+        if free(m.start(), m.end()) and looks_opaque(token):
+            spans.append((m.start(), m.end(), "jeton"))
+    return [s for s in spans if not _software_build(text, s[0])]
 
 
 #: Build ids of office suites in generator strings (``LibreOffice/24.2.7.2$Windows_X86_64
@@ -255,4 +261,4 @@ def _software_build(text: str, start: int) -> bool:
     return bool(_BUILD_PREFIX.search(text[max(0, start - 10) : start]))
 
 
-__all__ = ["DETECTOR_NAME", "OpaqueIdDetector", "looks_opaque"]
+__all__ = ["DETECTOR_NAME", "OpaqueIdDetector", "looks_opaque", "opaque_spans"]

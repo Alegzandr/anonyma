@@ -29,6 +29,7 @@ from typing import Any
 
 from anonyma import outputs as output_record
 from anonyma import paths, registry
+from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.errors import failure_reason
 from anonyma.frenchtext import plural
@@ -77,6 +78,7 @@ from anonyma.resolver import (
     propagate,
     resolve,
 )
+from anonyma.structure import PROPERTY as STRUCTURE
 from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import find_all, normalize, safe_filename, safe_suffix
 from anonyma.verifier import Verifier, is_ocr_issue, spaced_name
@@ -560,6 +562,7 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
     """Run the detector chain on a document and all its descendants."""
     entities: list[Entity] = []
     detectors = detectors_for(config)
+    atomic = AtomicIndex()
     for doc in root.walk():
         # Unreadable items still get their name analysed: it shows up in reports.
         segments = (
@@ -593,6 +596,11 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
                     continue
                 if e.score < config.min_score:
                     continue
+                # No detector may cut a GUID, a hash or a token (:mod:`anonyma.atomic`).
+                span = atomic.fit(text, e.start, e.end)
+                if span is None:
+                    continue
+                e.start, e.end = span
                 e.value = text[e.start : e.end]
                 e.document_id = doc.id
                 entities.append(e)
@@ -965,6 +973,9 @@ class _WriteJob:
     work_dir: Path
     #: Original names of the tree (searched in the output by the verifier).
     names: list[str] = field(default_factory=list)
+    #: Structural names of the batch (JSON keys, CSV headers, XML names), never
+    #: searched in raw bytes (:mod:`anonyma.structure`).
+    structure: frozenset[str] = frozenset()
     #: ``document id -> output name`` decided batch-wide: neutral names
     #: (``config.neutral_filenames``), else the top-level names, whose folders are
     #: named consistently for the whole batch (:func:`top_level_names`).
@@ -1262,7 +1273,9 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
         if result.clean:
             # Backstop: what no extractor exposed is still in the bytes.
             result.residues.extend(
-                verifier.verify_raw(output_doc, job.sensitive, substitutes, job.allowed)
+                verifier.verify_raw(
+                    output_doc, job.sensitive, substitutes, job.allowed, job.structure
+                )
             )
         return result
     except Exception as exc:
@@ -1529,6 +1542,12 @@ class Pipeline:
         )
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)
         review = {cid for cid, c in active.items() if c.needs_review}
+        structure = frozenset(
+            name
+            for root in analysis.documents
+            for d in root.walk()
+            for name in d.properties.get(STRUCTURE, ())
+        )
         if self.config.neutral_filenames:
             names = neutral_names(analysis.documents)
             if self.store is not None and self.config.regime is Regime.PSEUDONYMIZATION:
@@ -1558,6 +1577,7 @@ class Pipeline:
                         output_dir=output_dir,
                         work_dir=analysis.work_dir / f"w-{new_id()[:8]}",
                         names=original_names(doc),
+                        structure=structure,
                         output_names={d.id: names[d.id] for d in doc.walk() if d.id in names},
                     ),
                 )

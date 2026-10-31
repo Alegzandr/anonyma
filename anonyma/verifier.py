@@ -49,6 +49,7 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 
 from anonyma import checksums
+from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.data import is_common_word
 from anonyma.detectors._custom import STOP_WORDS
@@ -189,6 +190,7 @@ class Verifier:
             certain_words=not self.config.neutral_filenames,
         )
         kinds: list[SegmentKind] = []  # of each residue, for neutral labels
+        atomic = AtomicIndex()
 
         for doc in output.walk():
             gaps = [
@@ -241,7 +243,12 @@ class Verifier:
                                 (nm.start, nm.end, FILENAME_TYPE, NAME_DETECTOR, nm.payloads[0])
                             )
                 flagged: list[tuple[int, int]] = []
-                for start, end, entity_type, source, certain in hits:
+                for hit_start, hit_end, entity_type, source, certain in hits:
+                    # A fragment of a GUID or a token is not that value (atomic tokens).
+                    span = atomic.fit(segment.text, hit_start, hit_end)
+                    if span is None:
+                        continue
+                    start, end = span
                     value = segment.text[start:end]
                     if _overlaps(start, end, flagged):
                         continue
@@ -252,7 +259,7 @@ class Verifier:
                     result.residues.append(
                         Residue(
                             location=doc.name,
-                            segment_label=segment.context.label,
+                            segment_label=place(segment, start),
                             entity_type=entity_type,
                             reason=ORIGINAL_VALUE,
                             detector=source,
@@ -267,6 +274,10 @@ class Verifier:
                     if found is None or entity.score < self.config.min_score:
                         continue
                     segment = found
+                    span = atomic.fit(segment.text, entity.start, entity.end)
+                    if span is None:
+                        continue
+                    entity.start, entity.end = span
                     value = segment.text[entity.start : entity.end]
                     if normalize(value) in allowed_keys:
                         continue
@@ -280,7 +291,7 @@ class Verifier:
                     result.residues.append(
                         Residue(
                             location=doc.name,
-                            segment_label=segment.context.label,
+                            segment_label=place(segment, entity.start),
                             entity_type=entity.entity_type,
                             reason=DETECTOR_HIT,
                             detector=entity.detector,
@@ -298,15 +309,18 @@ class Verifier:
         sensitive: Sequence[tuple[str, str]],
         substitutes: set[str],
         allowed: Sequence[str] = (),
+        structure: frozenset[str] = frozenset(),
     ) -> list[Residue]:
         """Original values found in the raw bytes of a re-extracted output tree (the
-        written file and the items extracted from it, still on disk). Same arguments
-        as :meth:`verify`."""
+        written file and the items extracted from it, still on disk), and embedded
+        files none of these items accounts for. Same arguments as :meth:`verify`;
+        ``structure``: the batch's structural names (:mod:`anonyma.structure`), never
+        searched."""
         allowed_keys = {normalize(a) for a in allowed} | self.config.whitelist_keys()
         kept = (*allowed, *self.config.whitelist)
         scanner = _cached(
-            ("raw", tuple(sensitive), frozenset(substitutes), frozenset(kept)),
-            lambda: RawScanner(sensitive, substitutes, allowed_keys, kept, self.config),
+            ("raw", tuple(sensitive), frozenset(substitutes), frozenset(kept), structure),
+            lambda: RawScanner(sensitive, substitutes, allowed_keys, kept, self.config, structure),
         )
         return neutral_places(raw_residues(scanner.scan(output)))
 
@@ -464,6 +478,17 @@ def neutral_places(residues: Sequence[Residue], kinds: Sequence[SegmentKind] = (
             location = "/".join(MASKED_NAME if leaks(p) else p for p in location.split("/"))
         out.append(replace(residue, segment_label=label, location=location))
     return out
+
+
+def place(segment: Segment, start: int) -> str:
+    """Where a residue at ``start`` in ``segment`` lies, for reports: the precise
+    location (``where``, else the label) and, for text formats, the file line."""
+    context = segment.context
+    base = context.where or context.label
+    if context.line is None:
+        return base
+    line = context.line + segment.text.count("\n", 0, start)
+    return f"{base} (ligne {line} du fichier)"
 
 
 def _inside(start: int, end: int, spans: Sequence[tuple[int, int]]) -> bool:

@@ -28,11 +28,12 @@ import random
 import re
 import secrets
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
 from anonyma import checksums
 from anonyma import substitutes as fk
+from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.models import (
     Document,
@@ -732,10 +733,13 @@ def build_plan(
         if e.document_id == document.id and e.cluster_id in table.by_cluster:
             by_segment.setdefault(e.segment_id, []).append(e)
     texts = {s.id: s.text for s in document.segments}
-    for segment_id, items in by_segment.items():
+    atomic = AtomicIndex()
+    for segment_id, found in by_segment.items():
         text = texts.get(segment_id)
         if text is None:
             continue
+        # Last guard of :mod:`anonyma.atomic`: no replacement cuts a GUID or a token.
+        items = [e for e in (_fitted(e, text, atomic) for e in found) if e is not None]
         # On equal spans a whole-code entity gives the substitute ([CODE_BARRES_001]).
         items.sort(key=lambda e: (e.start, -(e.end - e.start), e.entity_type != EntityType.BARCODE))
         merged: list[tuple[int, int, Entity]] = []
@@ -768,6 +772,17 @@ def build_plan(
             )
         plan.by_segment[segment_id] = reps
     return plan
+
+
+def _fitted(entity: Entity, text: str, atomic: AtomicIndex) -> Entity | None:
+    if entity.start < 0 or entity.end > len(text) or entity.start >= entity.end:
+        return None
+    span = atomic.fit(text, entity.start, entity.end)
+    if span is None:
+        return None
+    if span == (entity.start, entity.end):
+        return entity
+    return replace(entity, start=span[0], end=span[1], value=text[span[0] : span[1]])
 
 
 def _extend(text: str, start: int, end: int, head: Entity, substitute: str) -> str:

@@ -10,6 +10,7 @@ structures the extractors must handle (tracked changes, comments, notes...).
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import zipfile
@@ -720,6 +721,60 @@ def make_json(path: Path) -> None:
     path.write_bytes((text + "\n").encode("utf-8"))
 
 
+#: Fixed identifiers of the Dataverse fixture: kept byte for byte (structure).
+DATAVERSE_ACTIVITY = "34be8221-5b2a-4e8a-b93c-e8b15d765216"
+DATAVERSE_INDEX = "0101DD39E9E8E7878FFCDEEA917C9A5A4A7C6F2329FB"
+
+
+def dataverse_page(attachment: bytes, filename: str, mimetype: str) -> dict[str, object]:
+    """A reduced Dynamics 365 Web API page (``emails`` with OData annotations,
+    activity parties and one attachment whose body is base64, wrapped at 76)."""
+    body = base64.encodebytes(attachment).decode("ascii").replace("\n", "\r\n")
+    return {
+        "@odata.context": "https://exemple.crm4.dynamics.com/api/data/v9.2/$metadata#emails",
+        "value": [
+            {
+                "@odata.etag": 'W/"83736425"',
+                "activityid": DATAVERSE_ACTIVITY,
+                "subject": f"Demande de {P}",
+                "description": f"<p>Bonjour,</p><p>{P}<br>{E}</p>",
+                "sender": E,
+                "directioncode": False,
+                "directioncode@OData.Community.Display.V1.FormattedValue": "Entrant",
+                "createdon": "2026-09-01T08:14:29Z",
+                "conversationindex": DATAVERSE_INDEX,
+                "_ownerid_value@OData.Community.Display.V1.FormattedValue": P,
+                "_ownerid_value@Microsoft.Dynamics.CRM.lookuplogicalname": "systemuser",
+                "_ownerid_value": "a6acb80d-d02f-45a0-bb2b-b74943127924",
+                "email_activity_parties": [
+                    {
+                        "participationtypemask": 1,
+                        "addressused": E,
+                        "_partyid_value@OData.Community.Display.V1.FormattedValue": P,
+                    }
+                ],
+                "email_activity_mime_attachment": [
+                    {
+                        "activitymimeattachmentid": "e1984ad3-2a71-46e1-a115-280d5f3b094e",
+                        "filename": filename,
+                        "mimetype": mimetype,
+                        "filesize": len(attachment),
+                        "body": body,
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def make_dataverse_json(path: Path) -> None:
+    """Dataverse export: the canaries in fields, annotations and in a text file
+    attached as base64 (the attachment body must be anonymized, not copied)."""
+    note = f"Compte rendu rédigé par {P} ({E}).\r\n" * 3
+    page = dataverse_page(note.encode("utf-8"), "compte-rendu.txt", "text/plain")
+    path.write_bytes(json.dumps(page, ensure_ascii=False, indent=2).encode("utf-8"))
+
+
 def make_xml(path: Path) -> None:
     text = (
         '<?xml version="1.0" encoding="ISO-8859-1"?>\n'
@@ -908,6 +963,7 @@ GENERATORS = {
     "contacts.csv": make_csv,
     "export.tsv": make_tsv,
     "dossier.json": make_json,
+    "dataverse.json": make_dataverse_json,
     "dossier.xml": make_xml,
     "rapport.docx": make_docx,
     "tableau.xlsx": make_xlsx,
