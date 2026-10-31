@@ -86,10 +86,18 @@ MAX_NAME_BYTES = 200
 _SUFFIX = re.compile(r"\.[A-Za-z0-9]{1,10}")
 
 
+#: A masked value in a file or folder name (masquage mode): fixed length, so that
+#: the name does not reveal the length of what it hides.
+NAME_MASK = "█████"
+_MASK_RUN = re.compile("█+")
+
+
 def safe_filename(name: str) -> str:
     """Make a single path component safe on Windows, macOS and Linux: no reserved
-    character or device name, at most :data:`MAX_NAME_BYTES` (extension kept)."""
+    character or device name, at most :data:`MAX_NAME_BYTES` (extension kept). Runs
+    of block characters (masked values) become :data:`NAME_MASK`."""
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .")
+    cleaned = _MASK_RUN.sub(NAME_MASK, cleaned)
     if cleaned.split(".")[0].rstrip(" ").upper() in _RESERVED_NAMES:
         cleaned = f"_{cleaned}"
     if len(cleaned.encode("utf-8")) > MAX_NAME_BYTES:

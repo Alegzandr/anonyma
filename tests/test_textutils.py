@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import dataclasses
+from pathlib import Path
+
 import pytest
 
 from anonyma.codec import chunk_text, decode_bytes
+from anonyma.config import Config
+from anonyma.models import ReplacementMode
+from anonyma.pipeline import Pipeline
 from anonyma.textutils import MAX_NAME_BYTES, find_all, normalize, safe_filename, safe_suffix
+from tests.canary import CANARY_PERSON
 
 
 def test_normalize() -> None:
@@ -61,3 +68,14 @@ def test_safe_suffix_from_archive_entries() -> None:
     assert safe_suffix("a.tx t") == ""
     assert safe_suffix("archive") == ""
     assert safe_suffix("x." + "a" * 11) == ""
+
+
+def test_masked_names_do_not_reveal_lengths(tmp_path: Path, canary_config: Config) -> None:
+    assert safe_filename("CV ██ ████████████.pdf") == "CV █████ █████.pdf"
+    src = tmp_path / "in" / f"Dossier {CANARY_PERSON}"
+    src.mkdir(parents=True)
+    (src / f"Note {CANARY_PERSON}.txt").write_text(f"{CANARY_PERSON}\n", encoding="utf-8")
+    config = dataclasses.replace(canary_config, mode=ReplacementMode.BLACKOUT)
+    result = Pipeline(config).run([tmp_path / "in"], tmp_path / "out")
+    [top] = result.results
+    assert top.output_name.split("/")[-2:] == ["Dossier █████", "Note █████.txt"]

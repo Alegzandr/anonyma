@@ -207,7 +207,8 @@ ancien nom `mentions_par_type`) et `entites_distinctes_par_type`.
 Principe : vous choisissez un fichier ou un dossier ; chaque fichier est lu, anonymisé
 puis restitué **dans son format d'origine**, avec la même arborescence et la même mise en
 forme. Les noms de fichiers et de dossiers sont anonymisés comme le contenu
-(`CV Jean Dupont.pdf` devient `CV [PERSONNE_001].pdf`). Les originaux ne sont jamais
+(`CV Jean Dupont.pdf` devient `CV [PERSONNE_001].pdf` ; en mode masquage, `CV █████.pdf`,
+un masque de longueur fixe qui ne trahit pas celle du nom). Les originaux ne sont jamais
 modifiés. `anonyma-cli formats` affiche la liste exacte disponible sur le poste.
 
 | Famille | Formats | Ce qui est traité |
