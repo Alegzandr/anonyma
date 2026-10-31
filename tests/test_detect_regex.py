@@ -202,7 +202,8 @@ def test_siren_luhn_failure_dropped_without_context(detector: RegexDetector) -> 
 def test_plates(detector: RegexDetector) -> None:
     assert found(detector, "véhicule AB-123-CD garé", "PLAQUE") == ["AB-123-CD"]
     assert found(detector, "immatriculation 1234 AB 75", "PLAQUE") == ["1234 AB 75"]
-    assert not found(detector, "code AI-123-OU", "PLAQUE")  # I, O, U excluded
+    (odd,) = [e for e in detect(detector, "code AI-123-OU") if e.entity_type == "PLAQUE"]
+    assert odd.score < 0.85  # letters SIV never uses: kept, but less confident
     assert not found(detector, "voir 1234 AB 75", "PLAQUE")  # FNI needs context
 
 

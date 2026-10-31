@@ -117,6 +117,9 @@ def match_case(original: str, fake: str) -> str:
     runs = _RUN.findall(original)
     targets = list(_RUN.finditer(fake))
     if not runs or len(runs) != len(targets):
+        letters = [c for c in original if c.isalpha()]
+        if any(c.islower() for c in letters) and fake.isupper():
+            return _RUN.sub(lambda m: m.group()[:1] + m.group()[1:].lower(), fake)
         return mirror_case(original, fake)
     out: list[str] = []
     pos = 0

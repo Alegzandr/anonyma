@@ -79,7 +79,7 @@ def _intl_phone(value: str) -> bool:
 
 def _card(value: str) -> bool:
     d = checksums.digits(value)
-    return 13 <= len(d) <= 19 and d[0] in "23456" and checksums.luhn_valid(d)
+    return 13 <= len(d) <= 19 and d[0] in "123456" and checksums.luhn_valid(d)
 
 
 def _card_not_siret(value: str) -> bool:
@@ -323,6 +323,16 @@ RULES: tuple[Rule, ...] = (
         validator=_card_not_siret,
         invalid_score=0.4,
     ),
+    Rule(
+        # 12-digit Maestro numbers: too common a length to be trusted without context.
+        "carte_bancaire_courte",
+        EntityType.CREDIT_CARD,
+        r"(?<![\d\-])(?:\d[ \- ]?){11}\d(?![\d\-])",
+        0.35,
+        context=("carte", "cb", "maestro", "card", "paiement", "expire", "cvv"),
+        context_score=0.9,
+        validator=lambda v: checksums.luhn_valid(v) and checksums.digits(v)[0] in "56",
+    ),
     # French identifiers.
     Rule(
         "nir",
@@ -454,6 +464,24 @@ RULES: tuple[Rule, ...] = (
         r"(?<![A-Za-z0-9\-])[A-HJ-NP-TV-Z]{2}-\d{3}-[A-HJ-NP-TV-Z]{2}(?![A-Za-z0-9\-])",
         0.85,
         context=("immatricul*", "plaque", "vehicule", "voiture", "carte grise", "auto", "moto"),
+    ),
+    Rule(
+        # Same shape with letters SIV never uses (I, O, U): typos, foreign or fake plates.
+        "plaque_siv_large",
+        EntityType.LICENSE_PLATE,
+        r"(?<![A-Za-z0-9\-])[A-Z]{2}-\d{3}-[A-Z]{2}(?![A-Za-z0-9\-])",
+        0.6,
+        context=("immatricul*", "plaque", "vehicule", "voiture", "carte grise", "auto", "moto"),
+        context_score=0.9,
+    ),
+    Rule(
+        # Old FNI numbers written with hyphens (``431-USL-85``) are distinctive.
+        "plaque_fni_tirets",
+        EntityType.LICENSE_PLATE,
+        r"(?<![A-Za-z0-9\-])\d{1,4}-[A-Z]{1,3}-(?:\d{2}|2A|2B|97[1-6])(?![A-Za-z0-9\-])",
+        0.6,
+        context=("immatricul*", "plaque", "vehicule", "voiture", "carte grise"),
+        context_score=0.9,
     ),
     Rule(
         "plaque_siv_compacte",

@@ -226,10 +226,21 @@ class _Realistic:
         base = result.pop("", None) or next(iter(result.values()))
         self.table.by_cluster[cluster.id] = base
         self.used.add(normalize(base))
+
+        # Case variants share one normalized key: keep the rendering of the mention
+        # with the most lower-case letters (case is re-applied per mention later).
+        def lowers(text: str) -> int:
+            return sum(c.islower() for c in text)
+
+        chosen: dict[str, tuple[str, str]] = {}
         for variant, substitute in result.items():
-            if substitute != base:
-                self.table.by_variant[(cluster.id, normalize(variant))] = substitute
+            vkey = normalize(variant)
+            if vkey not in chosen or lowers(variant) > lowers(chosen[vkey][0]):
+                chosen[vkey] = (variant, substitute)
             self.used.add(normalize(substitute))
+        for vkey, (_, substitute) in chosen.items():
+            if substitute != base:
+                self.table.by_variant[(cluster.id, vkey)] = substitute
         if self.store and known is None:
             self.store.save(cluster.entity_type, key, cluster.canonical, base)
 
@@ -307,7 +318,7 @@ def _person(
             return _same_for_all(cluster, known)
         given = tuple(g for g in parsed.given if not is_initial(g)) or ("Camille",)
         fake = fk.FakePerson(
-            given, parsed.surname[-1] if parsed.surname else "Martin", gender or "m"
+            given, " ".join(parsed.surname) if parsed.surname else "Martin", gender or "m"
         )
     else:
         fake = fk.fake_person(canonical, gender, rng)

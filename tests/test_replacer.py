@@ -81,8 +81,8 @@ def test_realistic_person_variants_are_consistent() -> None:
     table, kept, _ = assign([(v, "PERSONNE") for v in values], ReplacementMode.REALISTIC)
     full = sub(table, kept, "Jean Dupont")
     person = parse_person(full)
-    assert person is not None and len(person.given) == 1 and len(person.surname) == 1
-    given, surname = person.given[0], person.surname[0]
+    assert person is not None and len(person.given) == 1 and person.surname
+    given, surname = person.given[0], " ".join(person.surname)
     assert given != "Jean" and surname != "Dupont"
     assert sub(table, kept, "J. Dupont") == f"{given[0]}. {surname}"
     assert sub(table, kept, "DUPONT Jean") == f"{surname.upper()} {given}"
