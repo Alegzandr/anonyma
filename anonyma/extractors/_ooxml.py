@@ -71,6 +71,12 @@ NS_R = frozenset(
         "http://purl.oclc.org/ooxml/officeDocument/relationships",
     }
 )
+NS_W = frozenset(
+    {
+        "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+        "http://purl.oclc.org/ooxml/wordprocessingml/main",
+    }
+)
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 
 ANONYMOUS = ANONYMOUS_AUTHOR
@@ -424,7 +430,8 @@ def office_attr_filter(el: Element, name: str, value: str) -> bool:
     if local.startswith("rsid"):
         return False
     if local == "val":
-        return local_name(el.tag) in VAL_PARENTS
+        # Form fields / content controls only (not spreadsheet font names...).
+        return local_name(el.tag) in VAL_PARENTS and namespace(el.tag) in NS_W
     if local in TEXT_ATTRS:
         return True
     if local in STOP_ATTRS:
