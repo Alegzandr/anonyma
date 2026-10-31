@@ -11,9 +11,18 @@ dependencies = [
     "cryptography>=44",
     "huggingface-hub>=0.25",
     "pillow>=11",
+    "presidio-analyzer>=2.2.355",
+    "onnxruntime>=1.20",
+    "tokenizers>=0.20",
+    "numpy>=1.26",
+    "pyahocorasick>=2.1",
+    "phonenumbers>=8.13",
 ]
 
 [project.optional-dependencies]
+llm = [
+    "llama-cpp-python>=0.3.30",
+]
 
 [project.scripts]
 anonyma = "anonyma.cli:main"
@@ -23,7 +32,13 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "mypy>=1.11",
+    "types-regex>=2026.9.29.20261030",
 ]
+
+[[tool.uv.index]]
+name = "llama-cpp-cpu"
+url = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
@@ -54,7 +69,7 @@ module = [
     "docx.*", "pptx.*", "odf.*", "striprtf.*", "fitz.*", "pymupdf.*", "extract_msg.*",
     "pypff.*", "py7zr.*", "pillow_heif.*", "rapidocr.*", "rapidocr_onnxruntime.*",
     "presidio_analyzer.*", "presidio_anonymizer.*", "onnxruntime.*", "llama_cpp.*",
-    "faker.*", "xlrd.*", "olefile.*", "tokenizers.*", "psutil.*", "PyInstaller.*",
+    "faker.*", "xlrd.*", "ahocorasick", "ahocorasick.*", "olefile.*", "tokenizers.*", "psutil.*", "PyInstaller.*",
 ]
 ignore_missing_imports = true
 
@@ -65,3 +80,6 @@ markers = [
     "slow: tests lents (modèles, OCR)",
     "models: nécessite des modèles téléchargés",
 ]
+
+[tool.uv.sources]
+llama-cpp-python = { index = "llama-cpp-cpu" }
