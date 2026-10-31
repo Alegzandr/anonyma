@@ -1,10 +1,17 @@
 """End-of-batch report. Contains anonymized names, counts and codes only: never a
-sensitive value."""
+sensitive value.
+
+The verdict, the exit code of ``run`` and every count come from the same outcomes of
+the top-level files (:meth:`BatchReport.file_outcomes`): they never disagree. The
+JSON vocabulary (:meth:`BatchReport.to_dict`, :meth:`BatchReport.counts`) is the one
+documented in the README (« Automatisation »).
+"""
 
 from __future__ import annotations
 
 import html
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +19,7 @@ from typing import Any
 
 from anonyma.brand import app_svg_data_uri
 from anonyma.frenchtext import NBSP, plural, typo
-from anonyma.models import DocumentResult, DocumentStatus, Severity, UserError
+from anonyma.models import DocumentResult, DocumentStatus, Regime, Severity, UserError
 from anonyma.pipeline import BatchResult, is_quarantined
 
 STATUS_LABELS = {
@@ -45,6 +52,9 @@ REVIEW_INTRO = (
 
 _QUARANTINED = "en quarantaine (ne pas diffuser)"
 
+#: Version of the JSON vocabulary of ``run --json`` and of JSON reports.
+SCHEMA_VERSION = 2
+
 #: Outcome of a top-level file outside quarantine, by status. A RESIDUE file that is
 #: not in quarantine only holds possible residues: it is to be reviewed.
 _OUTCOME_BY_STATUS = {
@@ -54,9 +64,92 @@ _OUTCOME_BY_STATUS = {
     DocumentStatus.UNSUPPORTED: "non_supporte",
     DocumentStatus.CANCELLED: "annule",
 }
+#: Outcomes of top-level files, in display order.
+OUTCOMES = ("anonymise", "a_revoir", "quarantaine", "echec", "non_supporte", "annule")
+#: Exit code of ``run`` for each verdict.
+EXIT_CODE_BY_VERDICT = {"anonymise": 0, "a_revoir": 0, "vide": 0, "quarantaine": 1, "echec": 1}
+#: Statuses of an item that produced no output (unless an output path is known).
+_NOT_WRITTEN = frozenset(
+    {DocumentStatus.FAILED, DocumentStatus.UNSUPPORTED, DocumentStatus.CANCELLED}
+)
+#: Separator in the path of an embedded item (« archive.zip › membre.pdf »).
+PATH_SEPARATOR = " › "
+#: Issue code of an embedded item left out of its container.
+OMITTED_CODE = "child.omitted"
+
+#: Residue origins (``Residue.reason``): JSON code and French label.
+_ORIGINS = {
+    "original_value": ("valeur_origine", "valeur d'origine"),
+    "detector": ("detecteur", "détecteur"),
+}
+#: French labels of the verification sources that are not detectors of a profile.
+_VERIFICATION_SOURCES = {
+    "table": "Table du lot",
+    "table_variante": "Table du lot (variante)",
+    "table_ocr": "Table du lot (lecture OCR)",
+    "nom_origine": "Nom d'origine du fichier",
+    "octets_bruts": "Octets bruts du fichier",
+}
+_TYPE_LABELS = {"NOM_FICHIER": "Nom de fichier"}
 
 #: Extensions accepted by :meth:`BatchReport.save`.
 REPORT_EXTENSIONS = (".json", ".md", ".markdown", ".html", ".htm")
+
+
+def status_label(status: DocumentStatus | str, regime: Regime = Regime.ANONYMIZATION) -> str:
+    """French label of a status; « Pseudonymisé » for a pseudonymized output."""
+    try:
+        status = DocumentStatus(status)
+    except ValueError:
+        return str(status)
+    if status is DocumentStatus.ANONYMIZED and regime is Regime.PSEUDONYMIZATION:
+        return "Pseudonymisé"
+    return STATUS_LABELS.get(status, str(status))
+
+
+def detector_label(name: str) -> str:
+    """French label of a detector or verification source (« Règles », « Table du lot »)."""
+    from anonyma.gui.labels import detector_label as gui_label
+
+    return _VERIFICATION_SOURCES.get(name) or gui_label(name)
+
+
+def type_label(entity_type: str) -> str:
+    """French label of an entity type (« Personne »)."""
+    from anonyma.gui.labels import entity_type_label
+
+    return _TYPE_LABELS.get(entity_type) or entity_type_label(entity_type)
+
+
+def origin_label(reason: str) -> str:
+    """French label of a residue origin (« valeur d'origine », « détecteur »)."""
+    return _ORIGINS.get(reason, (reason, reason))[1]
+
+
+def written(result: DocumentResult) -> bool:
+    """Whether an output exists for ``result`` (so that its occurrences were masked)."""
+    return result.output_path is not None or result.status not in _NOT_WRITTEN
+
+
+def omitted_count(result: DocumentResult) -> int:
+    """Embedded items of ``result``'s tree left out of their container."""
+    return sum(1 for r in _walk(result) for i in r.issues if i.code == OMITTED_CODE)
+
+
+def masked_counts(result: DocumentResult) -> dict[str, int]:
+    """Occurrences masked in ``result``'s output, by type (none without an output)."""
+    counts: dict[str, int] = {}
+
+    def visit(r: DocumentResult) -> None:
+        if not written(r):
+            return
+        for t, n in r.entity_counts.items():
+            counts[t] = counts.get(t, 0) + n
+        for child in r.children:
+            visit(child)
+
+    visit(result)
+    return counts
 
 
 @dataclass(slots=True)
@@ -64,22 +157,35 @@ class BatchReport:
     batch_id: str
     started_at: str
     finished_at: str
+    #: Top-level files by status.
     status_counts: dict[str, int] = field(default_factory=dict)
+    #: Occurrences masked, by type (an item without an output counts none).
     entity_counts: dict[str, int] = field(default_factory=dict)
+    #: One entry per top-level file. ``statut`` is the French label (« Anonymisé »)
+    #: and ``code`` the status code; the JSON export gives codes (:meth:`to_dict`).
     files: list[dict[str, Any]] = field(default_factory=list)
     residues: list[dict[str, str]] = field(default_factory=list)
     #: Low-confidence entities awaiting review, by tag (never the original value).
     review: list[dict[str, str]] = field(default_factory=list)
+    #: Items (any depth) that failed or hold an error: their path (« archive.zip ›
+    #: membre.pdf »), French label, status code, messages and issue codes.
     failures: list[dict[str, Any]] = field(default_factory=list)
     #: Files whose verification could not read every image or page (OCR): never
     #: anonymized, kept in quarantine for a visual check.
     incomplete: list[dict[str, Any]] = field(default_factory=list)
     #: Non-sensitive batch settings (profile, mode, regime...), French labels.
     settings: dict[str, str] = field(default_factory=dict)
+    #: The same settings as machine values (``{"profil": "leger", ...}``).
+    parameters: dict[str, Any] = field(default_factory=dict)
+    regime: Regime = Regime.ANONYMIZATION
     #: For each entry of ``files`` (same order): its status, and whether its output was
     #: placed in the quarantine folder.
     file_statuses: list[DocumentStatus] = field(default_factory=list)
     file_placed: list[bool] = field(default_factory=list)
+    #: Every item (top-level files, attachments, archive members) by status.
+    item_status_counts: dict[str, int] = field(default_factory=dict)
+    #: Embedded items left out of their container (unreadable, encrypted...).
+    omitted: int = 0
 
     @classmethod
     def from_result(cls, result: BatchResult) -> BatchReport:
@@ -87,26 +193,33 @@ class BatchReport:
             result.batch_id,
             result.started_at.isoformat(timespec="seconds"),
             result.finished_at.isoformat(timespec="seconds"),
+            regime=getattr(result, "regime", Regime.ANONYMIZATION),
         )
         for top in result.results:
             report.status_counts[top.status] = report.status_counts.get(top.status, 0) + 1
+            placed = is_quarantined(top, result.output_dir)
             report.files.append(_file_entry(top))
             report.file_statuses.append(top.status)
-            report.file_placed.append(is_quarantined(top, result.output_dir))
+            report.file_placed.append(placed)
+            report.omitted += omitted_count(top)
             report.review += [
                 {"fichier": top.output_name, "type": t, "remplacement": substitute}
                 for t, substitute in top.review_items
             ]
-            for r in _walk(top):
-                for t, n in r.entity_counts.items():
-                    report.entity_counts[t] = report.entity_counts.get(t, 0) + n
+            for t, n in masked_counts(top).items():
+                report.entity_counts[t] = report.entity_counts.get(t, 0) + n
+            for r, path in walk_paths(top):
+                status = r.status.value
+                report.item_status_counts[status] = report.item_status_counts.get(status, 0) + 1
                 errors = [i for i in r.issues if i.severity is Severity.ERROR]
                 if errors or r.status in (DocumentStatus.FAILED, DocumentStatus.UNSUPPORTED):
                     report.failures.append(
                         {
-                            "fichier": r.output_name,
+                            "fichier": path,
                             "statut": STATUS_LABELS.get(r.status, r.status),
-                            "problemes": [f"{i.code} : {i.message}" for i in r.issues],
+                            "code": r.status.value,
+                            "problemes": [i.message for i in r.issues],
+                            "codes": [i.code for i in r.issues],
                         }
                     )
             if top.verification and not top.verification.complete:
@@ -142,15 +255,19 @@ class BatchReport:
         """Number of top-level files in quarantine (never to be shared)."""
         return sum(self._in_quarantine())
 
+    def file_outcomes(self) -> list[str]:
+        """Outcome of each entry of ``files`` (one of :data:`OUTCOMES`)."""
+        statuses = self.file_statuses or [DocumentStatus.FAILED] * len(self.files)
+        return [
+            "quarantaine" if quarantined else _OUTCOME_BY_STATUS.get(status, "echec")
+            for status, quarantined in zip(statuses, self._in_quarantine(), strict=True)
+        ]
+
     def _outcomes(self) -> dict[str, int]:
         """Top-level files by outcome; a quarantined file counts only as such."""
-        outcomes = dict.fromkeys(
-            ("anonymise", "a_revoir", "quarantaine", "echec", "non_supporte", "annule"), 0
-        )
-        statuses = self.file_statuses or [DocumentStatus.FAILED] * len(self.files)
-        for status, quarantined in zip(statuses, self._in_quarantine(), strict=True):
-            key = "quarantaine" if quarantined else _OUTCOME_BY_STATUS.get(status, "echec")
-            outcomes[key] += 1
+        outcomes = dict.fromkeys(OUTCOMES, 0)
+        for outcome in self.file_outcomes():
+            outcomes[outcome] += 1
         return outcomes
 
     def verdict_code(self) -> str:
@@ -166,19 +283,29 @@ class BatchReport:
             return "a_revoir"
         return "anonymise"
 
+    def exit_code(self) -> int:
+        """Exit code of ``run`` (0 or 1), derived from the verdict."""
+        return EXIT_CODE_BY_VERDICT[self.verdict_code()]
+
+    @property
+    def _done_word(self) -> str:
+        return "pseudonymisé" if self.regime is Regime.PSEUDONYMIZATION else "anonymisé"
+
     def verdict(self) -> tuple[str, str]:
         """One-line French verdict and its level (``ok``, ``warn`` or ``ko``):
         « 8 fichiers anonymisés et vérifiés. » or
-        « 6 anonymisés · 1 à revoir · 1 en quarantaine (ne pas diffuser) »."""
+        « 6 anonymisés · 1 à revoir · 1 en quarantaine (ne pas diffuser) »
+        (« pseudonymisés » in pseudonymization)."""
         outcomes = self._outcomes()
         total = len(self.files)
         if not total:
             return "Aucun fichier traité.", "warn"
+        done = self._done_word
         if outcomes["anonymise"] == total:
-            text = plural(total, "fichier anonymisé et vérifié", "fichiers anonymisés et vérifiés")
+            text = plural(total, f"fichier {done} et vérifié", f"fichiers {done}s et vérifiés")
             return text + ".", "ok"
         parts = [
-            plural(outcomes["anonymise"], "anonymisé"),
+            plural(outcomes["anonymise"], done),
             plural(outcomes["a_revoir"], "à revoir", "à revoir"),
             plural(outcomes["quarantaine"], _QUARANTINED, _QUARANTINED),
             plural(outcomes["echec"], "en échec", "en échec"),
@@ -189,23 +316,111 @@ class BatchReport:
         level = "warn" if self.verdict_code() == "a_revoir" else "ko"
         return " · ".join(shown), level
 
+    # -- JSON -------------------------------------------------------------------
+
+    def counts(self) -> dict[str, Any]:
+        """Batch counts, shared by the JSON report and ``run --json``."""
+        outcomes = self._outcomes()
+        items = sum(self.item_status_counts.values())
+        certain = sum(1 for r in self.residues if r.get("certitude") == "certain")
+        occurrences = dict(sorted(self.entity_counts.items()))
+        return {
+            "nombre_fichiers": len(self.files),
+            "nombre_elements": items,
+            "nombre_elements_inclus": max(0, items - len(self.files)),
+            "elements_omis": self.omitted,
+            "statuts": {str(s): n for s, n in sorted(self.status_counts.items())},
+            "resultats": outcomes,
+            "statuts_elements": dict(sorted(self.item_status_counts.items())),
+            "quarantaine": self.quarantined,
+            "fichiers_a_revoir": outcomes["a_revoir"],
+            "fichiers_en_echec": outcomes["echec"],
+            "entites_a_revoir": len(self.review),
+            "residus_certains": certain,
+            "residus_possibles": len(self.residues) - certain,
+            "occurrences": sum(occurrences.values()),
+            "occurrences_par_type": occurrences,
+        }
+
+    def file_records(self) -> list[dict[str, Any]]:
+        """JSON entries of ``files``: codes, French labels apart."""
+        records = []
+        for entry, outcome, quarantined in zip(
+            self.files, self.file_outcomes(), self._in_quarantine(), strict=True
+        ):
+            code = str(entry.get("code", ""))
+            records.append(
+                {
+                    "fichier": entry["fichier"],
+                    "format": entry.get("format", ""),
+                    "format_sortie": entry.get("format_sortie", ""),
+                    "statut": code,
+                    "statut_libelle": status_label(code, self.regime),
+                    "resultat": outcome,
+                    "quarantaine": quarantined,
+                    "occurrences": entry["entites"],
+                    # Obsolete name of « occurrences ».
+                    "entites": entry["entites"],
+                    "residus": entry["residus"],
+                    "residus_possibles": entry.get("residus_possibles", 0),
+                    "a_revoir": entry.get("a_revoir", 0),
+                    "elements_omis": entry.get("elements_omis", 0),
+                }
+            )
+        return records
+
+    def residue_records(self) -> list[dict[str, str]]:
+        """JSON entries of ``residues``: codes, French labels apart."""
+        return [
+            {
+                **r,
+                "origine": _ORIGINS.get(r["origine"], (r["origine"], r["origine"]))[0],
+                "origine_libelle": origin_label(r["origine"]),
+                "type_libelle": type_label(r["type"]),
+                "detecteur_libelle": detector_label(r["detecteur"]),
+            }
+            for r in self.residues
+        ]
+
+    def failure_records(self) -> list[dict[str, Any]]:
+        """JSON entries of ``failures``: status code, French label apart."""
+        return [
+            {
+                "fichier": f["fichier"],
+                "statut": str(f.get("code", "")),
+                "statut_libelle": status_label(str(f.get("code", "")), self.regime),
+                "problemes": list(f["problemes"]),
+                "codes": list(f.get("codes", [])),
+            }
+            for f in self.failures
+        ]
+
     def to_dict(self) -> dict[str, Any]:
+        """The JSON report: every count of :meth:`counts`, then the details. Codes
+        are machine values; French labels sit in ``*_libelle`` keys."""
+        text, _ = self.verdict()
+        counts = self.counts()
         data: dict[str, Any] = {
+            "schema": SCHEMA_VERSION,
             "lot": self.batch_id,
             "debut": self.started_at,
             "fin": self.finished_at,
+            "regime": self.regime.value,
             "verdict": self.verdict_code(),
-            "quarantaine": self.quarantined,
-            "statuts": self.status_counts,
-            "entites_par_type": self.entity_counts,
-            "fichiers": self.files,
-            "residus": self.residues,
+            "verdict_libelle": text,
+            "code_sortie": self.exit_code(),
+            **counts,
+            # Obsolete name of « occurrences_par_type » (these are occurrences).
+            "entites_par_type": counts["occurrences_par_type"],
+            "fichiers": self.file_records(),
+            "residus": self.residue_records(),
             "a_revoir": self.review,
-            "echecs": self.failures,
+            "echecs": self.failure_records(),
             "verifications_incompletes": self.incomplete,
         }
-        if self.settings:
-            data["parametres"] = self.settings
+        if self.parameters or self.settings:
+            data["parametres"] = self.parameters
+            data["parametres_libelles"] = self.settings
         return data
 
     def save_json(self, path: Path) -> None:
@@ -213,9 +428,16 @@ class BatchReport:
 
     # -- Markdown -------------------------------------------------------------
 
-    def to_markdown(self) -> str:
-        from anonyma.gui.labels import entity_type_label
+    def _file_rows(self) -> Iterator[tuple[dict[str, Any], str, str]]:
+        """(entry, French status label, occurrences cell) of each file."""
+        for entry in self.files:
+            label = status_label(str(entry.get("code", "")), self.regime)
+            if not entry.get("code"):
+                label = str(entry["statut"])
+            occurrences = str(entry["entites"]) if entry.get("ecrit", True) else "—"
+            yield entry, label, occurrences
 
+    def to_markdown(self) -> str:
         c = _md_cell
         verdict, _ = self.verdict()
         lines = [
@@ -234,10 +456,8 @@ class BatchReport:
             "| Fichier | Statut | Occurrences | Résidus |",
             "|---|---|---|---|",
         ]
-        for f in self.files:
-            lines.append(
-                f"| {c(f['fichier'])} | {c(f['statut'])} | {f['entites']} | {f['residus']} |"
-            )
+        for f, label, occurrences in self._file_rows():
+            lines.append(f"| {c(f['fichier'])} | {c(label)} | {occurrences} | {f['residus']} |")
         lines += [
             "",
             "## Occurrences masquées par type",
@@ -246,8 +466,7 @@ class BatchReport:
             "|---|---|---|",
         ]
         lines += [
-            f"| {c(entity_type_label(t))} | {c(t)} | {n} |"
-            for t, n in sorted(self.entity_counts.items())
+            f"| {c(type_label(t))} | {c(t)} | {n} |" for t, n in sorted(self.entity_counts.items())
         ]
         if self.residues:
             lines += [
@@ -256,19 +475,20 @@ class BatchReport:
                 "",
                 typo(RESIDUE_INTRO),
                 "",
-                "| Emplacement | Zone | Type | Origine | Certitude |",
-                "|---|---|---|---|---|",
+                "| Fichier | Emplacement | Zone | Type | Origine | Détecteur | Certitude |",
+                "|---|---|---|---|---|---|---|",
             ]
             lines += [
-                f"| {c(r['emplacement'])} | {c(r['zone'])} | {c(r['type'])} | {c(r['origine'])} "
-                f"| {c(r['certitude'])} |"
+                f"| {c(r['fichier'])} | {c(r['emplacement'])} | {c(r['zone'])} "
+                f"| {c(type_label(r['type']))} | {c(origin_label(r['origine']))} "
+                f"| {c(detector_label(r['detecteur']))} | {c(r['certitude'])} |"
                 for r in self.residues
             ]
         if self.review:
             lines += ["", "## À revoir", "", typo(REVIEW_INTRO), ""]
             lines += ["| Fichier | Type | Remplacé par |", "|---|---|---|"]
             lines += [
-                f"| {c(r['fichier'])} | {c(r['type'])} | {c(r['remplacement'])} |"
+                f"| {c(r['fichier'])} | {c(type_label(r['type']))} | {c(r['remplacement'])} |"
                 for r in self.review
             ]
         if self.incomplete:
@@ -279,7 +499,8 @@ class BatchReport:
             for f in self.failures:
                 problems = " ; ".join(f["problemes"])
                 detail = f"{NBSP}: {problems}" if problems else ""
-                lines.append(f"- **{c(f['fichier'])}** ({f['statut']}){detail}")
+                label = status_label(str(f.get("code", "")), self.regime)
+                lines.append(f"- **{c(f['fichier'])}** ({label}){detail}")
         return "\n".join(lines) + "\n"
 
     def save_markdown(self, path: Path) -> None:
@@ -289,8 +510,6 @@ class BatchReport:
 
     def to_html(self) -> str:
         """Self-contained HTML page: inline CSS, no script, no external resource."""
-        from anonyma.gui.labels import entity_type_label
-
         e = _esc
         verdict, level = self.verdict()
         files_count = plural(len(self.files), "fichier")
@@ -298,19 +517,18 @@ class BatchReport:
             sum(self.entity_counts.values()), "occurrence masquée", "occurrences masquées"
         )
         status_rows = "".join(
-            f"<tr><td>{e(_status_label(s))}</td><td class=n>{n}</td></tr>"
+            f"<tr><td>{e(status_label(s, self.regime))}</td><td class=n>{n}</td></tr>"
             for s, n in sorted(self.status_counts.items())
         )
         file_rows = "".join(
-            f"<tr class={_status_class(str(f['statut']))}><td>{e(f['fichier'])}</td>"
-            f"<td>{e(f.get('format', ''))}</td><td class=st>{e(f['statut'])}</td>"
-            f"<td class=n>{e(f['entites'])}</td><td class=n>{e(f['residus'])}</td>"
+            f"<tr class={_status_class(str(f.get('code', '')))}><td>{e(f['fichier'])}</td>"
+            f"<td>{e(f.get('format', ''))}</td><td class=st>{e(label)}</td>"
+            f"<td class=n>{e(occurrences_cell)}</td><td class=n>{e(f['residus'])}</td>"
             f"<td class=n>{e(f.get('a_revoir', 0))}</td></tr>"
-            for f in self.files
+            for f, label, occurrences_cell in self._file_rows()
         )
         entity_rows = "".join(
-            f"<tr><td>{e(entity_type_label(t))}</td><td><code>{e(t)}</code></td>"
-            f"<td class=n>{n}</td></tr>"
+            f"<tr><td>{e(type_label(t))}</td><td><code>{e(t)}</code></td><td class=n>{n}</td></tr>"
             for t, n in sorted(self.entity_counts.items())
         )
         parts = [
@@ -344,22 +562,23 @@ class BatchReport:
         ]
         if self.residues:
             rows = "".join(
-                f"<tr><td>{e(r['emplacement'])}</td><td>{e(r['zone'])}</td>"
-                f"<td>{e(r['type'])}</td><td>{e(r['origine'])}</td>"
-                f"<td>{e(r['detecteur'])}</td><td>{e(r['certitude'])}</td></tr>"
+                f"<tr><td>{e(r['fichier'])}</td><td>{e(r['emplacement'])}</td>"
+                f"<td>{e(r['zone'])}</td><td>{e(type_label(r['type']))}</td>"
+                f"<td>{e(origin_label(r['origine']))}</td>"
+                f"<td>{e(detector_label(r['detecteur']))}</td><td>{e(r['certitude'])}</td></tr>"
                 for r in self.residues
             )
             parts.append(
                 _section(
                     "Résidus",
-                    ["Emplacement", "Zone", "Type", "Origine", "Détecteur", "Certitude"],
+                    ["Fichier", "Emplacement", "Zone", "Type", "Origine", "Détecteur", "Certitude"],
                     rows,
                     intro=e(typo(RESIDUE_INTRO)),
                 )
             )
         if self.review:
             rows = "".join(
-                f"<tr><td>{e(r['fichier'])}</td><td>{e(r['type'])}</td>"
+                f"<tr><td>{e(r['fichier'])}</td><td>{e(type_label(r['type']))}</td>"
                 f"<td><code>{e(r['remplacement'])}</code></td></tr>"
                 for r in self.review
             )
@@ -386,7 +605,8 @@ class BatchReport:
             )
         if self.failures:
             items = "".join(
-                f"<li><strong>{e(f['fichier'])}</strong> ({e(f['statut'])})"
+                f"<li><strong>{e(f['fichier'])}</strong> "
+                f"({e(status_label(str(f.get('code', '')), self.regime))})"
                 + (
                     "<ul>" + "".join(f"<li>{e(p)}</li>" for p in f["problemes"]) + "</ul>"
                     if f["problemes"]
@@ -503,17 +723,10 @@ def _section(title: str, headers: list[str], rows: str, intro: str = "") -> str:
     )
 
 
-def _status_label(status: str) -> str:
-    try:
-        return STATUS_LABELS.get(DocumentStatus(status), status)
-    except ValueError:
-        return status
-
-
-def _status_class(label: str) -> str:
-    if label == STATUS_LABELS[DocumentStatus.ANONYMIZED]:
+def _status_class(code: str) -> str:
+    if code == DocumentStatus.ANONYMIZED:
         return "ok"
-    if label == STATUS_LABELS[DocumentStatus.NEEDS_REVIEW]:
+    if code == DocumentStatus.NEEDS_REVIEW:
         return "warn"
     return "ko"
 
@@ -525,13 +738,25 @@ def _walk(result: DocumentResult) -> list[DocumentResult]:
     return out
 
 
+def walk_paths(result: DocumentResult, prefix: str = "") -> Iterator[tuple[DocumentResult, str]]:
+    """Every item of ``result``'s tree with its path (« archive.zip › membre.pdf »)."""
+    path = f"{prefix}{PATH_SEPARATOR}{result.output_name}" if prefix else result.output_name
+    yield result, path
+    for child in result.children:
+        yield from walk_paths(child, path)
+
+
 def _file_entry(r: DocumentResult) -> dict[str, Any]:
     return {
         "fichier": r.output_name,
         "format": r.format,
         "format_sortie": r.output_format,
         "statut": STATUS_LABELS.get(r.status, r.status),
-        "entites": sum(sum(x.entity_counts.values()) for x in _walk(r)),
+        "code": r.status.value,
+        "ecrit": written(r),
+        "entites": sum(masked_counts(r).values()),
         "residus": r.residue_count,
+        "residus_possibles": r.possible_residue_count,
         "a_revoir": r.review_count,
+        "elements_omis": omitted_count(r),
     }

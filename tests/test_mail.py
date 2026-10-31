@@ -297,7 +297,7 @@ def test_unsupported_attachment_is_omitted(tmp_path: Path, canary_config: Config
     (src / "m.eml").write_bytes(msg.as_bytes())
     result = Pipeline(canary_config).run([src / "m.eml"], tmp_path / "out")
     top = result.results[0]
-    assert top.status is DocumentStatus.ANONYMIZED
+    assert top.status is DocumentStatus.NEEDS_REVIEW  # attachment left out
     assert any(i.code == "child.omitted" for i in top.issues)
     assert top.output_path is not None
     parsed: Message = email.message_from_bytes(top.output_path.read_bytes(), policy=compat32)
@@ -410,7 +410,8 @@ def test_msg_rtf_only_body_and_removed_attachments(tmp_path: Path, canary_config
     src.mkdir()
     (src / "r.msg").write_bytes(_rtf_only_msg())
     top = Pipeline(canary_config).run([src / "r.msg"], tmp_path / "out").results[0]
-    assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]
+    # An attachment left out: « À revoir », never « Anonymisé ».
+    assert top.status is DocumentStatus.NEEDS_REVIEW, [i.message for i in top.issues]
     assert any(i.code == "msg.ole_attachment" for i in top.issues)
     assert any(i.code == "child.omitted" for i in top.issues)
     assert top.output_path is not None

@@ -137,7 +137,9 @@ def _encrypt_first_entry(data: bytes) -> bytes:
 def test_encrypted_entry_is_failed_child_and_omitted(tmp_path: Path, canary_config: Config) -> None:
     data = _encrypt_first_entry(_zip({"secret.txt": b"chiffre", "clair.txt": NOTE}))
     top = _run(tmp_path, "c.zip", data, canary_config)
-    assert top.status is DocumentStatus.ANONYMIZED
+    # A member left out: the archive is incomplete, never « Anonymisé ».
+    assert top.status is DocumentStatus.NEEDS_REVIEW
+    assert any(i.code == "container.incomplete" for i in top.issues)
     failed = [c for c in top.children if c.status is DocumentStatus.FAILED]
     assert len(failed) == 1
     assert any(i.code == "archive.encrypted" for i in failed[0].issues)
@@ -170,10 +172,11 @@ def test_7z_encrypted_content(tmp_path: Path, canary_config: Config) -> None:
     with py7zr.SevenZipFile(path, "w", password="secret") as sz:
         sz.writestr(NOTE, "note.txt")
     top = _run(tmp_path, "e.7z", path.read_bytes(), canary_config)
-    assert top.status is DocumentStatus.ANONYMIZED
+    # Nothing could be kept: no empty archive is produced, the file fails.
+    assert top.status is DocumentStatus.FAILED
     assert [c.status for c in top.children] == [DocumentStatus.FAILED]
-    with py7zr.SevenZipFile(top.output_path, "r") as sz:
-        assert sz.list() == []
+    assert any(i.code == "container.empty" for i in top.issues)
+    assert top.output_path is None
 
 
 def test_7z_encrypted_headers(tmp_path: Path, canary_config: Config) -> None:

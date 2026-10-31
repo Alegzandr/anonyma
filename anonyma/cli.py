@@ -24,7 +24,7 @@ from rich.console import Console
 from rich.table import Table
 
 from anonyma.frenchtext import plural
-from anonyma.models import DocumentStatus, Profile, Regime, ReplacementMode
+from anonyma.models import DocumentStatus, Profile, Regime, ReplacementMode, Severity
 
 if TYPE_CHECKING:
     from anonyma.config import Config
@@ -38,16 +38,6 @@ DEFAULT_STORE_NAME = "table-correspondance.anonyma"
 EXIT_OK = 0
 EXIT_PARTIAL = 1
 EXIT_USAGE = 2
-
-#: Statuses that make ``anonyma run`` exit with code 1.
-BAD_STATUSES = frozenset(
-    {
-        DocumentStatus.RESIDUE,
-        DocumentStatus.FAILED,
-        DocumentStatus.UNSUPPORTED,
-        DocumentStatus.CANCELLED,
-    }
-)
 
 #: Text formats handled by ``anonyma reidentifier`` (plain substitution).
 REIDENTIFY_EXTENSIONS = frozenset(
@@ -674,8 +664,29 @@ def _settings(config: Config) -> dict[str, str]:
         "Régime": _short_label(REGIME_LABELS.get(config.regime, config.regime.value)),
         "Mode paranoïaque": "oui" if config.paranoid else "non",
         "OCR": "oui" if config.ocr_enabled else "non",
-        "Noms des fichiers": "neutres" if config.neutral_filenames else "anonymisés",
+        "Noms des fichiers": "neutres" if config.neutral_filenames else _done_word(config),
         "Organisations": config.organization_policy.replace("_", " "),
+    }
+
+
+def _done_word(config: Config) -> str:
+    """« anonymisés » or, in pseudonymization, « pseudonymisés »."""
+    return "pseudonymisés" if config.regime is Regime.PSEUDONYMIZATION else "anonymisés"
+
+
+def _parameters(config: Config) -> dict[str, Any]:
+    """The batch settings of :func:`_settings` as machine values (JSON)."""
+    from anonyma import registry
+
+    return {
+        "profil": config.effective_profile().value,
+        "mode": config.mode.value,
+        "regime": config.regime.value,
+        "paranoiaque": config.paranoid,
+        "ocr": config.ocr_enabled,
+        "noms_neutres": config.neutral_filenames,
+        "organisations": config.organization_policy,
+        "detecteurs_indisponibles": registry.missing_detectors(config, config.effective_profile()),
     }
 
 
@@ -1056,6 +1067,7 @@ def run(
 
     report = BatchReport.from_result(result)
     report.settings = _settings(pipeline.config)
+    report.parameters = _parameters(pipeline.config)
     if report_path is not None:
         try:
             report.save(report_path)
@@ -1086,50 +1098,61 @@ def _check_output_dir(inputs: Sequence[Path], output: Path) -> None:
 
 
 def run_summary(
-    report: BatchReport, result: BatchResult, config: Config, report_path: Path | None
+    report: BatchReport,
+    result: BatchResult,
+    config: Config,
+    report_path: Path | None,
 ) -> dict[str, Any]:
-    """Machine-readable outcome of ``run``: codes, counts and paths only (never an
-    original value or file name; file names are the anonymized ones)."""
-    from anonyma.pipeline import is_quarantined, quarantine_dir
+    """Machine-readable outcome of ``run`` (``--json``): codes, counts and paths only,
+    never an original value or file name (file names are the anonymized ones).
 
-    statuses = {r.status for r in result.all_results()}
-    # Certain residues and actual placement only: a possible residue is « À revoir ».
-    quarantined = report.quarantined
+    The vocabulary is documented in the README (« Automatisation ») and shared with
+    the JSON report (:meth:`BatchReport.counts`); ``code_sortie`` is derived from
+    ``verdict`` (:meth:`BatchReport.exit_code`)."""
+    from anonyma.pipeline import is_quarantined, quarantine_dir
+    from anonyma.report import SCHEMA_VERSION, walk_paths
+
     quarantine = quarantine_dir(result.output_dir)
-    # Quarantined outputs (residues, incomplete verification) are never a success.
-    code = EXIT_PARTIAL if statuses & BAD_STATUSES or quarantined else EXIT_OK
-    documents = [
-        {
-            "fichier": r.output_name,
-            "statut": r.status.value,
-            "quarantaine": is_quarantined(r, result.output_dir),
-            "occurrences": entry["entites"],
-            "residus": r.residue_count,
-            "a_revoir": r.review_count,
-        }
-        for r, entry in zip(result.results, report.files, strict=True)
-    ]
+    counts = report.counts()
+    text, _ = report.verdict()
+    documents = []
+    for r, record in zip(result.results, report.file_records(), strict=True):
+        problems = [
+            {"element": path, "code": i.code, "gravite": i.severity.value, "message": i.message}
+            for item, path in walk_paths(r)
+            for i in item.issues
+            if i.severity is not Severity.INFO
+        ]
+        documents.append(
+            {
+                **record,
+                "quarantaine": is_quarantined(r, result.output_dir),
+                "chemin": str(r.output_path) if r.output_path is not None else None,
+                "problemes": problems,
+            }
+        )
+    in_quarantine = counts["quarantaine"] or quarantine.exists()
     return {
+        "schema": SCHEMA_VERSION,
         "verdict": report.verdict_code(),
-        "code_sortie": code,
+        "verdict_libelle": text,
+        "code_sortie": report.exit_code(),
         "lot": report.batch_id,
-        "fichiers": len(result.results),
-        "elements": sum(1 for _ in result.all_results()),
-        "statuts": {str(s): n for s, n in sorted(report.status_counts.items())},
-        "quarantaine": quarantined,
-        "a_revoir": len(report.review),
-        "residus": len(report.residues),
+        "regime": report.regime.value,
+        # Same counts as nombre_fichiers / nombre_elements (names kept for scripts).
+        "fichiers": counts["nombre_fichiers"],
+        "elements": counts["nombre_elements"],
+        **counts,
+        # Older names: a_revoir = entites_a_revoir, residus = certain + possible
+        # residues, echecs = items (any depth) listed among the failures.
+        "a_revoir": counts["entites_a_revoir"],
+        "residus": counts["residus_certains"] + counts["residus_possibles"],
         "echecs": len(report.failures),
-        "occurrences_par_type": dict(sorted(report.entity_counts.items())),
         "dossier_sortie": str(result.output_dir),
         # Also given when the folder exists (left by an earlier batch, for instance).
-        "dossier_quarantaine": str(quarantine) if quarantined or quarantine.exists() else None,
+        "dossier_quarantaine": str(quarantine) if in_quarantine else None,
         "rapport": str(report_path.resolve()) if report_path is not None else None,
-        "parametres": {
-            "profil": config.effective_profile().value,
-            "mode": config.mode.value,
-            "regime": config.regime.value,
-        },
+        "parametres": _parameters(config),
         "documents": documents,
     }
 

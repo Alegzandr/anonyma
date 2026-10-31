@@ -29,6 +29,7 @@ from typing import Any
 
 from anonyma import paths, registry
 from anonyma.config import Config
+from anonyma.frenchtext import plural
 from anonyma.logs import get_logger
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
@@ -89,6 +90,14 @@ MANUAL_DETECTOR = "manuel"
 CRASH_MESSAGE = (
     "Le traitement de ce fichier a fait planter le processus de travail deux fois : "
     "fichier non traité."
+)
+#: Issue codes of containers that could not keep every embedded item.
+OMITTED_CODE = "child.omitted"
+INCOMPLETE_CONTAINER_CODE = "container.incomplete"
+EMPTY_CONTAINER_CODE = "container.empty"
+EMPTY_CONTAINER = (
+    "Aucun élément de ce fichier n'a pu être anonymisé (illisible, chiffré ou non pris en "
+    "charge) : fichier non produit."
 )
 #: Format of the links skipped in input folders (never read, reported).
 LINK_FORMAT = "lien"
@@ -173,6 +182,8 @@ class BatchResult:
     results: list[DocumentResult]
     started_at: datetime
     finished_at: datetime = field(default_factory=datetime.now)
+    #: Outputs are pseudonymized (reports say « pseudonymisé ») or anonymized.
+    regime: Regime = Regime.ANONYMIZATION
 
     def all_results(self) -> Iterator[DocumentResult]:
         def walk(r: DocumentResult) -> Iterator[DocumentResult]:
@@ -969,10 +980,17 @@ def _write_tree(
             result.issues.append(
                 Issue(
                     Severity.WARNING,
-                    "child.omitted",
+                    OMITTED_CODE,
                     f"Élément « {child_result.output_name} » omis : il n'a pas pu être anonymisé.",
                 )
             )
+
+    nothing_kept = doc.children and all(o.path is None for o in child_outputs.values())
+    if nothing_kept and not _has_own_text(doc):
+        # Nothing of the container could be kept: no empty shell is produced.
+        result.status = DocumentStatus.FAILED
+        result.issues.append(Issue(Severity.ERROR, EMPTY_CONTAINER_CODE, EMPTY_CONTAINER))
+        return result, None
 
     # Top-level outputs too: they only reach the output folder once verified.
     destination = job.work_dir / new_id() / PurePosixPath(name).name
@@ -1076,7 +1094,33 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
         )
         return result
     _set_status(result, status)
+    omitted = _flag_omissions(result)
+    if omitted and result.status is DocumentStatus.NEEDS_REVIEW:
+        result.issues.append(
+            Issue(
+                Severity.WARNING,
+                INCOMPLETE_CONTAINER_CODE,
+                f"{plural(omitted, 'élément inclus omis', 'éléments inclus omis')} (illisible, "
+                "chiffré ou non pris en charge) : le fichier produit est incomplet, à revoir.",
+            )
+        )
     return result
+
+
+def _has_own_text(doc: Document) -> bool:
+    """Whether a container holds text of its own (mail headers and body...), besides
+    its name and the names of its folders."""
+    return any(s.text.strip() for s in doc.segments if s.context.kind is not SegmentKind.FILENAME)
+
+
+def _flag_omissions(result: DocumentResult) -> int:
+    """Embedded items left out of ``result``'s tree (``child.omitted``). A verified
+    container missing some of them is never « Anonymisé »: it becomes « À revoir »."""
+    omitted = sum(1 for i in result.issues if i.code == OMITTED_CODE)
+    omitted += sum(_flag_omissions(child) for child in result.children)
+    if omitted and result.status is DocumentStatus.ANONYMIZED:
+        result.status = DocumentStatus.NEEDS_REVIEW
+    return omitted
 
 
 def _write_crashed(job: _WriteJob) -> DocumentResult:
@@ -1492,7 +1536,13 @@ class Pipeline:
                 if out is not None
                 else DocumentResult(doc.id, "", doc.format, doc.format, DocumentStatus.CANCELLED)
             )
-        return BatchResult(analysis.batch_id, output_dir, results, analysis.started_at)
+        return BatchResult(
+            analysis.batch_id,
+            output_dir,
+            results,
+            analysis.started_at,
+            regime=self.config.regime,
+        )
 
     def run(
         self,
