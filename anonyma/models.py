@@ -459,6 +459,9 @@ class DocumentResult:
     residue_count: int = 0  # certain residues
     possible_residue_count: int = 0
     review_count: int = 0
+    #: ``(entity type, substitute)`` of the clusters awaiting review: the tags or
+    #: substitutes already present in the output, never an original value.
+    review_items: list[tuple[str, str]] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
     children: list[DocumentResult] = field(default_factory=list)
     verification: VerificationResult | None = None

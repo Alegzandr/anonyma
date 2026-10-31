@@ -29,6 +29,10 @@ INCOMPLETE_INTRO = (
     "contenu n'a pas été vérifié. Les fichiers sont « À revoir » et placés en quarantaine "
     "(_quarantaine) : contrôlez-les visuellement avant toute diffusion."
 )
+REVIEW_INTRO = (
+    "Entités détectées avec une faible confiance : elles sont masquées, mais peuvent être "
+    "de fausses détections. Retrouvez-les dans le fichier produit grâce à leur remplacement."
+)
 
 #: Extensions accepted by :meth:`BatchReport.save`.
 REPORT_EXTENSIONS = (".json", ".md", ".html")
@@ -43,6 +47,8 @@ class BatchReport:
     entity_counts: dict[str, int] = field(default_factory=dict)
     files: list[dict[str, Any]] = field(default_factory=list)
     residues: list[dict[str, str]] = field(default_factory=list)
+    #: Low-confidence entities awaiting review, by tag (never the original value).
+    review: list[dict[str, str]] = field(default_factory=list)
     failures: list[dict[str, Any]] = field(default_factory=list)
     #: Files whose verification could not read every image or page (OCR): never
     #: anonymized, kept in quarantine for a visual check.
@@ -60,6 +66,10 @@ class BatchReport:
         for top in result.results:
             report.status_counts[top.status] = report.status_counts.get(top.status, 0) + 1
             report.files.append(_file_entry(top))
+            report.review += [
+                {"fichier": top.output_name, "type": t, "remplacement": substitute}
+                for t, substitute in top.review_items
+            ]
             for r in _walk(top):
                 for t, n in r.entity_counts.items():
                     report.entity_counts[t] = report.entity_counts.get(t, 0) + n
@@ -100,6 +110,7 @@ class BatchReport:
             "entites_par_type": self.entity_counts,
             "fichiers": self.files,
             "residus": self.residues,
+            "a_revoir": self.review,
             "echecs": self.failures,
             "verifications_incompletes": self.incomplete,
         }
@@ -145,6 +156,13 @@ class BatchReport:
             lines += [
                 f"| {c(r['emplacement'])} | {c(r['zone'])} | {c(r['type'])} | {c(r['origine'])} |"
                 for r in self.residues
+            ]
+        if self.review:
+            lines += ["", "## À revoir", "", REVIEW_INTRO, ""]
+            lines += ["| Fichier | Type | Remplacé par |", "|---|---|---|"]
+            lines += [
+                f"| {c(r['fichier'])} | {c(r['type'])} | {c(r['remplacement'])} |"
+                for r in self.review
             ]
         if self.incomplete:
             lines += ["", "## Vérification incomplète", "", INCOMPLETE_INTRO, ""]
@@ -224,6 +242,17 @@ class BatchReport:
                     rows,
                     intro="Ces fichiers ont été placés en quarantaine (<code>_quarantaine</code>) "
                     "et ne doivent pas être diffusés.",
+                )
+            )
+        if self.review:
+            rows = "".join(
+                f"<tr><td>{e(r['fichier'])}</td><td>{e(r['type'])}</td>"
+                f"<td><code>{e(r['remplacement'])}</code></td></tr>"
+                for r in self.review
+            )
+            parts.append(
+                _section(
+                    "À revoir", ["Fichier", "Type", "Remplacé par"], rows, intro=e(REVIEW_INTRO)
                 )
             )
         if self.incomplete:
