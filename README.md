@@ -91,7 +91,7 @@ passe en local : aucune donnée ne quitte le poste.
   (modification annulable). Raccourcis : N / P naviguer, Maj+N suivante non décidée,
   V valider, R rejeter, T type, A ajouter.
 - **Rapport** : bilan du lot, exportable en JSON, Markdown ou HTML. Les fichiers en
-  quarantaine (`_quarantaine`) sont expliqués et ne doivent pas être diffusés. Chaque
+  quarantaine (dossier `<sortie>_quarantaine`, à côté du dossier de sortie) sont expliqués et ne doivent pas être diffusés. Chaque
   résidu s'ouvre à son emplacement dans le fichier produit, et « Corriger et réappliquer »
   ramène à la revue puis remplace les fichiers produits précédemment.
 - **Modèles** et **Réglages** : matériel détecté, modèles installés (le téléchargement est
@@ -149,7 +149,9 @@ Codes de sortie : **0** tous les fichiers sont anonymisés, **1** au moins un fi
 présente des résidus, a échoué, n'est pas pris en charge ou le traitement a été
 interrompu, **2** erreur d'utilisation (option invalide, phrase secrète incorrecte,
 configuration invalide…). Les fichiers dont la vérification échoue sont placés dans
-`<sortie>/_quarantaine/` et ne doivent pas être diffusés.
+`<sortie>_quarantaine/`, **à côté** du dossier de sortie (jamais dedans : le dossier de
+sortie ne contient que des fichiers vérifiés et peut être partagé tel quel) ; ils ne doivent
+pas être diffusés.
 
 ## Formats
 
@@ -172,7 +174,7 @@ modifiés. `anonyma-cli formats` affiche la liste exacte disponible sur le poste
 Un élément qui ne peut pas être anonymisé (format inconnu, fichier chiffré, lecture
 impossible) n'est **jamais recopié tel quel** : il est absent de la sortie et signalé dans
 le rapport. Un fichier dans lequel la vérification retrouve une valeur d'origine est placé
-dans `_quarantaine/` du dossier de sortie.
+dans `<sortie>_quarantaine/`, à côté du dossier de sortie.
 
 ## Profils et matériel
 
@@ -251,7 +253,7 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
   démarrage suivant (en cas d'arrêt brutal).
 - **Vérification systématique** : chaque fichier produit est relu ; s'il reste une valeur
   sensible ou si la relecture est impossible, il part en **quarantaine**
-  (`_quarantaine/`) et n'est jamais compté comme anonymisé.
+  (`<sortie>_quarantaine/`, hors du dossier de sortie) et n'est jamais compté comme anonymisé.
 - **Journaux et rapports** : `data/logs/` et les rapports ne contiennent ni valeur
   sensible ni nom de fichier d'origine (seulement des noms anonymisés, des nombres et des
   codes).

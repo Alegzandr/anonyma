@@ -700,7 +700,7 @@ def run(
     numbering: NumberingOpt = None,
 ) -> None:
     """Anonymise des fichiers et dossiers vers un dossier de sortie."""
-    from anonyma.pipeline import QUARANTINE_DIR, OutputDirError, Pipeline
+    from anonyma.pipeline import OutputDirError, Pipeline, is_quarantined, quarantine_dir
     from anonyma.report import REPORT_EXTENSIONS, BatchReport
 
     _check_inputs(inputs)
@@ -746,7 +746,7 @@ def run(
 
     report = BatchReport.from_result(result)
     report.settings = _settings(pipeline.config)
-    _print_run_summary(report, result.output_dir, QUARANTINE_DIR)
+    _print_run_summary(report, result.output_dir, quarantine_dir(result.output_dir))
     if report_path is not None:
         try:
             report.save(report_path)
@@ -755,13 +755,11 @@ def run(
         out.print(f"Rapport enregistré : {report_path}")
     statuses = {r.status for r in result.all_results()}
     # Quarantined outputs (residues, incomplete verification) are never a success.
-    quarantined = any(
-        r.output_path is not None and QUARANTINE_DIR in r.output_path.parts for r in result.results
-    )
+    quarantined = any(is_quarantined(r, result.output_dir) for r in result.results)
     raise typer.Exit(EXIT_PARTIAL if statuses & BAD_STATUSES or quarantined else EXIT_OK)
 
 
-def _print_run_summary(report: Any, output_dir: Path, quarantine: str) -> None:
+def _print_run_summary(report: Any, output_dir: Path, quarantine: Path) -> None:
     from anonyma.report import STATUS_LABELS
 
     table = Table(title="Résultat du lot", show_edge=False)
@@ -781,7 +779,7 @@ def _print_run_summary(report: Any, output_dir: Path, quarantine: str) -> None:
         problems = " ; ".join(failure["problemes"]) or failure["statut"]
         out.print(f"[red]•[/] {_markup_escape(failure['fichier'])} : {_markup_escape(problems)}")
     out.print(f"Dossier de sortie : {output_dir}")
-    if report.residues or (output_dir / quarantine).exists():
+    if report.residues or quarantine.exists():
         out.print(
             f"[yellow]Des fichiers ont été placés en quarantaine dans « {quarantine} » : "
             "ne les diffusez pas.[/]"

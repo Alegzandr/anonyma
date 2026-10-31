@@ -49,6 +49,7 @@ from anonyma.pipeline import (
     ProgressEvent,
     collect_inputs,
     extract_file,
+    quarantine_dir,
     validate_output_dir,
 )
 from anonyma.store import EncryptedMappingStore
@@ -98,14 +99,14 @@ def open_store(path: Path, passphrase: str, create: bool) -> EncryptedMappingSto
 
 def remove_outputs(result: BatchResult) -> None:
     """Delete the files/folders a previous application produced (and only those)."""
-    root = result.output_dir.resolve()
+    roots = (result.output_dir.resolve(), quarantine_dir(result.output_dir).resolve())
     for r in result.results:
         path = r.output_path
         if path is None:
             continue
         try:
             resolved = path.resolve()
-            if root not in resolved.parents:
+            if not any(root in resolved.parents for root in roots):
                 continue
             if resolved.is_dir():
                 shutil.rmtree(resolved, ignore_errors=True)

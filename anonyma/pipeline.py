@@ -77,7 +77,10 @@ from anonyma.writers.zip import write_zip
 
 log = get_logger("pipeline")
 
-QUARANTINE_DIR = "_quarantaine"
+#: Suffix of the quarantine folder, created next to the output folder (``sortie`` →
+#: ``sortie_quarantaine``) and never inside it: the output folder is the deliverable
+#: users zip or upload as a whole, so it must only hold verified files.
+QUARANTINE_SUFFIX = "_quarantaine"
 MANUAL_DETECTOR = "manuel"
 #: RAM budget per worker process in the STANDARD profile (GLiNER loaded per process).
 GLINER_WORKER_RAM = int(2.5 * 1024**3)
@@ -881,7 +884,7 @@ def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[Docu
     result.review_count = len(
         {e.cluster_id for e in job.entities if e.document_id in tree_ids} & job.review_clusters
     )
-    quarantine = job.output_dir / QUARANTINE_DIR
+    quarantine = quarantine_dir(job.output_dir)
     if not verification.clean:
         if verification.verified:
             result.issues.append(
@@ -1310,22 +1313,42 @@ class OutputDirError(UserError):
     """The output folder overlaps the inputs."""
 
 
+def quarantine_dir(output_dir: Path) -> Path:
+    """Folder receiving the outputs that failed verification: a sibling of the output
+    folder (``sortie_quarantaine``), so that sharing the output folder never shares them.
+    An output folder at a drive root has no sibling: the quarantine then sits inside."""
+    output_dir = Path(output_dir)
+    if not output_dir.name:
+        return output_dir / QUARANTINE_SUFFIX.lstrip("_")
+    return output_dir.with_name(output_dir.name + QUARANTINE_SUFFIX)
+
+
+def is_quarantined(result: DocumentResult, output_dir: Path) -> bool:
+    """Whether ``result``'s output was placed in the quarantine of ``output_dir``."""
+    if result.output_path is None:
+        return False
+    quarantine = quarantine_dir(output_dir)
+    return result.output_path == quarantine or quarantine in result.output_path.parents
+
+
 def validate_output_dir(inputs: Sequence[Path], output_dir: Path) -> None:
-    """Refuse an output folder that is, contains, or lies inside one of the inputs.
+    """Refuse an output folder (or its quarantine) that is, contains, or lies inside one
+    of the inputs.
 
     Raises ``OutputDirError`` (usable before any analysis)."""
     output_dir = Path(output_dir).resolve()
-    for raw in inputs:
-        root = Path(raw).resolve()
-        inside_input = root.is_dir() and (output_dir == root or root in output_dir.parents)
-        contains_input = output_dir == root or output_dir in root.parents
-        if inside_input or contains_input:
-            raise OutputDirError(OUTPUT_CONFLICT_MESSAGE)
+    for target in (output_dir, quarantine_dir(output_dir)):
+        for raw in inputs:
+            root = Path(raw).resolve()
+            inside_input = root.is_dir() and (target == root or root in target.parents)
+            contains_input = target == root or target in root.parents
+            if inside_input or contains_input:
+                raise OutputDirError(OUTPUT_CONFLICT_MESSAGE)
 
 
 __all__ = [
     "OUTPUT_CONFLICT_MESSAGE",
-    "QUARANTINE_DIR",
+    "QUARANTINE_SUFFIX",
     "BatchAnalysis",
     "BatchResult",
     "CancelToken",
@@ -1338,9 +1361,11 @@ __all__ = [
     "detect_tree",
     "drop_inside_whitelist",
     "extract_file",
+    "is_quarantined",
     "manual_entities",
     "neutral_names",
     "propagate_names",
+    "quarantine_dir",
     "resolve_decisions",
     "validate_output_dir",
 ]

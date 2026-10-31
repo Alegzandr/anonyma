@@ -19,11 +19,14 @@ from anonyma.models import (
     Severity,
 )
 from anonyma.pipeline import (
-    QUARANTINE_DIR,
     CancelToken,
+    OutputDirError,
     Pipeline,
     collect_inputs,
+    is_quarantined,
+    quarantine_dir,
     resolve_decisions,
+    validate_output_dir,
 )
 from anonyma.store import InMemoryMappingStore
 from anonyma.writers.text import TextWriter
@@ -99,9 +102,13 @@ def test_residue_goes_to_quarantine(
     result = Pipeline(canary_config).run([src], tmp_path / "out")
     top = result.results[0]
     assert top.status is DocumentStatus.RESIDUE
-    assert top.output_path is not None and QUARANTINE_DIR in top.output_path.parts
+    assert is_quarantined(top, tmp_path / "out")
     assert top.verification is not None and top.verification.residues
     assert "Quintavalle" not in repr(top)
+    # The quarantine is a sibling of the output folder: sharing the output folder
+    # never shares a file known to contain residues.
+    assert not list((tmp_path / "out").rglob("*.txt"))
+    assert top.output_path.is_relative_to(tmp_path / "out_quarantaine")
 
 
 class _LowScoreDetector(Detector):
@@ -349,7 +356,7 @@ def test_possible_residue_means_review_not_quarantine(
     top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
     assert top.status is DocumentStatus.NEEDS_REVIEW
     assert top.possible_residue_count == 1 and top.residue_count == 0
-    assert top.output_path is not None and QUARANTINE_DIR not in top.output_path.parts
+    assert top.output_path is not None and not is_quarantined(top, tmp_path / "out")
     assert "verify.possible_residue" in [i.code for i in top.issues]
 
 
@@ -566,7 +573,7 @@ def test_ocr_gap_at_verification_goes_to_quarantine(
     src.write_text(f"{CANARY_PERSON}\n", encoding="utf-8")
     top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
     assert top.status is DocumentStatus.NEEDS_REVIEW
-    assert top.output_path is not None and QUARANTINE_DIR in top.output_path.parts
+    assert is_quarantined(top, tmp_path / "out")
     assert "verify.incomplete" in {i.code for i in top.issues}
     assert top.verification is not None and top.verification.unread == 1
 
@@ -643,3 +650,11 @@ def test_place_copies_across_volumes(tmp_path: Path, monkeypatch: pytest.MonkeyP
     written.write_text("un", encoding="utf-8")
     placed = pipeline_module._place(written, tmp_path / "out", "x.txt")
     assert placed.read_text(encoding="utf-8") == "un" and not written.exists()
+
+
+def test_quarantine_folder_must_not_overlap_the_inputs(tmp_path: Path) -> None:
+    assert quarantine_dir(tmp_path / "sortie") == tmp_path / "sortie_quarantaine"
+    inputs = tmp_path / "sortie_quarantaine"
+    inputs.mkdir()
+    with pytest.raises(OutputDirError):
+        validate_output_dir([inputs], tmp_path / "sortie")

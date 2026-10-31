@@ -79,7 +79,7 @@ reported in `registry.unavailable` and its format becomes "non supporté".
 * Temp files live in `data/tmp/<batch>/`, removed by `Pipeline.close` and
   `paths.clean_tmp()` at startup.
 * Every output is written in the batch temp folder and only moved to the output
-  folder (or to `<output>/_quarantaine/`) once verified, under a name reserved by
+  folder (or to `<output>_quarantaine/`, a sibling,) once verified, under a name reserved by
   exclusive creation; any failure on the way deletes it. Outputs that fail
   verification are never marked anonymized.
 * Errors shown to users: only `UserError` (and `StoreError`, `ModelError`) messages
@@ -97,9 +97,9 @@ certain; their distinctive words, possible). Values kept by the organization pol
 
 | Outcome | Status | Output |
 |---|---|---|
-| certain residue | RESIDUE | `_quarantaine/` |
-| output not re-extractable | FAILED | `_quarantaine/` |
-| an image/page of the **output** could not be OCR'd (`VerificationResult.unread`, any `ocr` issue: OCR disabled, unavailable, failed) | NEEDS_REVIEW + `verify.incomplete` | `_quarantaine/` (content never checked) |
+| certain residue | RESIDUE | `<output>_quarantaine/` |
+| output not re-extractable | FAILED | `<output>_quarantaine/` |
+| an image/page of the **output** could not be OCR'd (`VerificationResult.unread`, any `ocr` issue: OCR disabled, unavailable, failed) | NEEDS_REVIEW + `verify.incomplete` | `<output>_quarantaine/` (content never checked) |
 | possible residue, uncertain entities, or an image/page of the **input** not OCR'd (`analyse.ocr_incomplete`) | NEEDS_REVIEW | output folder |
 | none of the above | ANONYMIZED | output folder |
 

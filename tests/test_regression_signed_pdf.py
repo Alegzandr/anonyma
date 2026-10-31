@@ -38,7 +38,7 @@ from PIL import Image
 from anonyma import pipeline as pipeline_module
 from anonyma.config import Config
 from anonyma.models import DocumentResult, DocumentStatus, OcrLine, Profile
-from anonyma.pipeline import BatchResult, Pipeline
+from anonyma.pipeline import BatchResult, Pipeline, is_quarantined
 from tests.benchmark.measure import NAME, Hay, walk_bytes
 from tests.fixtures.generators import signed_pdf as fx
 
@@ -437,4 +437,4 @@ def test_never_anonymized_when_verification_cannot_ocr(
     result = Pipeline(_config()).run(selected, tmp_path / "sortie")
     for top in result.results:
         assert top.status is not DocumentStatus.ANONYMIZED, _describe(top)
-        assert top.output_path is None or "_quarantaine" in top.output_path.parts
+        assert top.output_path is None or is_quarantined(top, tmp_path / "sortie")

@@ -697,7 +697,10 @@ def run_anonyma(
 
 def doc_output_files(out_root: Path, slug: str) -> list[tuple[str, Path, bool]]:
     found = []
-    for base, quarantined in ((out_root / slug, False), (out_root / QUARANTINE / slug, True)):
+    for base, quarantined in (
+        (out_root / slug, False),
+        (out_root.with_name(out_root.name + QUARANTINE) / slug, True),
+    ):
         if base.exists():
             for path in sorted(base.rglob("*")):
                 if path.is_file():

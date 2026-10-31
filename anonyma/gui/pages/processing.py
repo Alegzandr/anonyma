@@ -35,7 +35,7 @@ from anonyma.gui.widgets import (
     primary_button,
 )
 from anonyma.models import DocumentResult, DocumentStatus, Regime
-from anonyma.pipeline import QUARANTINE_DIR, ProgressEvent
+from anonyma.pipeline import ProgressEvent, is_quarantined, quarantine_dir
 
 STAGE_LABELS = {"analyse": "Analyse des fichiers", "ecriture": "Écriture et vérification"}
 
@@ -433,9 +433,7 @@ class ProcessingPage(QWidget):
         ok = statuses.count(DocumentStatus.ANONYMIZED)
         review = statuses.count(DocumentStatus.NEEDS_REVIEW)
         bad = len(statuses) - ok - review
-        quarantined = sum(
-            1 for r in result.results if r.output_path and QUARANTINE_DIR in r.output_path.parts
-        )
+        quarantined = sum(1 for r in result.results if is_quarantined(r, result.output_dir))
         text = f"Terminé : {ok} fichier(s) anonymisé(s)"
         if review:
             text += f", {review} à revoir"
@@ -443,7 +441,8 @@ class ProcessingPage(QWidget):
             text += f", {bad} en échec ou non pris en charge"
         text += "."
         if quarantined:
-            text += f" {quarantined} fichier(s) placé(s) en quarantaine ({QUARANTINE_DIR})."
+            folder = quarantine_dir(result.output_dir)
+            text += f" {quarantined} fichier(s) placé(s) en quarantaine dans « {folder} »."
         level = "success" if not bad and not review else "warning"
         self.banner.show_message(text, level, [("Voir le rapport", self.report_requested.emit)])
         self.stage_label.setText("Traitement terminé.")

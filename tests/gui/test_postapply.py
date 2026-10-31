@@ -11,7 +11,7 @@ from anonyma import registry
 from anonyma.gui.main_window import MainWindow
 from anonyma.gui.pages import report as report_module
 from anonyma.models import DocumentStatus
-from anonyma.pipeline import QUARANTINE_DIR
+from anonyma.pipeline import quarantine_dir
 from anonyma.writers.text import TextWriter
 from tests.gui.conftest import DialogRecorder, prepare
 
@@ -74,7 +74,7 @@ def test_quarantine_residue_jump_and_reapply(
     assert any("remplacés" in text for text in recorder.confirms)
     assert {r.status for r in c.result.results} == {DocumentStatus.ANONYMIZED}
     assert all(p is not None and not p.exists() for p in previous)
-    assert not list((out / QUARANTINE_DIR).rglob("*.txt"))
+    assert not list(quarantine_dir(out).rglob("*.txt"))
     names = sorted(p.name for p in out.rglob("*.txt"))
     assert names == ["a.txt", "b.txt"]  # replaced, no « (2) » duplicates
 

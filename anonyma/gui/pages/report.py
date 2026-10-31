@@ -38,7 +38,7 @@ from anonyma.gui.widgets import (
 )
 from anonyma.logs import get_logger
 from anonyma.models import DocumentResult, DocumentStatus, Residue, Severity
-from anonyma.pipeline import QUARANTINE_DIR
+from anonyma.pipeline import is_quarantined, quarantine_dir
 from anonyma.report import STATUS_LABELS, BatchReport
 
 log = get_logger("gui.report")
@@ -103,10 +103,6 @@ def _fill(
             if c in numeric:
                 item.setTextAlignment(_RIGHT)
             table.setItem(r, c, item)
-
-
-def is_quarantined(result: DocumentResult) -> bool:
-    return result.output_path is not None and QUARANTINE_DIR in result.output_path.parts
 
 
 def quarantine_reason(result: DocumentResult) -> str:
@@ -316,7 +312,7 @@ class ReportPage(QWidget):
             ],
             numeric=(2,),
         )
-        self.quarantined = [r for r in result.results if is_quarantined(r)]
+        self.quarantined = [r for r in result.results if is_quarantined(r, result.output_dir)]
         _fill(
             self.quarantine_table,
             [
@@ -364,7 +360,7 @@ class ReportPage(QWidget):
         if self.quarantined:
             self.banner.show_message(
                 f"{len(self.quarantined)} fichier(s) en quarantaine dans "
-                f"« {result.output_dir / QUARANTINE_DIR} » : ils ne sont pas considérés comme "
+                f"« {quarantine_dir(result.output_dir)} » : ils ne sont pas considérés comme "
                 "anonymisés.",
                 "warning",
                 [

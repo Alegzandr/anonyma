@@ -44,7 +44,7 @@ through a file the tool silently skipped.
 - **Fully local, provably offline**: outbound connections are blocked inside the process;
   the only network action is a model download the user explicitly triggers. No telemetry.
 - **Verification is part of the product, not an option**: every output is re-read by
-  independent means; a recovered original value sends the file to `_quarantaine/`, never to
+  independent means; a recovered original value sends the file to `<output>_quarantaine/` (a sibling of the output folder), never to
   the "Anonymisé" count.
 - **Original format preserved**: each file comes back in its own format, folder tree and
   layout (msg stays msg, legacy Office via the bundled LibreOffice, PST as a folder of eml),

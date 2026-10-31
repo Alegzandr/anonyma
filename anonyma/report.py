@@ -27,7 +27,8 @@ STATUS_LABELS = {
 INCOMPLETE_INTRO = (
     "Certaines images ou pages de ces fichiers n'ont pas pu être relues par l'OCR : leur "
     "contenu n'a pas été vérifié. Les fichiers sont « À revoir » et placés en quarantaine "
-    "(_quarantaine) : contrôlez-les visuellement avant toute diffusion."
+    "(dossier « …_quarantaine » à côté du dossier de sortie) : contrôlez-les visuellement "
+    "avant toute diffusion."
 )
 
 #: Extensions accepted by :meth:`BatchReport.save`.
@@ -222,8 +223,9 @@ class BatchReport:
                     "Résidus",
                     ["Emplacement", "Zone", "Type", "Origine", "Détecteur"],
                     rows,
-                    intro="Ces fichiers ont été placés en quarantaine (<code>_quarantaine</code>) "
-                    "et ne doivent pas être diffusés.",
+                    intro="Ces fichiers ont été placés en quarantaine (dossier "
+                    "<code>…_quarantaine</code> à côté du dossier de sortie) et ne doivent "
+                    "pas être diffusés.",
                 )
             )
         if self.incomplete:

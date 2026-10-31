@@ -47,7 +47,7 @@ before you consider a change done. On Windows, keep pytest's base temp short
   layout (msg stays msg, legacy Office via bundled LibreOffice, PST as a folder of eml,
   file and folder names anonymised). Changing an output format is a regression.
 - **Fail closed**: something that cannot be anonymised or verified is omitted and reported,
-  never copied as is; a verified residue sends the file to `_quarantaine/`. Containers must
+  never copied as is; a verified residue sends the file to `<output>_quarantaine/` (a sibling of the output folder). Containers must
   never embed original child bytes (`child_outputs[id].path is None` ⇒ omit).
 - **Recall over precision**: a single detection masks; uncertain entities are masked *and*
   sent to review, never left visible.
