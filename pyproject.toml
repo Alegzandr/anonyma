@@ -11,6 +11,11 @@ dependencies = [
     "cryptography>=44",
     "huggingface-hub>=0.25",
     "pillow>=11",
+    "py7zr>=1.1.4",
+    "pillow-heif>=1.8.1",
+    "extract-msg>=0.58.0",
+    "libpff-python>=20260926",
+    "rapidocr-onnxruntime>=1.4.4",
 ]
 
 [project.optional-dependencies]

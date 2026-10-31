@@ -1,0 +1,209 @@
+"""Image writer: opaque boxes over every replaced OCR span, all metadata stripped.
+
+EXIF orientation is applied to the pixels, every page/frame is kept, the format
+and (as far as possible) the compression settings are preserved; only the ICC
+profile survives. In tag mode the tag is drawn inside the box when it fits.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from PIL import Image, ImageDraw, ImageFont, JpegImagePlugin
+
+from anonyma.extractors.image import IMAGE_FORMATS, prepare_frame
+from anonyma.models import (
+    BBox,
+    Document,
+    Issue,
+    ReplacementMode,
+    ReplacementPlan,
+    Segment,
+    SegmentKind,
+    WriteContext,
+    Writer,
+)
+from anonyma.registry import register_writer
+
+#: Box padding relative to the line height (OCR character cells are approximate).
+PAD_X = 0.3
+PAD_Y = 0.15
+
+_PIL_FORMATS = {
+    "png": "PNG",
+    "jpeg": "JPEG",
+    "tiff": "TIFF",
+    "bmp": "BMP",
+    "webp": "WEBP",
+    "heic": "HEIF",
+}
+
+
+def drawable(frame: Image.Image, fmt: str) -> Image.Image:
+    """Convert to a mode that supports opaque drawing and the output format."""
+    if frame.mode in ("P", "PA"):
+        has_alpha = frame.mode == "PA" or "transparency" in frame.info
+        return frame.convert("RGBA" if has_alpha and fmt != "jpeg" else "RGB")
+    if frame.mode in ("YCbCr", "LAB", "HSV"):
+        return frame.convert("RGB")
+    if frame.mode.startswith("I;16"):
+        return frame.convert("I")
+    if fmt in ("jpeg", "bmp") and frame.mode in ("RGBA", "LA", "RGBa", "La"):
+        return frame.convert("RGB" if frame.mode.startswith("RGB") else "L")
+    if fmt in ("webp", "heic") and frame.mode not in ("RGB", "RGBA", "L"):
+        return frame.convert("RGBA" if "A" in frame.mode else "RGB")
+    return frame
+
+
+def _colors(mode: str) -> tuple[Any, Any]:
+    """(box fill, text fill) for ``mode``."""
+    if mode == "1":
+        return 0, 1
+    if mode in ("L", "I", "F"):
+        return 0, 255
+    if mode == "LA":
+        return (0, 255), (255, 255)
+    if mode == "RGBA":
+        return (0, 0, 0, 255), (255, 255, 255, 255)
+    if mode == "CMYK":
+        return (0, 0, 0, 255), (0, 0, 0, 0)
+    return (0, 0, 0), (255, 255, 255)
+
+
+def redaction_boxes(segment: Segment, plan: ReplacementPlan) -> list[tuple[BBox, str]]:
+    boxes: list[tuple[BBox, str]] = []
+    line = segment.context.bbox
+    for rep in plan.for_segment(segment.id):
+        box = segment.span_bbox(rep.start, rep.end) or line
+        if box is None:
+            continue
+        if line is not None:
+            box = BBox(box.x0, min(box.y0, line.y0), box.x1, max(box.y1, line.y1))
+        height = max(box.y1 - box.y0, 1.0)
+        boxes.append(
+            (
+                BBox(
+                    box.x0 - PAD_X * height,
+                    box.y0 - PAD_Y * height,
+                    box.x1 + PAD_X * height,
+                    box.y1 + PAD_Y * height,
+                ),
+                rep.substitute,
+            )
+        )
+    return boxes
+
+
+def redact(frame: Image.Image, boxes: list[tuple[BBox, str]], mode: ReplacementMode) -> None:
+    draw = ImageDraw.Draw(frame)
+    fill, text_fill = _colors(frame.mode)
+    width, height = frame.size
+    for box, label in boxes:
+        x0, y0 = max(0, int(box.x0)), max(0, int(box.y0))
+        x1, y1 = min(width, int(box.x1 + 0.999)), min(height, int(box.y1 + 0.999))
+        if x1 <= x0 or y1 <= y0:
+            continue
+        draw.rectangle((x0, y0, x1 - 1, y1 - 1), fill=fill)
+        if mode is ReplacementMode.TAG and label and frame.mode != "1":
+            size = max(8, int((y1 - y0) * 0.55))
+            try:
+                font: Any = ImageFont.load_default(size=size)
+            except (OSError, TypeError):
+                continue
+            text_box = draw.textbbox((0, 0), label, font=font)
+            text_w, text_h = text_box[2] - text_box[0], text_box[3] - text_box[1]
+            if text_w <= x1 - x0 and text_h <= y1 - y0:
+                position = (x0 + (x1 - x0 - text_w) / 2, y0 + (y1 - y0 - text_h) / 2 - text_box[1])
+                draw.text(position, label, fill=text_fill, font=font)
+
+
+def _webp_lossless(source: Path) -> bool:
+    with source.open("rb") as fh:
+        head = fh.read(4096)
+    return b"VP8L" in head[12:200] and b"VP8 " not in head[12:200]
+
+
+def save_frames(
+    frames: list[Image.Image], fmt: str, destination: Path, original: Image.Image, source: Path
+) -> None:
+    pil_format = _PIL_FORMATS[fmt]
+    params: dict[str, Any] = {}
+    icc = original.info.get("icc_profile")
+    if icc and fmt != "bmp":
+        params["icc_profile"] = icc
+    first, rest = frames[0], frames[1:]
+    if fmt == "jpeg":
+        params.update(_jpeg_params(original, first))
+    elif fmt == "tiff":
+        compression = original.info.get("compression", "raw")
+        params["compression"] = compression
+    elif fmt == "webp":
+        if _webp_lossless(source):
+            params["lossless"] = True
+        else:
+            params["quality"] = 90
+        if rest:
+            params["duration"] = original.info.get("duration", 100)
+            params["loop"] = original.info.get("loop", 0)
+    elif fmt == "heic":
+        params.update(quality=90, exif=None, xmp=None)
+    elif fmt == "png" and rest:
+        params["duration"] = original.info.get("duration", 100)
+        params["loop"] = original.info.get("loop", 0)
+    if rest:
+        params.update(save_all=True, append_images=rest)
+    try:
+        first.save(destination, pil_format, **params)
+    except (OSError, ValueError, KeyError):
+        if fmt != "tiff":
+            raise
+        params["compression"] = "tiff_lzw" if first.mode != "1" else "group4"
+        first.save(destination, pil_format, **params)
+
+
+def _jpeg_params(original: Image.Image, frame: Image.Image) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    if original.format == "JPEG" and frame.mode == original.mode:
+        quantization = getattr(original, "quantization", None)
+        if quantization:
+            params["qtables"] = quantization
+        sampling = JpegImagePlugin.get_sampling(original)
+        if sampling != -1:
+            params["subsampling"] = sampling
+    else:
+        params["quality"] = 95
+    if original.info.get("progressive") or original.info.get("progression"):
+        params["progressive"] = True
+    return params
+
+
+@register_writer
+class ImageWriter(Writer):
+    name = "image"
+    formats = IMAGE_FORMATS
+
+    def write(
+        self,
+        document: Document,
+        plan: ReplacementPlan,
+        destination: Path,
+        ctx: WriteContext,
+    ) -> list[Issue]:
+        by_page: dict[int, list[Segment]] = {}
+        for segment in document.segments:
+            if segment.context.kind is SegmentKind.OCR:
+                by_page.setdefault(segment.context.page or 0, []).append(segment)
+        with Image.open(document.source) as image:
+            frames: list[Image.Image] = []
+            for page in range(getattr(image, "n_frames", 1) or 1):
+                image.seek(page)
+                frame = drawable(prepare_frame(image), document.format)
+                boxes = [b for s in by_page.get(page, []) for b in redaction_boxes(s, plan)]
+                if boxes:
+                    redact(frame, boxes, ctx.mode)
+                frame.info = {}
+                frames.append(frame)
+            image.seek(0)
+            save_frames(frames, document.format, destination, image, document.source)
+        return []
