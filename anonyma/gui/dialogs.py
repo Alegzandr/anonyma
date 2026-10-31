@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from anonyma.frenchtext import typo
 from anonyma.gui import icons
 from anonyma.gui.labels import entity_type_label
 
@@ -46,29 +47,38 @@ _TYPE_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")
 # ---------------------------------------------------------------------------
 
 
-def error(parent: QWidget | None, text: str, title: str = "Erreur") -> None:
-    QMessageBox.critical(parent, title, text)
+APP_TITLE = "Anonyma"
 
 
-def warning(parent: QWidget | None, text: str, title: str = "Attention") -> None:
-    QMessageBox.warning(parent, title, text)
+def error(parent: QWidget | None, text: str, title: str = APP_TITLE) -> None:
+    QMessageBox.critical(parent, title, typo(text))
 
 
-def info(parent: QWidget | None, text: str, title: str = "Information") -> None:
-    QMessageBox.information(parent, title, text)
+def warning(parent: QWidget | None, text: str, title: str = APP_TITLE) -> None:
+    QMessageBox.warning(parent, title, typo(text))
+
+
+def info(parent: QWidget | None, text: str, title: str = APP_TITLE) -> None:
+    QMessageBox.information(parent, title, typo(text))
 
 
 def confirm(
     parent: QWidget | None,
     text: str,
-    title: str = "Confirmation",
+    title: str = APP_TITLE,
     ok_label: str = "Continuer",
     cancel_label: str = "Annuler",
+    *,
+    warn: bool = False,
 ) -> bool:
-    box = QMessageBox(QMessageBox.Icon.Question, title, text, parent=parent)
+    """Ask a question; ``warn`` shows the warning icon and makes the safe answer the
+    default (data loss, overwrite)."""
+    icon = QMessageBox.Icon.Warning if warn else QMessageBox.Icon.Question
+    box = QMessageBox(icon, title, typo(text), parent=parent)
     ok = box.addButton(ok_label, QMessageBox.ButtonRole.AcceptRole)
-    box.addButton(cancel_label, QMessageBox.ButtonRole.RejectRole)
-    box.setDefaultButton(ok)
+    cancel = box.addButton(cancel_label, QMessageBox.ButtonRole.RejectRole)
+    box.setDefaultButton(cancel if warn else ok)
+    box.setEscapeButton(cancel)
     box.exec()
     return box.clickedButton() is ok
 
@@ -99,10 +109,10 @@ class PassphraseDialog(QDialog):
             )
         else:
             intro = "Saisissez la phrase secrète de la table de correspondance chiffrée."
-        text = QLabel(intro)
+        text = QLabel(typo(intro))
         text.setWordWrap(True)
         layout.addWidget(text)
-        location = QLabel(f"Fichier : {store_path}")
+        location = QLabel(typo(f"Fichier : {store_path}"))
         location.setProperty("muted", True)
         location.setWordWrap(True)
         location.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -123,7 +133,9 @@ class PassphraseDialog(QDialog):
         self.error_label.setWordWrap(True)
         layout.addWidget(self.error_label)
         buttons = QDialogButtonBox()
-        buttons.addButton("Valider", QDialogButtonBox.ButtonRole.AcceptRole)
+        ok_label = "Créer la table" if create else "Déverrouiller"
+        ok = buttons.addButton(ok_label, QDialogButtonBox.ButtonRole.AcceptRole)
+        ok.setDefault(True)
         buttons.addButton("Annuler", QDialogButtonBox.ButtonRole.RejectRole)
         buttons.accepted.connect(self._check)
         buttons.rejected.connect(self.reject)
@@ -181,21 +193,25 @@ class TypeDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title or "Type d'entité")
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Choisissez un type, ou saisissez un nouveau type (ex. PROJET) :"))
+        prompt = QLabel(typo("Choisissez un type, ou saisissez-en un nouveau (ex. Projet) :"))
+        layout.addWidget(prompt)
         self.combo = QComboBox()
         self.combo.setEditable(True)
         self.combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        prompt.setBuddy(self.combo)
         for t in types:
-            self.combo.addItem(f"{t} — {entity_type_label(t)}", t)
+            self.combo.addItem(entity_type_label(t), t)
         if current:
             index = self.combo.findData(current)
             if index >= 0:
                 self.combo.setCurrentIndex(index)
         layout.addWidget(self.combo)
         self.error_label = QLabel("")
+        self.error_label.setStyleSheet("color: palette(bright-text);")
         layout.addWidget(self.error_label)
         buttons = QDialogButtonBox()
-        buttons.addButton("Valider", QDialogButtonBox.ButtonRole.AcceptRole)
+        ok = buttons.addButton("Choisir ce type", QDialogButtonBox.ButtonRole.AcceptRole)
+        ok.setDefault(True)
         buttons.addButton("Annuler", QDialogButtonBox.ButtonRole.RejectRole)
         buttons.accepted.connect(self._check)
         buttons.rejected.connect(self.reject)
@@ -203,16 +219,17 @@ class TypeDialog(QDialog):
         self.resize(380, self.sizeHint().height())
 
     def value(self) -> str:
-        index = self.combo.currentIndex()
-        text = self.combo.currentText()
-        if index >= 0 and self.combo.itemText(index) == text:
-            return str(self.combo.itemData(index))
+        """Code of the chosen type: a listed label (any case) or a new code."""
+        text = self.combo.currentText().strip()
+        for i in range(self.combo.count()):
+            if self.combo.itemText(i).casefold() == text.casefold():
+                return str(self.combo.itemData(i))
         return normalize_type(text)
 
     def _check(self) -> None:
         if not self.value():
             self.error_label.setText(
-                "Type invalide : lettres majuscules, chiffres et « _ » uniquement."
+                typo("Type invalide : lettres sans accents, chiffres et « _ » uniquement.")
             )
             return
         self.accept()
@@ -261,14 +278,14 @@ class FileBrowser(QDialog):
 
         layout = QVBoxLayout(self)
         bar = QHBoxLayout()
-        self.up_button = QPushButton(icons.icon("previous"), "Dossier parent")
+        self.up_button = QPushButton("Dossier parent")
         self.up_button.clicked.connect(self._go_up)
         self.path_edit = QLineEdit()
         self.path_edit.returnPressed.connect(lambda: self.navigate(Path(self.path_edit.text())))
         bar.addWidget(self.up_button)
         bar.addWidget(self.path_edit, 1)
         if mode in ("folder", "save"):
-            new_folder = QPushButton(icons.icon("add"), "Nouveau dossier")
+            new_folder = QPushButton("Nouveau dossier")
             new_folder.clicked.connect(self._new_folder)
             bar.addWidget(new_folder)
         layout.addLayout(bar)
@@ -304,11 +321,13 @@ class FileBrowser(QDialog):
         self.name_edit = QLineEdit(default_name)
         if mode == "save":
             row = QHBoxLayout()
-            row.addWidget(QLabel("Nom du fichier"))
+            name_label = QLabel("&Nom du fichier")
+            name_label.setBuddy(self.name_edit)
+            row.addWidget(name_label)
             row.addWidget(self.name_edit, 1)
             layout.addLayout(row)
         if name_filters:
-            hint = QLabel("Fichiers affichés : " + ", ".join(name_filters))
+            hint = QLabel(typo("Fichiers affichés : " + ", ".join(name_filters)))
             hint.setProperty("muted", True)
             layout.addWidget(hint)
 
@@ -336,14 +355,15 @@ class FileBrowser(QDialog):
             if path and Path(path).is_dir():
                 places.append((label, Path(path)))
         for drive in QDir.drives():
-            places.append((drive.absoluteFilePath(), Path(drive.absoluteFilePath())))
+            path = drive.absoluteFilePath()
+            places.append((QDir.toNativeSeparators(path), Path(path)))
         return places
 
     def navigate(self, path: Path) -> None:
         if not path.is_dir():
             return
         self.current = path.resolve()
-        self.path_edit.setText(str(self.current))
+        self.path_edit.setText(QDir.toNativeSeparators(str(self.current)))
         self.view.setRootIndex(self.model.index(str(self.current)))
         self.view.clearSelection()
 
@@ -352,7 +372,7 @@ class FileBrowser(QDialog):
             self.navigate(self.current.parent)
 
     def _new_folder(self) -> None:
-        name = ask_text(self, "Nouveau dossier", "Nom du dossier :")
+        name = ask_text(self, "Nouveau dossier", typo("Nom du dossier :"))
         if not name or not name.strip():
             return
         target = self.current / name.strip()
