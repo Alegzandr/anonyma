@@ -35,8 +35,8 @@ Public API (`anonyma/pipeline.py`): `Pipeline(config, store=None)`,
 ## Contracts (`anonyma/models.py`)
 
 * `Segment`: `id`, `text`, `locator` (opaque, writer-specific), `context`
-  (`SegmentKind`, label, page, bbox), optional `char_boxes` for visual redaction.
-  Offsets are `str` indices, `end` exclusive.
+  (`SegmentKind`, label, page, bbox, `where`/`line` for reports only), optional
+  `char_boxes` for visual redaction. Offsets are `str` indices, `end` exclusive.
 * `Document`: `source` (readable file, never modified), `name` (logical, `/`
   separators, sensitive), `format`, `segments`, `children`, `properties`
   (writer-private, picklable), `issues`, `status`.
@@ -102,6 +102,21 @@ hyphen-free and OCR-tolerant forms), every detector of the profile, and the orig
 names of the file and of its embedded items (each path component and its stem,
 certain; their distinctive words, possible). Values kept by the organization policy
 (`policy.keeps`) are not residues.
+
+Identifiers are atomic (`anonyma/atomic.py`): no detection, propagated mention,
+replacement or verification hit may start or end inside a GUID, a long hexadecimal
+run or a base64/generated token; a span overlapping one is trimmed to its outside
+part or dropped (enforced in `detect_tree`, `resolver.propagate`, `build_plan` and
+the verifier, for every detector).
+
+Structured data (`anonyma/structure.py`, `anonyma/extractors/_embedded.py`): JSON keys
+and CSV headers that are structural names (`createdon`, `@odata.etag`, OData
+annotations) are neither exposed nor rewritten, and the raw backstop never searches the
+batch's structural names. A base64 value or `data:` URI holding a file (JSON, XML, CSV)
+is extracted as a child like a mail attachment and written back re-encoded in the same
+style, or as an empty value when the child is omitted. The raw backstop
+(`anonyma/rawscan.py`) turns any base64 file of an output that no re-extracted item
+accounts for into a certain `FICHIER_INCORPORE` residue.
 
 | Outcome | Status | Output |
 |---|---|---|

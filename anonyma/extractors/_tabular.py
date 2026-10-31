@@ -117,6 +117,10 @@ class JsonToken:
     path: str  # keys masked as "*": labels must never hold values
     value: str = field(repr=False)
     ascii_escaped: bool = False
+    #: Real path: document index, then keys and array indexes (keys may hold values).
+    keys: tuple[str | int, ...] = field(default=(), repr=False)
+    #: Number of the object or array holding the token (siblings share it).
+    parent: int = -1
 
 
 _WS = " \t\r\n"
@@ -156,12 +160,16 @@ def tokenize_json(text: str) -> list[JsonToken]:
             raise JsonSyntaxError("chaîne invalide") from exc
         return str(value)
 
-    def value_at(pos: int, path: str) -> int:
+    containers = [0]
+
+    def value_at(pos: int, path: str, keys: tuple[str | int, ...], parent: int) -> int:
         pos = skip_ws(pos)
         if pos >= n:
             raise JsonSyntaxError("fin inattendue")
         ch = text[pos]
         if ch == "{":
+            containers[0] += 1
+            own = containers[0]
             pos = skip_ws(pos + 1)
             if pos < n and text[pos] == "}":
                 return pos + 1
@@ -171,13 +179,15 @@ def tokenize_json(text: str) -> list[JsonToken]:
                     raise JsonSyntaxError("clé attendue")
                 end = read_string(pos)
                 raw = text[pos:end]
+                key = decode(pos, end)
+                inner = (*keys, key)
                 tokens.append(
-                    JsonToken("key", pos, end, f"{path}.*", decode(pos, end), "\\u" in raw)
+                    JsonToken("key", pos, end, f"{path}.*", key, "\\u" in raw, inner, own)
                 )
                 pos = skip_ws(end)
                 if pos >= n or text[pos] != ":":
                     raise JsonSyntaxError("deux-points attendu")
-                pos = value_at(pos + 1, f"{path}.*")
+                pos = value_at(pos + 1, f"{path}.*", inner, own)
                 pos = skip_ws(pos)
                 if pos < n and text[pos] == ",":
                     pos += 1
@@ -186,12 +196,14 @@ def tokenize_json(text: str) -> list[JsonToken]:
                     return pos + 1
                 raise JsonSyntaxError("objet mal formé")
         if ch == "[":
+            containers[0] += 1
+            own = containers[0]
             pos = skip_ws(pos + 1)
             if pos < n and text[pos] == "]":
                 return pos + 1
             index = 0
             while True:
-                pos = value_at(pos, f"{path}[{index}]")
+                pos = value_at(pos, f"{path}[{index}]", (*keys, index), own)
                 pos = skip_ws(pos)
                 index += 1
                 if pos < n and text[pos] == ",":
@@ -203,7 +215,8 @@ def tokenize_json(text: str) -> list[JsonToken]:
         if ch == '"':
             end = read_string(pos)
             raw = text[pos:end]
-            tokens.append(JsonToken("string", pos, end, path, decode(pos, end), "\\u" in raw))
+            value = decode(pos, end)
+            tokens.append(JsonToken("string", pos, end, path, value, "\\u" in raw, keys, parent))
             return end
         for literal in ("true", "false", "null"):
             if text.startswith(literal, pos):
@@ -217,7 +230,7 @@ def tokenize_json(text: str) -> list[JsonToken]:
             float(text[pos:end])
         except ValueError as exc:
             raise JsonSyntaxError("nombre invalide") from exc
-        tokens.append(JsonToken("number", pos, end, path, text[pos:end]))
+        tokens.append(JsonToken("number", pos, end, path, text[pos:end], False, keys, parent))
         return end
 
     pos = skip_ws(0)
@@ -225,7 +238,7 @@ def tokenize_json(text: str) -> list[JsonToken]:
         raise JsonSyntaxError("document vide")
     document = 0
     while pos < n:
-        pos = skip_ws(value_at(pos, f"${document}" if document else "$"))
+        pos = skip_ws(value_at(pos, f"${document}" if document else "$", (document,), 0))
         document += 1
     return tokens
 

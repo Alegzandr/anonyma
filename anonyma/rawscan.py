@@ -7,15 +7,24 @@ searched in the raw bytes decoded as UTF-8, cp1252, UTF-16 (both byte orders and
 alignments), after XML/HTML character references, in quoted-printable and base64
 MIME content and RFC 2047 words, in the inflated streams of a PDF, and in every
 member of a zip (Office, ODF, archives) or stream of a compound file (msg), names
-included. A hit is a certain residue: the file goes to quarantine.
+included. A hit is a certain residue: the file goes to quarantine. Its label
+gives the byte offset of the first occurrence in the buffer it was found in.
+
+Embedded files: a base64 block (or ``data:`` URI) of the output whose bytes are a
+known file type (image, PDF, Office, archive) must be an item the extractors
+re-read and verified (a mail attachment, a file embedded in a JSON value); any
+other one is a file nobody checked, whatever it shows: a certain residue of type
+:data:`EMBEDDED_TYPE` (fail closed).
 
 False positives are kept away by searching only identifying values (persons,
 contacts, account numbers, business terms...: not organizations, places or dates,
 which legitimately occur in namespaces and metadata of binary formats), at least
 :data:`MIN_RAW_LENGTH` characters long, never a single common word, with strict word
-boundaries (no letter or digit on either side), and by ignoring occurrences inside
-a substitute or a kept (whitelisted) value. Bounded: :data:`MAX_RAW_BYTES` decoded
-bytes per output, :data:`MAX_DEPTH` levels of nesting.
+boundaries (no letter or digit on either side), by ignoring occurrences inside
+a substitute or a kept (whitelisted) value, and by never searching structure: OData
+annotations and ``_x_value`` names, or a name of the batch's own schema (JSON keys,
+CSV headers, XML names: :mod:`anonyma.structure`). Bounded: :data:`MAX_RAW_BYTES`
+decoded bytes per output, :data:`MAX_DEPTH` levels of nesting.
 """
 
 from __future__ import annotations
@@ -23,13 +32,14 @@ from __future__ import annotations
 import base64
 import binascii
 import bisect
+import hashlib
 import html
 import io
 import quopri
 import re
 import zipfile
 import zlib
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from email.header import decode_header
 
@@ -37,13 +47,17 @@ import ahocorasick
 
 from anonyma.config import Config
 from anonyma.data import is_common_word
+from anonyma.extractors._embedded import file_signature
 from anonyma.models import Document, EntityType, Residue
 from anonyma.names import needs_capital
 from anonyma.policy import keeps
 from anonyma.resolver import NAME_TYPES
+from anonyma.structure import is_structural_token
 from anonyma.textutils import normalize, strip_accents
 
 RAW_DETECTOR = "octets_bruts"
+#: Residue type of a file embedded in an output that no extractor re-read.
+EMBEDDED_TYPE = "FICHIER_INCORPORE"
 #: Formats whose members are items of the output tree (not parsed again here).
 ARCHIVE_FORMATS = frozenset({"zip", "7z"})
 #: Values shorter than this (spaces collapsed) are not searched in raw bytes.
@@ -82,6 +96,12 @@ _BASE64_BLOCK = re.compile(
 )
 _ENCODED_WORD = re.compile(rb"=\?[\w.-]+\?[BbQq]\?[^?\s]*\?=")
 _PDF_STREAM = re.compile(rb"stream\r?\n")
+#: A base64 file in text: a long run, then runs after line ends written raw, as
+#: JSON escapes (``\\r\\n``, ``\\/``) or as character references.
+_FILE_BLOB = re.compile(
+    rb"[A-Za-z0-9+/]{40,}(?:(?:\\[rn/]|&#1[03];|&#x[dDaA];|\r|\n)+[A-Za-z0-9+/]+)*={0,2}"
+)
+_BLOB_SEPARATORS = re.compile(rb"\\[rn]|&#1[03];|&#x[dDaA];|\r|\n")
 
 
 @dataclass(slots=True)
@@ -97,6 +117,8 @@ class RawHit:
     value: str = field(repr=False)
     #: Neutral label of where it was found (never a name or a value).
     label: str
+    #: Byte offset of the occurrence in the buffer ``label`` names, when known.
+    offset: int | None = None
 
 
 class RawScanner:
@@ -109,6 +131,7 @@ class RawScanner:
         allowed_keys: set[str],
         kept: Sequence[str],
         config: Config,
+        structure: frozenset[str] = frozenset(),
     ) -> None:
         self.config = config
         cover_keys = {_key(s) for s in [*substitutes, *kept] if len(_key(s)) >= 2}
@@ -116,6 +139,8 @@ class RawScanner:
         for value, entity_type in sensitive:
             if not _searchable(value, entity_type, allowed_keys):
                 continue
+            if is_structural_token(value) or _key(value) in structure:
+                continue  # schema (an OData annotation, a JSON key): never personal data
             needle = _Needle(entity_type, entity_type in NAME_TYPES and needs_capital(value))
             for key in {_key(value), strip_accents(_key(value))}:
                 if key not in cover_keys and len(key) >= MIN_RAW_LENGTH:
@@ -130,18 +155,26 @@ class RawScanner:
     def scan(self, output: Document) -> list[tuple[str, RawHit]]:
         """``(location, hit)`` in the files of a re-extracted output tree: the output
         itself and every item its extractors materialized (archive members,
-        attachments, embedded files), located by their output names."""
-        if self._values is None:
-            return []
+        attachments, embedded files), located by their output names. Embedded files
+        that are none of these items are hits too (:data:`EMBEDDED_TYPE`)."""
         self._budget = MAX_RAW_BYTES
         hits: list[tuple[str, RawHit]] = []
         seen: set[tuple[str, str, str, str]] = set()
+        known: set[bytes] | None = None
         for doc in output.walk():
             if not doc.source.is_file() or self._budget <= 0:
                 continue
             try:
                 data = doc.source.read_bytes()
             except OSError:
+                continue
+            if file_signature(data) is None and _FILE_BLOB.search(data):
+                if known is None:
+                    known = _digests(output)
+                # Quoted-printable soft breaks would cut a data: URI of an HTML part.
+                view = quopri.decodestring(data) if _QP_MARKER.search(data) else data
+                hits.extend((doc.name, hit) for hit in _unverified_files(view, known))
+            if self._values is None:
                 continue
             # Plain archives: their members are items of their own, scanned as such.
             members = doc.format not in ARCHIVE_FORMATS
@@ -172,26 +205,32 @@ class RawScanner:
             yield from self._compound(data, label, depth)
             return
         text = data.decode("utf-8", "replace")
-        yield from self._text(text, label)
+        yield from self._text(text, label, _utf8_offset(text))
         if not data.isascii():
-            yield from self._text(data.decode("cp1252", "replace"), label)
+            yield from self._text(data.decode("cp1252", "replace"), label, _same_offset)
         if b"\x00" in data:
             for offset in (0, 1):
-                yield from self._text(data[offset:].decode("utf-16-le", "replace"), label)
-                yield from self._text(data[offset:].decode("utf-16-be", "replace"), label)
+                for codec in ("utf-16-le", "utf-16-be"):
+                    decoded = data[offset:].decode(codec, "replace")
+                    yield from self._text(decoded, label, _utf16_offset(offset))
         if b"&" in data:
             unescaped = html.unescape(text)
             if unescaped != text:
-                yield from self._text(unescaped, label)
+                yield from self._text(unescaped, f"{label} (références décodées)")
         if mime and _QP_MARKER.search(data):
             # Once per buffer: the decoded copy still holds the header asking for it.
-            yield from self._bytes(quopri.decodestring(data), label, depth + 1, mime=False)
+            yield from self._bytes(
+                quopri.decodestring(data), f"{label} (quoted-printable)", depth + 1, mime=False
+            )
         for match in _ENCODED_WORD.finditer(data):
-            yield from self._text(_decode_word(match.group(0)), label)
+            where = f"{label}, mot encodé à l'octet {match.start()}"
+            yield from self._text(_decode_word(match.group(0)), where)
         for match in _BASE64_BLOCK.finditer(data):
-            decoded = _base64(match.group(0))
-            if decoded:
-                yield from self._bytes(decoded, label, depth + 1)
+            block = _base64(match.group(0))
+            if block:
+                yield from self._bytes(
+                    block, f"{label}, bloc base64 à l'octet {match.start()}", depth + 1
+                )
         if data.startswith(b"%PDF"):
             yield from self._pdf_streams(data, label, depth)
 
@@ -253,7 +292,11 @@ class RawScanner:
 
     # -- matching ----------------------------------------------------------------
 
-    def _text(self, text: str, label: str) -> Iterator[RawHit]:
+    def _text(
+        self, text: str, label: str, to_byte: Callable[[int], int] | None = None
+    ) -> Iterator[RawHit]:
+        """Hits in ``text``; ``to_byte`` maps a character index of ``text`` to the
+        byte offset in the buffer it was decoded from."""
         if self._values is None or len(text) < MIN_RAW_LENGTH:
             return
         collapsed = _SPACES.sub(" ", text)
@@ -278,7 +321,10 @@ class RawScanner:
                     continue
                 if keeps(needle.entity_type, value, self.config):
                     continue
-                yield RawHit(needle.entity_type, value, label)
+                offset = None
+                if to_byte is not None:
+                    offset = to_byte(_uncollapsed(text, start))
+                yield RawHit(needle.entity_type, value, label, offset)
                 break
 
     def _covered(self, lower: str) -> list[tuple[int, int]]:
@@ -300,7 +346,7 @@ def raw_residues(hits: Sequence[tuple[str, RawHit]]) -> list[Residue]:
     return [
         Residue(
             location=location,
-            segment_label=hit.label,
+            segment_label=hit.label if hit.offset is None else f"{hit.label}, octet {hit.offset}",
             entity_type=hit.entity_type,
             reason=ORIGINAL_VALUE,
             detector=RAW_DETECTOR,
@@ -309,6 +355,59 @@ def raw_residues(hits: Sequence[tuple[str, RawHit]]) -> list[Residue]:
         )
         for location, hit in hits
     ]
+
+
+def _same_offset(index: int) -> int:
+    return index
+
+
+def _utf8_offset(text: str) -> Callable[[int], int]:
+    def to_byte(index: int) -> int:
+        return len(text[:index].encode("utf-8", "surrogatepass"))
+
+    return to_byte
+
+
+def _utf16_offset(shift: int) -> Callable[[int], int]:
+    def to_byte(index: int) -> int:
+        return shift + 2 * index
+
+    return to_byte
+
+
+def _uncollapsed(text: str, index: int) -> int:
+    """Index in ``text`` of the character found at ``index`` once its runs of white
+    space are collapsed to one space."""
+    shift = 0
+    for match in _SPACES.finditer(text):
+        if match.start() - shift >= index:
+            break
+        shift += len(match.group(0)) - 1
+    return index + shift
+
+
+def _digests(output: Document) -> set[bytes]:
+    """SHA-256 of every item of a re-extracted output tree (verified items)."""
+    digests: set[bytes] = set()
+    for doc in output.walk():
+        try:
+            digests.add(hashlib.sha256(doc.source.read_bytes()).digest())
+        except OSError:
+            continue
+    return digests
+
+
+def _unverified_files(data: bytes, known: set[bytes]) -> Iterator[RawHit]:
+    """Base64 blocks of ``data`` holding a known file type that is no item of the
+    re-extracted tree (``known`` digests): files nobody verified."""
+    for match in _FILE_BLOB.finditer(data):
+        compact = _BLOB_SEPARATORS.sub(b"", match.group(0).replace(b"\\/", b"/"))
+        if file_signature(_base64(compact[:64])) is None:
+            continue
+        decoded = _base64(compact)
+        if file_signature(decoded) is None or hashlib.sha256(decoded).digest() in known:
+            continue
+        yield RawHit(EMBEDDED_TYPE, "", "fichier incorporé non vérifié", match.start())
 
 
 def _key(value: str) -> str:
@@ -383,4 +482,11 @@ def _rtf_decompressed(data: bytes) -> bytes:
     return result if isinstance(result, bytes) else b""
 
 
-__all__ = ["MIN_RAW_LENGTH", "RAW_DETECTOR", "RawHit", "RawScanner", "raw_residues"]
+__all__ = [
+    "EMBEDDED_TYPE",
+    "MIN_RAW_LENGTH",
+    "RAW_DETECTOR",
+    "RawHit",
+    "RawScanner",
+    "raw_residues",
+]

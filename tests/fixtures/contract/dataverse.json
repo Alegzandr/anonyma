@@ -1,0 +1,34 @@
+{
+  "@odata.context": "https://exemple.crm4.dynamics.com/api/data/v9.2/$metadata#emails",
+  "value": [
+    {
+      "@odata.etag": "W/\"83736425\"",
+      "activityid": "34be8221-5b2a-4e8a-b93c-e8b15d765216",
+      "subject": "Demande de Zéphyrin Quintavalle",
+      "description": "<p>Bonjour,</p><p>Zéphyrin Quintavalle<br>zephyrin.quintavalle@exemple.test</p>",
+      "sender": "zephyrin.quintavalle@exemple.test",
+      "directioncode": false,
+      "directioncode@OData.Community.Display.V1.FormattedValue": "Entrant",
+      "createdon": "2026-09-01T08:14:29Z",
+      "conversationindex": "0101DD39E9E8E7878FFCDEEA917C9A5A4A7C6F2329FB",
+      "_ownerid_value@OData.Community.Display.V1.FormattedValue": "Zéphyrin Quintavalle",
+      "_ownerid_value@Microsoft.Dynamics.CRM.lookuplogicalname": "systemuser",
+      "_ownerid_value": "a6acb80d-d02f-45a0-bb2b-b74943127924",
+      "email_activity_parties": [
+        {
+          "participationtypemask": 1,
+          "addressused": "zephyrin.quintavalle@exemple.test",
+          "_partyid_value@OData.Community.Display.V1.FormattedValue": "Zéphyrin Quintavalle"
+        }
+      ],
+      "email_activity_mime_attachment": [
+        {
+          "activitymimeattachmentid": "e1984ad3-2a71-46e1-a115-280d5f3b094e",
+          "filename": "compte-rendu.txt",
+          "mimetype": "text/plain",
+          "body": "Q29tcHRlIHJlbmR1IHLDqWRpZ8OpIHBhciBaw6lwaHlyaW4gUXVpbnRhdmFsbGUgKHplcGh5cmlu\r\nLnF1aW50YXZhbGxlQGV4ZW1wbGUudGVzdCkuDQpDb21wdGUgcmVuZHUgcsOpZGlnw6kgcGFyIFrD\r\nqXBoeXJpbiBRdWludGF2YWxsZSAoemVwaHlyaW4ucXVpbnRhdmFsbGVAZXhlbXBsZS50ZXN0KS4N\r\nCkNvbXB0ZSByZW5kdSByw6lkaWfDqSBwYXIgWsOpcGh5cmluIFF1aW50YXZhbGxlICh6ZXBoeXJp\r\nbi5xdWludGF2YWxsZUBleGVtcGxlLnRlc3QpLg0K\r\n"
+        }
+      ]
+    }
+  ]
+}

@@ -90,7 +90,10 @@ _VERIFICATION_SOURCES = {
     "nom_origine": "Nom d'origine du fichier",
     "octets_bruts": "Octets bruts du fichier",
 }
-_TYPE_LABELS = {"NOM_FICHIER": "Nom de fichier"}
+_TYPE_LABELS = {
+    "NOM_FICHIER": "Nom de fichier",
+    "FICHIER_INCORPORE": "Fichier incorporé non vérifié",
+}
 
 #: Extensions accepted by :meth:`BatchReport.save`.
 REPORT_EXTENSIONS = (".json", ".md", ".markdown", ".html", ".htm")

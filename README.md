@@ -246,6 +246,14 @@ français, `codes`), `verifications_incompletes`, `parametres` (codes) et
 `parametres_libelles` (libellés du rapport lisible). L'ancienne clé `entites_par_type` y
 est conservée : elle contient des occurrences, comme `occurrences_par_type`.
 
+La `zone` d'un résidu le situe sans en reprendre la valeur : chemin JSON réel
+(`$.value[27].description (ligne 845 du fichier)`, seules les clés de schéma y figurent,
+les autres valent `*`), ligne et colonne d'un CSV (`ligne 28 du tableau, colonne B
+« sender »`), chemin XML, bloc et ligne d'un texte, ou position en octets dans le
+contenu brut (`contenu brut, octet 1234`). Le type `FICHIER_INCORPORE` signale un
+fichier incorporé (base64) que la vérification n'a pas pu relire : le fichier produit
+part en quarantaine.
+
 Une erreur d'utilisation (code 2) n'écrit rien sur la sortie standard : le message est sur
 la sortie d'erreur. `analyser --json` donne de même `occurrences_par_type` (aussi sous son
 ancien nom `mentions_par_type`), `entites_distinctes_par_type`, et dans `non_analyses` les
@@ -267,7 +275,7 @@ modifiés. `anonyma-cli formats` affiche la liste exacte disponible sur le poste
 | Anciens formats | doc, xls, ppt | Convertis par le LibreOffice embarqué, anonymisés, puis réécrits dans leur format d'origine. Sans LibreOffice (version allégée), les xls sont restitués en xlsx (valeurs seules) et les doc/ppt échouent explicitement. |
 | PDF | pdf texte et numérisé | Suppression réelle du texte (redaction, pas un simple cache), OCR des pages numérisées, formulaires, pièces jointes, signets, liens, métadonnées et XMP purgés. |
 | Courriels | eml, msg, mbox, pst | Tous les en-têtes (From, To, Cc, Bcc, Reply-To, Sender, Return-Path, Received, Message-ID, In-Reply-To, References…), noms d'affichage, corps texte et HTML (attributs `href`, `alt`, `title` compris), citations, signatures, images incorporées (OCR), pièces jointes et messages joints, récursivement. Les msg sont réécrits nativement en msg ; un pst est restitué sous forme de **dossier d'eml** reproduisant l'arborescence de la boîte. Signatures DKIM/ARC supprimées (elles deviendraient invalides). Les en-têtes restent lisibles par les messageries dans tous les modes : en mode balises, `From: "[PERSONNE_009]" <EMAIL_001@anonyme.invalid>`, `Message-ID: <ID_MESSAGE_001@anonyme.invalid>` (le même dans tout le lot : les fils de discussion sont conservés) et une date neutre (1er mars 1970, une minute de plus par réponse dans le fil) ; les images intégrées (`cid:`) restent affichées. |
-| Données et texte | txt, log, md, csv, tsv, json, xml, html | Contenu, clés et nombres JSON, attributs et commentaires XML/HTML ; encodage, délimiteurs, indentation et balisage conservés à l'identique hors des valeurs remplacées. |
+| Données et texte | txt, log, md, csv, tsv, json, xml, html | Contenu, clés et nombres JSON, attributs et commentaires XML/HTML ; encodage, délimiteurs, indentation et balisage conservés à l'identique hors des valeurs remplacées. Les noms de schéma (clés JSON comme `createdon`, `_ownerid_value`, `@odata.etag`, annotations OData `…@OData.Community.Display.V1.FormattedValue`, en-têtes CSV du même type) ne sont ni analysés ni modifiés ; une clé qui ressemble à une donnée (espaces, accents, adresse électronique, numéro) reste analysée. Les fichiers incorporés dans une valeur (corps de pièce jointe en base64 d'un export Dynamics 365/Dataverse, URI `data:`) sont traités comme des pièces jointes : anonymisés (OCR des images, PDF…) puis réencodés à l'identique (alphabet, longueur de ligne) ; s'ils ne peuvent pas l'être, la valeur est vidée et le fichier est « À revoir ». |
 | Images | png, jpg, tiff (multipage), bmp, heic, webp | OCR puis masquage opaque des zones, métadonnées EXIF/XMP/IPTC et GPS purgées. Sans moteur OCR, l'image est signalée en échec (son texte ne peut pas être vérifié). |
 | Archives | zip, 7z | Contenu traité récursivement sans limite arbitraire de profondeur, avec protection contre les bombes d'archives (taille, taux de compression, nombre de fichiers). Les entrées chiffrées sont signalées et omises. |
 

@@ -253,7 +253,7 @@ class Verifier:
                     result.residues.append(
                         Residue(
                             location=doc.name,
-                            segment_label=segment.context.label,
+                            segment_label=place(segment, start),
                             entity_type=entity_type,
                             reason=ORIGINAL_VALUE,
                             detector=source,
@@ -285,7 +285,7 @@ class Verifier:
                     result.residues.append(
                         Residue(
                             location=doc.name,
-                            segment_label=segment.context.label,
+                            segment_label=place(segment, entity.start),
                             entity_type=entity.entity_type,
                             reason=DETECTOR_HIT,
                             detector=entity.detector,
@@ -303,15 +303,18 @@ class Verifier:
         sensitive: Sequence[tuple[str, str]],
         substitutes: set[str],
         allowed: Sequence[str] = (),
+        structure: frozenset[str] = frozenset(),
     ) -> list[Residue]:
         """Original values found in the raw bytes of a re-extracted output tree (the
-        written file and the items extracted from it, still on disk). Same arguments
-        as :meth:`verify`."""
+        written file and the items extracted from it, still on disk), and embedded
+        files none of these items accounts for. Same arguments as :meth:`verify`;
+        ``structure``: the batch's structural names (:mod:`anonyma.structure`), never
+        searched."""
         allowed_keys = {normalize(a) for a in allowed} | self.config.whitelist_keys()
         kept = (*allowed, *self.config.whitelist)
         scanner = _cached(
-            ("raw", tuple(sensitive), frozenset(substitutes), frozenset(kept)),
-            lambda: RawScanner(sensitive, substitutes, allowed_keys, kept, self.config),
+            ("raw", tuple(sensitive), frozenset(substitutes), frozenset(kept), structure),
+            lambda: RawScanner(sensitive, substitutes, allowed_keys, kept, self.config, structure),
         )
         return neutral_places(raw_residues(scanner.scan(output)))
 
@@ -469,6 +472,17 @@ def neutral_places(residues: Sequence[Residue], kinds: Sequence[SegmentKind] = (
             location = "/".join(MASKED_NAME if leaks(p) else p for p in location.split("/"))
         out.append(replace(residue, segment_label=label, location=location))
     return out
+
+
+def place(segment: Segment, start: int) -> str:
+    """Where a residue at ``start`` in ``segment`` lies, for reports: the precise
+    location (``where``, else the label) and, for text formats, the file line."""
+    context = segment.context
+    base = context.where or context.label
+    if context.line is None:
+        return base
+    line = context.line + segment.text.count("\n", 0, start)
+    return f"{base} (ligne {line} du fichier)"
 
 
 def _inside(start: int, end: int, spans: Sequence[tuple[int, int]]) -> bool:
