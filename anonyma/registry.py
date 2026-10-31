@@ -138,7 +138,9 @@ def active_detectors(config: Config, profile: Profile) -> list[str]:
     return sorted(
         name
         for name, cls in _detectors.items()
-        if cls.min_profile.rank <= profile.rank and cls.is_available(config)
+        if cls.min_profile.rank <= profile.rank
+        and cls.is_available(config)
+        and cls.is_enabled(config)
     )
 
 

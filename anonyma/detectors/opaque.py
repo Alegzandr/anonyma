@@ -173,6 +173,10 @@ class OpaqueIdDetector(Detector):
     name = DETECTOR_NAME
     min_profile = Profile.LIGHT
 
+    @classmethod
+    def is_enabled(cls, config: Config) -> bool:
+        return config.mask_opaque_ids
+
     def __init__(self, config: Config) -> None:
         super().__init__(config)
         self.active = config.mask_opaque_ids

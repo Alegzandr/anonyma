@@ -96,6 +96,10 @@ class ParanoidDetector(Detector):
     name = "paranoiaque"
     min_profile = Profile.LIGHT
 
+    @classmethod
+    def is_enabled(cls, config: Config) -> bool:
+        return config.paranoid
+
     def __init__(self, config: Config) -> None:
         super().__init__(config)
         self.active = config.paranoid

@@ -666,6 +666,7 @@ def open_store(path: Path, *, create: bool) -> EncryptedMappingStore:
 
 #: French names of the pipeline stages (progress bar and heartbeat).
 STAGE_LABELS = {"analyse": "Analyse", "ecriture": "Écriture et vérification"}
+_STAGE_DONE = {"analyse": "Analyse terminée", "ecriture": "Écriture et vérification terminées"}
 #: Seconds between two heartbeat lines when stderr is not a terminal.
 HEARTBEAT_SECONDS = 10.0
 
@@ -720,15 +721,21 @@ class Heartbeat:
         with self._lock:
             now = self._clock()
             if self._state is not None and now - self._last >= self._interval:
-                self._emit(now)
+                self._emit(now, waiting=True)
 
-    def _emit(self, now: float) -> None:
+    def _emit(self, now: float, *, waiting: bool = False) -> None:
         assert self._state is not None
         stage, done, total = self._state
         label = STAGE_LABELS.get(stage, stage)
-        files = "fichier" if total < 2 else "fichiers"
-        ending = ", terminé" if total and done >= total else "…"
-        self._write(f"{label} : {done}/{total} {files}{ending} ({_elapsed(now - self._started)})")
+        elapsed = _elapsed(now - self._started)
+        if waiting and total and done >= total:
+            # Between two stages (batch-wide resolution, substitutes, report).
+            done_label = _STAGE_DONE.get(stage, label)
+            self._write(f"{done_label}, étape suivante en préparation… ({elapsed})")
+        else:
+            files = "fichier" if total < 2 else "fichiers"
+            ending = ", terminé" if total and done >= total else "…"
+            self._write(f"{label} : {done}/{total} {files}{ending} ({elapsed})")
         self._last = now
 
 

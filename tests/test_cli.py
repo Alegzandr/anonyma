@@ -719,7 +719,9 @@ def test_run_json_summary(
     assert data["parametres"]["regime"] == "anonymisation"
     # Which detection actually ran (an agent cannot tell otherwise).
     assert data["parametres"]["profil_effectif"] == "leger"
-    assert data["parametres"]["detecteurs"] and "gliner" not in data["parametres"]["detecteurs"]
+    used = data["parametres"]["detecteurs"]
+    assert "regex_fr" in used and "gliner" not in used
+    assert "paranoiaque" not in used  # switched off: it finds nothing, not listed
     assert data["parametres"]["detecteurs_indisponibles"] == []
     assert data["parametres"]["detecteurs_indisponibles_raisons"] == {}
     assert {d["statut"] for d in data["documents"]} == {"anonymise"}
@@ -1082,10 +1084,13 @@ def test_heartbeat_lines_are_plain_and_rate_limited() -> None:
     assert lines[-1] == "Analyse : 119/205 fichiers… (25 s)" and len(lines) == 3
     now[0] = 200.0
     beat.update(ProgressEvent("analyse", 205, 205))
+    now[0] = 215.0
+    beat.tick()  # between two stages (resolution): still alive
     beat.update(ProgressEvent("ecriture", 0, 205))
-    assert lines[-2:] == [
+    assert lines[-3:] == [
         "Analyse : 205/205 fichiers, terminé (3 min 20 s)",
-        "Écriture et vérification : 0/205 fichiers… (3 min 20 s)",
+        "Analyse terminée, étape suivante en préparation… (3 min 35 s)",
+        "Écriture et vérification : 0/205 fichiers… (3 min 35 s)",
     ]
 
 
