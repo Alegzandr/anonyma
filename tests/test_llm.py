@@ -335,6 +335,37 @@ def test_type_sanity_of_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
 
+def test_lone_job_titles_are_ordinary_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    lone = _seg("a", "Le boucher du marché couvert propose désormais des produits bio.")
+    near = _seg("b", "Mme Nolwenn Garrec, trésorière, a présenté les comptes.")
+    answer = [
+        ("boucher du marché couvert", "FONCTION"),
+        ("Nolwenn Garrec", "PERSONNE"),
+        ("trésorière", "FONCTION"),
+    ]
+    found, _ = _detect(monkeypatch, [lone, near], answer)
+    assert sorted(e.value for e in found) == ["Nolwenn Garrec", "trésorière"]
+
+
+def test_weak_indirect_identifiers_go_to_review(monkeypatch: pytest.MonkeyPatch) -> None:
+    segment = _seg(
+        "s",
+        "Le boucher du marché couvert a vu le fils du maire, la DRH de l'agence de Nantes "
+        "et le patient de la chambre 12.",
+    )
+    answer = [
+        ("Le boucher du marché couvert", "IDENTIFIANT_INDIRECT"),
+        ("le fils du maire", "IDENTIFIANT_INDIRECT"),
+        ("la DRH de l'agence de Nantes", "IDENTIFIANT_INDIRECT"),
+        ("le patient de la chambre 12", "IDENTIFIANT_INDIRECT"),
+    ]
+    found, _ = _detect(monkeypatch, [segment], answer)
+    scores = {e.value: e.score for e in found}
+    assert scores.pop("Le boucher du marché couvert") < Config().review_threshold
+    assert all(score >= Config().review_threshold for score in scores.values())
+    assert len(scores) == 3
+
+
 def test_tiny_segments_never_reach_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     segments = [_seg(f"s{i}", t) for i, t in enumerate(["Ok", "", "  ", "12/03/2024", "-"])]
     found, runner = _detect(monkeypatch, segments, [("Ok", "PERSONNE")])

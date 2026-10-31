@@ -13,8 +13,8 @@ from anonyma import paths
 from anonyma.config import Config
 from anonyma.detectors.gliner import (
     GlinerDetector,
-    _job_titles_near_people,
     _skip_leading_words,
+    job_titles_near_people,
     model_dir,
     model_spec,
 )
@@ -59,7 +59,7 @@ def test_job_titles_need_a_person_nearby() -> None:
         "Séance présidée par Eléonore VIDAL, présidente de l'association.\n\n"
         "Le boucher du marché couvert propose désormais des produits bio, comme chaque été."
     )
-    found = _job_titles_near_people(
+    found = job_titles_near_people(
         text,
         [
             _span("PERSONNE", text, "Eléonore VIDAL"),
@@ -70,7 +70,7 @@ def test_job_titles_need_a_person_nearby() -> None:
     assert [e.value for e in found] == ["Eléonore VIDAL", "présidente"]
     # A cell or a signature line made of the title is kept as it is.
     cell = "Responsable RH"
-    assert _job_titles_near_people(cell, [_span("FONCTION", cell, cell)])
+    assert job_titles_near_people(cell, [_span("FONCTION", cell, cell)])
 
 
 def test_person_spans_drop_greetings_and_verbs() -> None:

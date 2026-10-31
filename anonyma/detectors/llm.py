@@ -28,6 +28,7 @@ from anonyma.detectors._filters import (
     plausible,
     skip_segment,
 )
+from anonyma.detectors.gliner import job_titles_near_people
 from anonyma.logs import get_logger
 from anonyma.model_catalog import LLM_PREFERENCE, ModelKind, ModelSpec, get_spec
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
@@ -37,6 +38,8 @@ from anonyma.textutils import normalize
 log = get_logger("detectors.llm")
 
 SCORE = 0.75
+#: Below ``Config.review_threshold`` (0.6): masked and sent to review.
+REVIEW_SCORE = 0.5
 #: Segments with fewer letters carry nothing the model can add to the rule-based
 #: detectors (dates, numbers, « Ok »), and only invite it to make something up.
 MIN_LETTERS = 3
@@ -172,11 +175,21 @@ class LlmDetector(Detector):
                                 segment_id=segment.id,
                                 start=start,
                                 end=end,
-                                score=SCORE,
+                                score=_score(mention.entity_type, value),
                                 detector=self.name,
                             )
                         )
-        return found
+        # Same rule as GLiNER: a job title alone (« le boucher du marché couvert »
+        # as FONCTION) is ordinary text; next to a person it identifies them.
+        by_segment: dict[str, list[Entity]] = {}
+        for e in found:
+            by_segment.setdefault(e.segment_id, []).append(e)
+        texts = {s.id: s.text for s in todo}
+        return [
+            e
+            for sid, group in by_segment.items()
+            for e in job_titles_near_people(texts[sid], group)
+        ]
 
 
 def batches(
@@ -272,6 +285,28 @@ def _proper(value: str, text: str, start: int) -> bool:
         return True
     offset, first = words[0]
     return first[:1].isupper() and (len(words) == 1 or mid_sentence(text, start + offset))
+
+
+#: Uniqueness and ties to someone: what turns a description into an identifier.
+_SINGLING_OUT = regex.compile(
+    r"(?<![a-z])(?:seul|seule|unique|fils|fille|pere|mere|frere|soeur|epoux|epouse|mari|"
+    r"femme|conjoint|conjointe|compagnon|compagne|voisin|voisine|collegue|ami|amie|oncle|"
+    r"tante|cousin|cousine|neveu|niece|veuf|veuve|beau-pere|belle-mere|beau-frere|"
+    r"belle-soeur|grand-pere|grand-mere|petit-fils|petite-fille)s?(?![a-z])"
+)
+
+
+def _score(entity_type: str, value: str) -> float:
+    """:data:`SCORE`; an indirect identifier with nothing that singles a person out
+    (« le boucher du marché couvert ») is masked but sent to review."""
+    if entity_type != EntityType.INDIRECT:
+        return SCORE
+    if any(c.isdigit() for c in value) or _SINGLING_OUT.search(normalize(value)):
+        return SCORE
+    words = [w for w in _WORD.findall(value) if normalize(w) not in FUNCTION_WORDS]
+    if any(regex.split(r"['’]", w)[-1][:1].isupper() for w in words[1:]):
+        return SCORE  # « DRH de l'agence de Nantes »
+    return REVIEW_SCORE
 
 
 def _born(text: str) -> bool:
