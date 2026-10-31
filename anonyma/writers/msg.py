@@ -11,16 +11,19 @@ from __future__ import annotations
 import re
 import struct
 from collections.abc import Mapping, Sequence
+from email.utils import parsedate_to_datetime
 from pathlib import Path, PurePosixPath
 
 from anonyma.codec import chunk_text
 from anonyma.extractors._cfb import CfbEntry, Entry, read_cfb, write_cfb
 from anonyma.extractors._html import HtmlSource, plan_edits
 from anonyma.extractors._mailheaders import (
+    THREAD_INDEX_HEADER,
     apply_tracked,
     content_id_key,
     new_content_id,
     safe_address,
+    safe_date,
     safe_header,
     safe_message_ids,
     thread_depth,
@@ -32,6 +35,7 @@ from anonyma.extractors._mime import (
     decode_header_value,
     encode_header_text,
     fold_header,
+    thread_index_line,
 )
 from anonyma.extractors._msgfile import (
     ATTACH_BY_VALUE,
@@ -53,6 +57,8 @@ from anonyma.extractors._msgfile import (
     PT_BINARY,
     PT_LONG,
     PT_MV_BINARY,
+    PT_MV_SYSTIME,
+    PT_SYSTIME,
     PT_UNICODE,
     STRING_TYPES,
     MsgTree,
@@ -63,10 +69,12 @@ from anonyma.extractors._msgfile import (
     decode_string,
     encode_string,
     html_codec,
+    moment_filetime,
     parse_name,
     split_headers,
     string_size,
     text_items,
+    time_segment_id,
 )
 from anonyma.extractors.html import decode_html
 from anonyma.models import (
@@ -91,6 +99,7 @@ _ADDRESS_PROPS = frozenset(
 )
 #: PR_INTERNET_MESSAGE_ID, PR_IN_REPLY_TO_ID, PR_INTERNET_REFERENCES.
 _MESSAGE_ID_PROPS = frozenset({0x1035, 0x1042, 0x1039})
+_IN_REPLY_TO = 0x1042
 
 
 def _new_text(
@@ -122,6 +131,11 @@ def _new_text(
             if name.lower() in DROPPED_HEADERS:
                 continue
             replacements = plan.for_segment(segment.id) if segment is not None else []
+            if name.lower() == THREAD_INDEX_HEADER:
+                new_index = thread_index_line(raw, segment, replacements, plan)
+                if new_index is not None:
+                    lines.append(f"{name}: {new_index}\r\n")
+                continue
             if segment is not None and replacements:
                 decoded = decode_header_value(raw)
                 if segment.text != decoded:  # a neutral date was left out on extraction
@@ -150,6 +164,7 @@ class _Rewriter:
         self.child_outputs = child_outputs
         self.children: dict[str, str] = document.properties.get("msg_children", {})
         self.segments: dict[str, list[Segment]] = {}
+        self.times = {s.id: s for s in document.segments if s.locator[:1] == ("time",)}
         for segment in document.segments:
             base = segment.id.split("|", 1)[0]
             self.segments.setdefault(base, []).append(segment)
@@ -224,6 +239,10 @@ class _Rewriter:
             assert parsed is not None
             pid, ptype, index = parsed
             path = entry.path
+            if ptype == PT_MV_SYSTIME:  # never exposed: dropped
+                self.data[path] = None
+                removed.add((pid, ptype))
+                continue
             if ptype in (PT_BINARY, PT_MV_BINARY) and not (
                 pid == PR_HTML or (pid == PR_ATTACH_DATA and obj.kind == "attachment")
             ):
@@ -299,6 +318,16 @@ class _Rewriter:
         self._rtf_body(obj, items, sizes)
         self._props(obj, sizes, removed, child)
 
+    def _time(self, obj: PropObject, pid: int, value: bytes, depth: int) -> bytes:
+        """A date property rewritten like a ``Date`` header: its exposed text with the
+        plan applied (shifted substitute), the neutral date for a tag; kept when
+        nothing in it was replaced (or when it holds no date)."""
+        segment = self.times.get(time_segment_id(obj.path, pid))
+        if segment is None or not self.plan.for_segment(segment.id):
+            return value
+        moment = parsedate_to_datetime(safe_date(self.plan.apply(segment), depth))
+        return moment_filetime(moment)
+
     def _rtf_body(
         self,
         obj: PropObject,
@@ -324,13 +353,17 @@ class _Rewriter:
         if obj.stream(PR_RTF_COMPRESSED, PT_BINARY) is not None:
             removed.add((PR_RTF_COMPRESSED, PT_BINARY))
         has_html = obj.stream(PR_HTML, PT_BINARY) is not None
+        replies = any(obj.stream(_IN_REPLY_TO, ptype) for ptype in STRING_TYPES)
+        depth = 1 if obj.kind == "message" and replies else 0
         entries: list[PropEntry] = []
         for entry in obj.entries:
             key = (entry.pid, entry.ptype)
             if key in removed:
                 continue
             value = entry.value
-            if key in sizes:
+            if entry.ptype == PT_SYSTIME:
+                value = self._time(obj, entry.pid, value, depth)
+            elif key in sizes:
                 value = struct.pack("<II", sizes[key], 0)
             elif key == (PR_ATTACH_SIZE, PT_LONG) and child is not None and child.path:
                 value = struct.pack("<iI", child.path.stat().st_size, 0)

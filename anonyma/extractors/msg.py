@@ -36,9 +36,11 @@ from anonyma.extractors._msgfile import (
     PropObject,
     TextItem,
     decode_string,
+    render_time,
     rtf_only,
     split_headers,
     text_items,
+    time_items,
 )
 from anonyma.models import (
     Document,
@@ -46,6 +48,7 @@ from anonyma.models import (
     Extractor,
     Segment,
     SegmentContext,
+    SegmentKind,
     Severity,
 )
 from anonyma.registry import register_extractor
@@ -196,6 +199,17 @@ class MsgExtractor(Extractor):
             document.segments.extend(item_segments(item))
             if item.kind == "rtf":
                 rtf_bodies.add(item.owner)
+        for time in time_items(tree):
+            text = exposed_text("date", render_time(time.moment))
+            if text:  # a neutral date written by the writer holds no value
+                document.segments.append(
+                    Segment(
+                        id=time.segment_id,
+                        text=text,
+                        locator=("time", time.pid),
+                        context=SegmentContext(SegmentKind.METADATA, label=time.label),
+                    )
+                )
         if any(
             o.kind == "message" and rtf_only(o) and o.path not in rtf_bodies for o in tree.objects
         ):  # the writer always drops the compressed RTF

@@ -22,6 +22,14 @@ syntactically valid value from the replaced text (RFC 5322):
   plus one minute per ancestor of the message in its thread (number of ids in
   ``References``, or 1 with only ``In-Reply-To``): no original date is kept, and a
   reply still sorts after the message it answers;
+* **Thread-Index** (Outlook thread: a 22-byte header holding the thread start time
+  and a GUID, then 5 bytes per reply): only the start time is exposed (to the
+  minute, ``01 Sep 2026 08:14 +0000``); the header is rebuilt from its anonymized
+  version (the neutral date for a tag) and a GUID hashed with the batch-keyed
+  cluster ids, so every message of a thread gets the same new header and a reply
+  still extends the index of the message it answers. The reply blocks (time deltas)
+  are kept with a shifted date, zeroed with a neutral one. A value that is not a
+  Thread-Index, or whose time nothing replaced, is dropped;
 * **Content-ID** / ``cid:`` references: every Content-ID of a message is replaced by
   ``<CONTENU_001@anonyme.invalid>`` (numbered in document order) and the ``cid:``
   URLs of its HTML bodies follow the same mapping, so inline images keep working
@@ -33,9 +41,12 @@ substitutes; :func:`anonyma.policy.keeps` never counts them as residues.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 
 from anonyma.models import Replacement
@@ -83,6 +94,7 @@ MESSAGE_ID_HEADERS = frozenset(
     }
 )
 DATE_HEADERS = frozenset({"date", "resent-date", "delivery-date"})
+THREAD_INDEX_HEADER = "thread-index"
 CONTENT_ID_HEADER = "content-id"
 
 #: A tag of the replacer (``[PERSONNE_001]``, ``[EMAIL_K7Q2]``).
@@ -365,12 +377,88 @@ _NEUTRAL_DATE = re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# Thread-Index
+# ---------------------------------------------------------------------------
+
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+_FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=UTC)
+#: The thread start time keeps the high 40 bits of a FILETIME (units of 2**24 ticks).
+_THREAD_UNIT = 2**24
+_THREAD_HEADER = 22
+_THREAD_BLOCK = 5
+_NEUTRAL_MOMENT = datetime(1970, 3, 1, tzinfo=UTC)
+
+
+def _thread_index(value: str) -> bytes | None:
+    try:
+        raw = base64.b64decode("".join(value.split()), validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    if len(raw) < _THREAD_HEADER or (len(raw) - _THREAD_HEADER) % _THREAD_BLOCK or raw[0] != 1:
+        return None
+    return raw
+
+
+def render_minute(moment: datetime) -> str:
+    """``01 Sep 2026 08:14 +0000`` (UTC, to the minute, locale independent)."""
+    utc = moment.astimezone(UTC)
+    return f"{utc.day:02d} {_MONTHS[utc.month - 1]} {utc.year} {utc:%H:%M} +0000"
+
+
+def thread_index_time(value: str) -> str:
+    """Start time of the thread a Thread-Index value encodes, as exposed to the
+    detectors; empty for an invalid value or a neutral (1970) time."""
+    raw = _thread_index(value)
+    if raw is None:
+        return ""
+    ticks = int.from_bytes(raw[1:6], "big") * _THREAD_UNIT
+    try:
+        moment = _FILETIME_EPOCH + timedelta(microseconds=ticks // 10)
+    except OverflowError:
+        return ""
+    return "" if moment.year == _NEUTRAL_MOMENT.year else render_minute(moment)
+
+
+def safe_thread_index(value: str, new_time: str, clusters: Sequence[str]) -> str | None:
+    """Thread-Index ``value`` rebuilt around ``new_time`` (anonymized
+    :func:`thread_index_time`), or None when ``value`` is no Thread-Index."""
+    raw = _thread_index(value)
+    if raw is None:
+        return None
+    text = " ".join(new_time.split())
+    moment: datetime | None = None
+    if not TAG.search(text) and "█" not in text:
+        try:
+            moment = parsedate_to_datetime(text)
+        except (TypeError, ValueError, IndexError, OverflowError):
+            moment = None
+    neutral = moment is None
+    when = _NEUTRAL_MOMENT if moment is None else moment
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    ticks = (when - _FILETIME_EPOCH) // timedelta(microseconds=1) * 10
+    units = -(-ticks // _THREAD_UNIT)  # rounded up: read back, the same minute
+    if not 0 <= units < 2**40:
+        return None
+    seed = "\x1f".join(["thread-index", raw[6:_THREAD_HEADER].hex(), *sorted(set(clusters))])
+    guid = hashlib.sha256(seed.encode("utf-8")).digest()[:16]
+    blocks = bytearray(raw[_THREAD_HEADER:])
+    if neutral:  # no interval survives a neutral date
+        for start in range(0, len(blocks), _THREAD_BLOCK):
+            blocks[start : start + 4] = bytes(4)
+    out = b"\x01" + units.to_bytes(5, "big") + guid + bytes(blocks)
+    return base64.b64encode(out).decode("ascii")
+
+
 def exposed_text(name: str, text: str) -> str:
     """The part of header ``name`` (decoded ``text``) the extractors expose: a
     neutral date written by :func:`safe_date` holds no value and is left out (any
     detector would read a date there: a birth date for GLiNER, a proper noun « Mar »
     for the paranoid one), as is the neutral date closing a ``Received`` header."""
     lname = name.lower()
+    if lname == THREAD_INDEX_HEADER:
+        return thread_index_time(text)
     if lname in DATE_HEADERS and _NEUTRAL_DATE.fullmatch(text.strip()):
         return ""
     if lname == "received":
@@ -396,24 +484,41 @@ def safe_received(text: str, depth: int = 0) -> str:
 
 #: Neutral date of an mbox ``From `` line (asctime form of :func:`neutral_date`).
 NEUTRAL_ASCTIME = "Sun Mar  1 00:00:00 1970"
-_ASCTIME = re.compile(
-    r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) "
-    r"[ \d]?\d \d\d:\d\d:\d\d \d{4}"
-)
 
 
-def safe_from_line(text: str) -> str:
+def asctime(moment: datetime) -> str:
+    """``Mon Mar  9 08:00:00 2026`` (clock time as written, locale independent)."""
+    return (
+        f"{_WEEKDAYS[moment.weekday()]} {_MONTHS[moment.month - 1]} {moment.day:2d} "
+        f"{moment:%H:%M:%S} {moment.year}"
+    )
+
+
+def message_moment(message: bytes) -> datetime | None:
+    """The ``Date`` of an (anonymized) message, read from its header block."""
+    from email.parser import BytesHeaderParser
+    from email.policy import compat32
+
+    value = BytesHeaderParser(policy=compat32).parsebytes(message).get("Date")
+    if value is None:
+        return None
+    try:
+        return parsedate_to_datetime(str(value))
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+
+
+def safe_from_line(text: str, moment: datetime | None = None) -> str:
     """Anonymized mbox ``From `` line (without ``From ``): a valid sender address (or
-    ``MAILER-DAEMON``) and an asctime date; a date that is no longer one (tag, block
-    characters) becomes :data:`NEUTRAL_ASCTIME`."""
+    ``MAILER-DAEMON``) and an asctime date. The date of the line is never kept (no
+    detector reads an asctime date): it is the anonymized ``Date`` of the message
+    (``moment``: shifted, or the neutral date for a tag), else
+    :data:`NEUTRAL_ASCTIME`."""
     words = text.strip().split(None, 1)
     sender = words[0] if words else "MAILER-DAEMON"
-    rest = words[1].strip() if len(words) > 1 else ""
     if sender != "MAILER-DAEMON" and not valid_address(sender):
         sender = placeholder_address(sender)
-    if not _ASCTIME.fullmatch(rest):
-        rest = NEUTRAL_ASCTIME
-    return f"{sender} {rest}"
+    return f"{sender} {asctime(moment) if moment is not None else NEUTRAL_ASCTIME}"
 
 
 # ---------------------------------------------------------------------------
@@ -477,9 +582,12 @@ __all__ = [
     "DATE_HEADERS",
     "MESSAGE_ID_HEADERS",
     "PLACEHOLDER_DOMAIN",
+    "THREAD_INDEX_HEADER",
     "apply_tracked",
+    "asctime",
     "content_id_key",
     "map_cid_url",
+    "message_moment",
     "neutral_date",
     "new_content_id",
     "placeholder_address",
@@ -490,5 +598,7 @@ __all__ = [
     "safe_from_line",
     "safe_header",
     "safe_message_ids",
+    "safe_thread_index",
     "thread_depth",
+    "thread_index_time",
 ]
