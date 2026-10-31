@@ -54,7 +54,11 @@ Public API (`anonyma/pipeline.py`): `Pipeline(config, store=None)`,
   a tree of eml); the pipeline re-reads the folder for verification and, below the
   top level, packs it into a `.zip`.
 * `Detector`: `name`, `min_profile`, `is_available(config)`,
-  `detect(segments, document_id) -> list[Entity]`.
+  `detect(segments, document_id) -> list[Entity]`. A detector with `uses_prior`
+  (the LLM) runs after the others and gets their entities through
+  `detect_after(segments, document_id, prior)`; a long detector calls
+  `report(done, total)` (segments of the document), which single-process runs
+  forward as `ProgressEvent.item_*` (counts and the detector label only).
 * `OcrEngine.recognize(PIL.Image) -> list[OcrLine]`, created by
   `ocr.create_engine(config)`, reached by extractors through `ctx.ocr`.
 * `MappingStore`: `lookup`, `save`, `reverse`, `used_substitutes`.

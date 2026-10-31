@@ -671,8 +671,16 @@ def open_store(path: Path, *, create: bool) -> EncryptedMappingStore:
 
 
 #: French names of the pipeline stages (progress bar and heartbeat).
-STAGE_LABELS = {"analyse": "Analyse", "ecriture": "Écriture et vérification"}
-_STAGE_DONE = {"analyse": "Analyse terminée", "ecriture": "Écriture et vérification terminées"}
+STAGE_LABELS = {
+    "analyse": "Analyse",
+    "langue": "Modèle de langue",
+    "ecriture": "Écriture et vérification",
+}
+_STAGE_DONE = {
+    "analyse": "Analyse terminée",
+    "langue": "Modèle de langue terminé",
+    "ecriture": "Écriture et vérification terminées",
+}
 #: Seconds between two heartbeat lines when stderr is not a terminal.
 HEARTBEAT_SECONDS = 10.0
 

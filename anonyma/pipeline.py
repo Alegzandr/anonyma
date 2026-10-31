@@ -595,12 +595,23 @@ ItemProgress = Callable[[int, int, str], None]
 _item_progress: ItemProgress | None = None
 
 
-def detect_tree(root: Document, config: Config) -> list[Entity]:
+#: :func:`detect_tree` phases: every detector, those without ``uses_prior`` (run in
+#: worker processes), or only those with it (the LLM, run once per batch in the main
+#: process after the others).
+PHASE_ALL, PHASE_EARLY, PHASE_LATE = "all", "early", "late"
+
+
+def detect_tree(
+    root: Document, config: Config, phase: str = PHASE_ALL, prior: Sequence[Entity] = ()
+) -> list[Entity]:
     """Run the detector chain on a document and all its descendants. Detectors with
-    ``uses_prior`` run last and receive what the others found."""
+    ``uses_prior`` run last and receive what the others found (``prior`` holds the
+    early phase's entities when ``phase`` is :data:`PHASE_LATE`)."""
     entities: list[Entity] = []
     chain = detectors_for(config)
-    detectors = [d for d in chain if not d.uses_prior] + [d for d in chain if d.uses_prior]
+    early = [d for d in chain if not d.uses_prior] if phase != PHASE_LATE else []
+    late = [d for d in chain if d.uses_prior] if phase != PHASE_EARLY else []
+    detectors = early + late
     hook = _item_progress
     atomic = AtomicIndex()
     for doc in root.walk():
@@ -616,13 +627,14 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
         # values still refer to the real name.
         view = [_name_view(s) if s.id == FILENAME_SEGMENT_ID else s for s in segments]
         first = len(entities)
+        known = [e for e in prior if e.document_id == doc.id]
         for detector in detectors:
             if hook is not None:
                 step = _detector_label(detector.name)
                 detector.on_progress = lambda d, t, step=step: hook(d, t, step)
             try:
                 if detector.uses_prior:
-                    found = detector.detect_after(view, doc.id, entities[first:])
+                    found = detector.detect_after(view, doc.id, [*known, *entities[first:]])
                 else:
                     found = detector.detect(view, doc.id)
             except Exception as exc:
@@ -673,13 +685,15 @@ def _analyze_one(
     work_dir: Path,
     skipped: str = "",
     cancel: CancelToken | None = None,
+    phase: str = PHASE_ALL,
 ) -> tuple[Document, list[Entity]]:
     """Extract and detect one input; a ``skipped`` input is not read, only its name
     is analysed (so that it shows up anonymized in reports). ``cancel``: inline runs
-    only (a token does not cross processes), checked by containers between items."""
+    only (a token does not cross processes), checked by containers between items.
+    ``phase``: :data:`PHASE_EARLY` leaves the LLM to :meth:`Pipeline.analyze`."""
     doc = skipped_document(source, name, skipped) if skipped else None
     doc = doc or extract_file(source, name, config, work_dir, cancel=cancel)
-    return doc, detect_tree(doc, config)
+    return doc, detect_tree(doc, config, phase)
 
 
 def skipped_document(source: Path, name: str, reason: str) -> Document:
@@ -1346,6 +1360,8 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
 # Pipeline
 # ---------------------------------------------------------------------------
 
+#: Progress stage of the language model, run after the other detectors (FULL).
+LLM_STAGE = "langue"
 #: Beyond this, a FULL run is announced as long (CLI warning, GUI notice).
 LLM_WARNING_MINUTES = 15.0
 #: Files read (at most) and seconds of extraction spent to estimate a FULL run.
@@ -1450,13 +1466,14 @@ class Pipeline:
     # -- execution helpers --------------------------------------------------
 
     def _workers(self, jobs: int, stage: str = "analyse") -> int:
-        """Worker processes for ``stage``. FULL analyses in one process (one LLM
-        instance, a memo shared by the whole batch); its writing and verification
-        never run the LLM (``verify = False``) and are sized like STANDARD."""
+        """Worker processes for ``stage``. FULL runs its language model in one process
+        (one model instance, a memo shared by the whole batch: :data:`LLM_STAGE`);
+        everything else (extraction, the other detectors, writing and verification,
+        where the LLM never runs) is sized like STANDARD."""
         full = self.detection_profile is Profile.FULL
         if self.config.workers:
             wanted = self.config.workers
-        elif full and stage == "analyse":
+        elif full and stage == LLM_STAGE:
             wanted = 1  # one LLM instance at a time
         else:
             wanted = max(1, min(os.cpu_count() or 1, 8) - 1)
@@ -1625,6 +1642,13 @@ class Pipeline:
             log.warning("%d link(s) skipped in input folders", len(links))
         items = [*files, *links]
         inline = cancel if self._workers(len(items)) == 1 else None
+        # The language model runs after the pool, here, once for the whole batch: one
+        # instance and one memo, the other detectors in parallel worker processes.
+        late = (
+            any(d.uses_prior for d in detectors_for(self.config))
+            and self._workers(len(items), LLM_STAGE) == 1
+        )
+        phase = PHASE_EARLY if late else PHASE_ALL
         jobs = [
             (
                 path,
@@ -1633,10 +1657,13 @@ class Pipeline:
                 work_dir / f"f{i}",
                 SKIP_LINK if i >= len(files) else "",
                 inline,
+                phase,
             )
             for i, (path, name) in enumerate(items)
         ]
         outputs = self._map(_analyze_one, jobs, "analyse", progress, cancel, self._analysis_crashed)
+        if late:
+            self._late_detection(outputs, progress, cancel)
 
         documents: list[Document] = []
         entities: list[Entity] = []
@@ -1668,6 +1695,39 @@ class Pipeline:
             work_dir,
             inputs=[Path(p).resolve() for p in inputs],
         )
+
+    def _late_detection(
+        self,
+        outputs: list[Any | None],
+        progress: ProgressCallback | None,
+        cancel: CancelToken | None,
+    ) -> None:
+        """Run the ``uses_prior`` detectors (the LLM) on every analysed document, in
+        this process, with the entities the other detectors found; progress as the
+        :data:`LLM_STAGE` stage (files, and segments inside the current one)."""
+        global _item_progress
+        total = len(outputs)
+        done = 0
+
+        def item(done_: int, total_: int, step: str) -> None:
+            if progress is not None:
+                progress(ProgressEvent(LLM_STAGE, done, total, None, done_, total_, step))
+
+        if progress:
+            progress(ProgressEvent(LLM_STAGE, 0, total))
+        for index, out in enumerate(outputs):
+            if cancel and cancel.cancelled:
+                break
+            if out is not None:
+                doc, found = out
+                _item_progress = item if progress is not None else None
+                try:
+                    found.extend(detect_tree(doc, self.config, PHASE_LATE, found))
+                finally:
+                    _item_progress = None
+            done += 1
+            if progress:
+                progress(ProgressEvent(LLM_STAGE, done, total, index=index))
 
     def apply(
         self,

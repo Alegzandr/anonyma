@@ -597,7 +597,7 @@ def test_pipeline_runs_prior_detectors_last_with_item_progress(
     inside = [e for e in events if e.item_total]
     assert any((e.item_done, e.item_total) == (1, 2) for e in inside)
     assert {e.item_step for e in inside} == {"Prior"}  # only detectors that report
-    assert all(e.stage == "analyse" and e.done == 0 for e in inside)
+    assert all(e.stage == pipeline.LLM_STAGE and e.done == 0 for e in inside)
     assert pipeline._item_progress is None
 
 

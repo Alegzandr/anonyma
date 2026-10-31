@@ -43,7 +43,11 @@ from anonyma.gui.widgets import (
 from anonyma.models import DocumentResult, DocumentStatus, Regime
 from anonyma.pipeline import ProgressEvent, is_quarantined, quarantine_dir
 
-STAGE_LABELS = {"analyse": "Analyse des fichiers", "ecriture": "Écriture et vérification"}
+STAGE_LABELS = {
+    "analyse": "Analyse des fichiers",
+    "langue": "Modèle de langue",
+    "ecriture": "Écriture et vérification",
+}
 
 #: Summary of the supported families (the full extension list is in the tooltip).
 FORMATS_SUMMARY = "Office, PDF, courriels (eml, msg, pst), images, archives, texte et données."
@@ -576,7 +580,7 @@ class ProcessingPage(QWidget):
         self.progress_bar.setValue(event.done)
         self._update_times()
         if event.index is not None:
-            status = "Analysé" if event.stage == "analyse" else "Écrit"
+            status = "Écrit" if event.stage == "ecriture" else "Analysé"
             self.model.update_row(event.index, status=status, level="info")
 
     def _update_times(self) -> None:

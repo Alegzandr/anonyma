@@ -21,6 +21,7 @@ from anonyma.models import (
     Severity,
 )
 from anonyma.pipeline import (
+    LLM_STAGE,
     CancelToken,
     OutputDirError,
     Pipeline,
@@ -891,8 +892,8 @@ def test_full_profile_without_its_model_is_not_single_process(
 
 
 def test_full_profile_writes_with_several_processes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Only FULL's analysis needs a single process (one language model, one memo):
-    writing and verification never run it and use the STANDARD pool."""
+    """Only FULL's language model needs a single process (one model, one memo): the
+    other detectors, writing and verification use the STANDARD pool."""
     from anonyma import hardware
 
     monkeypatch.setattr("os.cpu_count", lambda: 4)
@@ -900,9 +901,10 @@ def test_full_profile_writes_with_several_processes(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(hardware, "detect_hardware", lambda **_: roomy)
     pipeline = Pipeline(Config(profile=Profile.FULL))
     pipeline.detection_profile = Profile.FULL
-    assert pipeline._workers(10, "analyse") == 1
+    assert pipeline._workers(10, LLM_STAGE) == 1
+    assert pipeline._workers(10, "analyse") > 1
     assert pipeline._workers(10, "ecriture") > 1
-    assert Pipeline(Config(profile=Profile.FULL, workers=2))._workers(10, "analyse") == 2
+    assert Pipeline(Config(profile=Profile.FULL, workers=2))._workers(10, LLM_STAGE) == 2
 
 
 def test_neutral_names_drop_empty_archive_folders(tmp_path: Path, canary_config: Config) -> None:
