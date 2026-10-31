@@ -252,6 +252,35 @@ class ProfileChoice(enum.StrEnum):
     FULL = "complet"
 
 
+class OrganizationChoice(enum.StrEnum):
+    ALL = "toutes"
+    EXCEPT_WHITELIST = "sauf_liste_blanche"
+    BLACKLIST = "liste_noire"
+
+
+class NumberingChoice(enum.StrEnum):
+    SEQUENTIAL = "sequentiel"
+    RANDOM = "aleatoire"
+
+
+@dataclasses.dataclass(slots=True)
+class ProtectionOptions:
+    """Options of the global fix (OCR, codes, invisible text, identifiers,
+    organizations, names); None = keep the configuration value."""
+
+    ocr: bool | None = None
+    ocr_pages: bool | None = None
+    barcodes: bool | None = None
+    remove_invisible: bool | None = None
+    opaque_ids: bool | None = None
+    opaque_whitelist: Sequence[str] = ()
+    organizations: OrganizationChoice | None = None
+    organization_whitelist: Path | None = None
+    organization_blacklist: Path | None = None
+    neutral_names: bool | None = None
+    numbering: NumberingChoice | None = None
+
+
 def load_config(config_file: Path | None) -> Config:
     from anonyma.config import Config
 
@@ -263,14 +292,43 @@ def load_config(config_file: Path | None) -> Config:
         fail(f"Configuration invalide : {translate_error(str(exc))}")
 
 
-def _read_whitelist(path: Path) -> list[str]:
+def _read_whitelist(path: Path, what: str = "Liste blanche") -> list[str]:
     if not path.is_file():
-        fail(f"Liste blanche introuvable : {path}")
+        fail(f"{what} introuvable : {path}")
     try:
         text = path.read_text(encoding="utf-8-sig")
     except (OSError, UnicodeDecodeError):
-        fail("Liste blanche illisible : enregistrez-la en UTF-8, une valeur par ligne.")
+        fail(f"{what} illisible : enregistrez-la en UTF-8, une valeur par ligne.")
     return [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
+
+
+def _apply_protection(config: Config, options: ProtectionOptions) -> None:
+    flags = {
+        "ocr_enabled": options.ocr,
+        "ocr_full_pages": options.ocr_pages,
+        "decode_barcodes": options.barcodes,
+        "remove_invisible_text": options.remove_invisible,
+        "mask_opaque_ids": options.opaque_ids,
+        "neutral_filenames": options.neutral_names,
+    }
+    for name, value in flags.items():
+        if value is not None:
+            setattr(config, name, value)
+    if options.opaque_whitelist:
+        config.opaque_id_whitelist = [*config.opaque_id_whitelist, *options.opaque_whitelist]
+    if options.organizations is not None:
+        config.organization_policy = options.organizations.value
+    if options.organization_whitelist is not None:
+        config.organization_whitelist = _read_whitelist(
+            options.organization_whitelist, "Liste blanche des organisations"
+        )
+    if options.organization_blacklist is not None:
+        config.organization_blacklist = [
+            *config.organization_blacklist,
+            *_read_whitelist(options.organization_blacklist, "Liste noire des organisations"),
+        ]
+    if options.numbering is not None:
+        config.tag_numbering = options.numbering.value
 
 
 def apply_options(
@@ -283,6 +341,7 @@ def apply_options(
     whitelist: Path | None = None,
     business_lists: Sequence[Path] = (),
     workers: int | None = None,
+    protection: ProtectionOptions | None = None,
 ) -> Config:
     from anonyma.config import load_business_list
 
@@ -306,6 +365,8 @@ def apply_options(
         config.business_lists = [*config.business_lists, str(csv_path.resolve())]
     if workers is not None:
         config.workers = workers
+    if protection is not None:
+        _apply_protection(config, protection)
     try:
         config.validate()
     except ValueError as exc:
@@ -316,9 +377,10 @@ def apply_options(
 def _check_inputs(inputs: Sequence[Path]) -> list[Path]:
     if not inputs:
         fail("Indiquez au moins un fichier ou un dossier.")
-    for path in inputs:
+    for index, path in enumerate(inputs, start=1):
         if not path.exists():
-            fail(f"Fichier ou dossier introuvable : {path}")
+            # The path itself is not echoed: input names may be sensitive.
+            fail(f"Fichier ou dossier introuvable (chemin n°{index}).")
     return list(inputs)
 
 
@@ -402,6 +464,9 @@ def _settings(config: Config) -> dict[str, str]:
         "Mode": config.mode.value,
         "Régime": config.regime.value,
         "Mode paranoïaque": "oui" if config.paranoid else "non",
+        "OCR": "oui" if config.ocr_enabled else "non",
+        "Noms des fichiers": "neutres" if config.neutral_filenames else "anonymisés",
+        "Organisations": config.organization_policy.replace("_", " "),
     }
 
 
@@ -483,6 +548,104 @@ TableOpt = Annotated[
 QuietOpt = Annotated[
     bool, typer.Option("--silencieux", "-q", help="Ne pas afficher la progression.")
 ]
+OcrOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--ocr/--sans-ocr",
+        help="Lire le texte des images et des pages numérisées (sans OCR, aucun fichier "
+        "contenant des images n'est marqué anonymisé).",
+        show_default=False,
+    ),
+]
+OcrPagesOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--ocr-pages/--sans-ocr-pages",
+        help="PDF : lire aussi chaque page entière par OCR (tampons, texte vectorisé).",
+        show_default=False,
+    ),
+]
+BarcodesOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--codes-barres/--sans-codes-barres",
+        help="Décoder les QR codes et codes-barres (toujours masqués).",
+        show_default=False,
+    ),
+]
+InvisibleOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--supprimer-texte-invisible/--conserver-texte-invisible",
+        help="PDF : supprimer le texte invisible au lieu de seulement l'anonymiser.",
+        show_default=False,
+    ),
+]
+OpaqueOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--masquer-identifiants/--conserver-identifiants",
+        help="Masquer les identifiants techniques (empreintes, UUID, références).",
+        show_default=False,
+    ),
+]
+OpaqueAllowOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--identifiant-autorise",
+        help="Identifiant technique à ne jamais masquer (valeur exacte, ou expression "
+        "régulière préfixée par « re: ») ; option répétable.",
+        metavar="VALEUR",
+        show_default=False,
+    ),
+]
+OrganizationsOpt = Annotated[
+    OrganizationChoice | None,
+    typer.Option(
+        "--organisations",
+        help="Organisations masquées : toutes, toutes sauf la liste blanche, ou seulement "
+        "la liste noire.",
+        case_sensitive=False,
+        show_default=False,
+    ),
+]
+OrganizationWhitelistOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--organisations-blanches",
+        help="Fichier texte des organisations, domaines et URL publiques à conserver (une "
+        "par ligne) ; remplace la liste fournie.",
+        metavar="FICHIER",
+        show_default=False,
+    ),
+]
+OrganizationBlacklistOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--organisations-noires",
+        help="Fichier texte des organisations à toujours masquer (une par ligne).",
+        metavar="FICHIER",
+        show_default=False,
+    ),
+]
+NeutralNamesOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--noms-neutres/--noms-anonymises",
+        help="Nommer les fichiers produits document_0001, piece_jointe_0001... au lieu "
+        "d'anonymiser les noms d'origine.",
+        show_default=False,
+    ),
+]
+NumberingOpt = Annotated[
+    NumberingChoice | None,
+    typer.Option(
+        "--numerotation",
+        help="Numérotation des balises : séquentielle ([PERSONNE_001]) ou aléatoire.",
+        case_sensitive=False,
+        show_default=False,
+    ),
+]
 
 
 @app.command("run")
@@ -524,6 +687,17 @@ def run(
     ] = None,
     table: TableOpt = None,
     quiet: QuietOpt = False,
+    ocr: OcrOpt = None,
+    ocr_pages: OcrPagesOpt = None,
+    barcodes: BarcodesOpt = None,
+    remove_invisible: InvisibleOpt = None,
+    opaque_ids: OpaqueOpt = None,
+    opaque_whitelist: OpaqueAllowOpt = None,
+    organizations: OrganizationsOpt = None,
+    organization_whitelist: OrganizationWhitelistOpt = None,
+    organization_blacklist: OrganizationBlacklistOpt = None,
+    neutral_names: NeutralNamesOpt = None,
+    numbering: NumberingOpt = None,
 ) -> None:
     """Anonymise des fichiers et dossiers vers un dossier de sortie."""
     from anonyma.pipeline import QUARANTINE_DIR, Pipeline
@@ -545,6 +719,19 @@ def run(
         whitelist=whitelist,
         business_lists=business_lists or (),
         workers=workers,
+        protection=ProtectionOptions(
+            ocr=ocr,
+            ocr_pages=ocr_pages,
+            barcodes=barcodes,
+            remove_invisible=remove_invisible,
+            opaque_ids=opaque_ids,
+            opaque_whitelist=opaque_whitelist or (),
+            organizations=organizations,
+            organization_whitelist=organization_whitelist,
+            organization_blacklist=organization_blacklist,
+            neutral_names=neutral_names,
+            numbering=numbering,
+        ),
     )
     store = None
     if config.regime is Regime.PSEUDONYMIZATION:
@@ -568,7 +755,11 @@ def run(
         report.save(report_path)
         out.print(f"Rapport enregistré : {report_path}")
     statuses = {r.status for r in result.all_results()}
-    raise typer.Exit(EXIT_PARTIAL if statuses & BAD_STATUSES else EXIT_OK)
+    # Quarantined outputs (residues, incomplete verification) are never a success.
+    quarantined = any(
+        r.output_path is not None and QUARANTINE_DIR in r.output_path.parts for r in result.results
+    )
+    raise typer.Exit(EXIT_PARTIAL if statuses & BAD_STATUSES or quarantined else EXIT_OK)
 
 
 def _print_run_summary(report: Any, output_dir: Path, quarantine: str) -> None:
@@ -614,6 +805,14 @@ def analyse(
     config_file: ConfigOpt = None,
     as_json: Annotated[bool, typer.Option("--json", help="Résultat au format JSON.")] = False,
     quiet: QuietOpt = False,
+    ocr: OcrOpt = None,
+    ocr_pages: OcrPagesOpt = None,
+    barcodes: BarcodesOpt = None,
+    opaque_ids: OpaqueOpt = None,
+    opaque_whitelist: OpaqueAllowOpt = None,
+    organizations: OrganizationsOpt = None,
+    organization_whitelist: OrganizationWhitelistOpt = None,
+    organization_blacklist: OrganizationBlacklistOpt = None,
 ) -> None:
     """Analyse à blanc : compte les entités détectées, sans rien écrire."""
     from anonyma.pipeline import Pipeline
@@ -626,6 +825,16 @@ def analyse(
         whitelist=whitelist,
         business_lists=business_lists or (),
         workers=workers,
+        protection=ProtectionOptions(
+            ocr=ocr,
+            ocr_pages=ocr_pages,
+            barcodes=barcodes,
+            opaque_ids=opaque_ids,
+            opaque_whitelist=opaque_whitelist or (),
+            organizations=organizations,
+            organization_whitelist=organization_whitelist,
+            organization_blacklist=organization_blacklist,
+        ),
     )
     pipeline = Pipeline(config)
     try:
@@ -726,12 +935,20 @@ def reidentify(
     ] = None,
     table: TableOpt = None,
     config_file: ConfigOpt = None,
+    names: Annotated[
+        bool,
+        typer.Option(
+            "--noms",
+            help="Afficher la correspondance des noms de fichiers neutres "
+            "(document_0001...) avec les noms d'origine.",
+        ),
+    ] = False,
 ) -> None:
     """Pseudonymisation : retrouve les valeurs d'origine (fichiers texte ou balises)."""
     from anonyma.pipeline import collect_inputs
 
-    if not inputs and not tags:
-        fail("Indiquez des fichiers à ré-identifier ou une option --balise.")
+    if not inputs and not tags and not names:
+        fail("Indiquez des fichiers à ré-identifier, une option --balise ou --noms.")
     if inputs and output is None:
         fail("L'option --sortie est obligatoire pour ré-identifier des fichiers.")
     if inputs:
@@ -740,6 +957,8 @@ def reidentify(
     store = open_store(store_path(config, table), create=False)
     code = EXIT_OK
     try:
+        if names:
+            _print_names(store.filenames())
         for tag in tags or []:
             original = store.reverse(tag)
             if original is None:
@@ -756,6 +975,18 @@ def reidentify(
     finally:
         store.close()
     raise typer.Exit(code)
+
+
+def _print_names(entries: Sequence[Any]) -> None:
+    if not entries:
+        out.print("Aucun nom de fichier neutre dans cette table.")
+        return
+    listing = Table(show_edge=False)
+    for column in ("Lot", "Nom produit", "Nom d'origine"):
+        listing.add_column(column)
+    for entry in entries:
+        listing.add_row(entry.batch_id, entry.output_name, _markup_escape(entry.original))
+    out.print(listing)
 
 
 def _check_reidentify_output(inputs: Sequence[Path], output: Path) -> None:
@@ -1130,7 +1361,11 @@ def config_set(
     container = data["limits"] if sub else data
     name = sub or top
     current = getattr(config.limits, name) if sub else getattr(config, name)
-    if name == "profile" or current is not None:
+    if name == "organization_whitelist" and current is None:
+        current = []  # None = the bundled list
+    if name == "organization_whitelist" and value.strip().lower() in {"", "defaut", "défaut"}:
+        container[name] = None  # back to the bundled list
+    elif name == "profile" or current is not None:
         try:
             container[name] = parse_setting(current, value, name)
         except (ValueError, json.JSONDecodeError) as exc:

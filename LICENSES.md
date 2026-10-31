@@ -137,6 +137,7 @@ Aucun modèle dans le catalogue au moment de la génération.
 | tzlocal | 5.4.5 | MIT | https://github.com/regebro/tzlocal |
 | win_unicode_console | 0.5 | MIT | https://github.com/Drekin/win-unicode-console |
 | xlrd | 2.0.2 | BSD | http://www.python-excel.org/ |
+| zxing-cpp | 3.1.1 | Apache-2.0 | https://github.com/zxing-cpp/zxing-cpp |
 
 ## Autres composants
 

@@ -241,7 +241,8 @@ def apply_with_spans(text: str, replacements: Sequence[Replacement]) -> tuple[st
     return "".join(out), spans
 
 
-_TAG = re.compile(r"\[([A-Z][A-Z0-9_]*?)_\d{3,}\]")
+#: Sequential (``[PERSONNE_001]``) and random (``[PERSONNE_K7Q2]``) tags.
+_TAG = re.compile(r"\[([A-Z][A-Z0-9_]*?)_(?:\d{3,}|(?=[A-Z2-9]*[2-9])[A-Z2-9]{4,5})\]")
 _BLOCKS = re.compile(f"{re.escape(BLACKOUT_CHAR)}+")
 
 

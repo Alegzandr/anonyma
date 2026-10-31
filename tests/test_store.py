@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -186,9 +187,38 @@ def test_pseudonymization_is_stable_across_batches(tmp_path: Path) -> None:
     with _open(db) as store:
         first = Pipeline(config, store=store).run([src], tmp_path / "out1")
     (src / "a.txt").write_text(f"Courriel {CANARY_EMAIL} de {CANARY_PERSON}.\n", encoding="utf-8")
+    texts = [first.results[0].output_path.read_text(encoding="utf-8")]  # type: ignore[union-attr]
+    # New values get random ids: sequential numbers would reveal the table size.
+    person = re.fullmatch(r"Bonjour (\[PERSONNE_[A-Z2-9]{4}\])\.\n", texts[0])
+    assert person is not None
     with _open(db) as store:
         second = Pipeline(config, store=store).run([src], tmp_path / "out2")
-        assert store.reverse("[PERSONNE_001]") == CANARY_PERSON
-    texts = [r.results[0].output_path.read_text(encoding="utf-8") for r in (first, second)]  # type: ignore[union-attr]
-    assert texts[0] == "Bonjour [PERSONNE_001].\n"
-    assert texts[1] == "Courriel [EMAIL_001] de [PERSONNE_001].\n"
+        assert store.reverse(person.group(1)) == CANARY_PERSON
+    texts.append(second.results[0].output_path.read_text(encoding="utf-8"))  # type: ignore[union-attr]
+    assert re.fullmatch(
+        r"Courriel \[EMAIL_[A-Z2-9]{4}\] de " + re.escape(person.group(1)) + r"\.\n", texts[1]
+    )
+
+
+def test_neutral_filenames_encrypted(tmp_path: Path) -> None:
+    path = tmp_path / "t.db"
+    original = f"Dossier {CANARY_PERSON}/CV {CANARY_PERSON}.pdf"
+    with _open(path) as store:
+        store.save_filename("lot-1", "dossier_0001/document_0001.pdf", original)
+        store.save_filename("lot-2", "document_0001.pdf", "autre.pdf")
+        store.save_filename("lot-2", "document_0001.pdf", "remplace.pdf")
+    data = path.read_bytes()
+    assert CANARY_PERSON.encode() not in data and b"document_0001" not in data
+    with _open(path) as store:
+        entries = store.filenames()
+        assert [(e.batch_id, e.output_name) for e in entries] == [
+            ("lot-1", "dossier_0001/document_0001.pdf"),
+            ("lot-2", "document_0001.pdf"),
+        ]
+        assert entries[0].original == original and entries[1].original == "remplace.pdf"
+        assert [e.original for e in store.filenames("lot-2")] == ["remplace.pdf"]
+        assert CANARY_PERSON not in repr(entries[0])
+        assert store.count() == 0  # value mappings are separate
+    memory = InMemoryMappingStore()
+    memory.save_filename("lot-1", "document_0001.pdf", original)
+    assert [e.original for e in memory.filenames("lot-1")] == [original]

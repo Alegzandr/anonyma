@@ -1,7 +1,9 @@
 """Custom Presidio recognizers needing more than one regex (helpers, not a plugin).
 
 * :class:`PersonRecognizer`: civility + name (civility left outside the span), known
-  given name + capitalized surname, ``SURNAME Given``, ``GIVEN SURNAME``.
+  given name + capitalized surname, ``SURNAME Given``, ``GIVEN SURNAME``, mixed case
+  (``jean DUPONT``), and any-case names after cues (« Signé par », « Signataire : »,
+  « Nom : », « Cordialement, » + line break, « Signed by », « Regards, »...).
 * :class:`AddressRecognizer`: French postal addresses (number, street type, name,
   optional postcode + city on the same or next line), postcode + city, streets
   without number.
@@ -13,6 +15,7 @@ Results carry ``recognition_metadata["attributes"]`` (e.g. civility gender).
 
 from __future__ import annotations
 
+from itertools import pairwise
 from typing import Any
 
 import regex
@@ -21,7 +24,7 @@ from presidio_analyzer import EntityRecognizer, RecognizerResult
 from anonyma.data import first_name, is_common_word
 from anonyma.detectors._rules import SP, STREET_TYPES, STRICT_STREET_TYPES
 from anonyma.models import EntityType
-from anonyma.names import CIVILITIES, PARTICLES
+from anonyma.names import CIVILITIES, PARTICLES, civility_of
 from anonyma.textutils import normalize
 
 UPPER = "A-ZÀ-ÖØ-Þ"
@@ -364,6 +367,60 @@ def _surname_token(token: _Token) -> bool:
     return token.is_cap or token.is_upper
 
 
+def _upper_surname(token: _Token) -> bool:
+    return (
+        token.is_upper
+        and len(token.bare) >= 2
+        and token.bare not in ACRONYMS
+        and token.key not in STOP_WORDS
+    )
+
+
+def _lower_given(token: _Token) -> bool:
+    """A frequent given name written in lower case (``jean``), not a common word
+    unless very frequent as a name."""
+    if len(token.bare) < 3 or token.key in STOP_WORDS or token.key in NOT_LONE_GIVEN:
+        return False
+    record = first_name(token.bare)
+    if record is None or record.count < 2000:
+        return False
+    return record.count >= 20000 or not is_common_word(token.bare)
+
+
+def _given_any_case(token: _Token, min_count: int) -> bool:
+    """:func:`_given` whatever the case of the token (``jean``, ``JEAN``, ``Jean``)."""
+    return _given(_Token(token.start, token.end, token.text.capitalize()), min_count)
+
+
+#: Cues after which a person name is expected (« Signé par », « Nom : »...). The
+#: name itself is parsed by :meth:`PersonRecognizer._cue_name`. Field names need a
+#: colon, closings a line break; OCR may add spaces or break the line after the cue.
+_CUE = regex.compile(
+    r"(?<![\w])(?:"
+    r"(?P<strong>sign[ée]e?s?(?:[ \t]+(?:[ée]lectroniquement|num[ée]riquement))?[ \t]+par"
+    r"|(?:(?:digitally|electronically)[ \t]+)?signed[ \t]+by"
+    r"|signataires?|signatory|nom[ \t]+du[ \t]+signataire|nom[ \t]+et[ \t]+pr[ée]noms?"
+    r"|pr[ée]noms?[ \t]+et[ \t]+nom|nom[ \t]*,[ \t]*pr[ée]noms?|full[ \t]+name)(?![\w])"
+    r"|(?P<field>nom|name|de|from|exp[ée]diteur|sender)(?=[ \t]*:)"
+    r"|(?P<closing>(?:bien[ \t]+)?cordialement|(?:(?:best|kind|warm)[ \t]+)?regards|sincerely"
+    r"|bien[ \t]+[àa][ \t]+(?:vous|toi))(?=[ \t]*,?[ \t]*\r?\n)"
+    r"|(?P<civ>M\.|Mme\.?|Mlle\.?|Mr\.?|Mrs\.?|Ms\.?|(?i:monsieur|madame|mademoiselle))"
+    r"(?=[ \t]+(?-i:[a-zß-öø-ÿ]))"
+    r")[ \t]*[:,]?[ \t]*(?:\r?\n[ \t]*){0,2}",
+    regex.IGNORECASE,
+)
+#: Words that end a name after a cue (roles, generic senders).
+_NOT_NAME_AFTER_CUE = frozenset(
+    normalize(w)
+    for w in [
+        "electroniquement", "numeriquement", "signataire", "signature", "service", "equipe",
+        "team", "support", "direction", "societe", "company", "client", "clients", "admin",
+        "administrateur", "administrator", "noreply", "inconnu", "unknown", "anonyme",
+        "voir", "see", "ci-dessous", "ci-dessus", "below", "above", "n/a", "na",
+    ]
+)  # fmt: skip
+
+
 class CustomRecognizer(EntityRecognizer):
     """Base of the recognizers below: no NLP artefacts needed."""
 
@@ -390,7 +447,112 @@ class PersonRecognizer(CustomRecognizer):
         results: list[Any] = []
         results += self._civility(text, tokens)
         results += self._given_names(text, tokens)
+        results += self._cues(text, tokens)
+        results += self._mixed_case(text, tokens)
         return results
+
+    # -- contextual cues ------------------------------------------------------------
+
+    def _cues(self, text: str, tokens: list[_Token]) -> list[Any]:
+        """Names after « Signé par », « Nom : », « Cordialement, »... in any case."""
+        out: list[Any] = []
+        starts = {t.start: i for i, t in enumerate(tokens)}
+        for m in _CUE.finditer(text, timeout=2):
+            kind = next(k for k in ("strong", "field", "closing", "civ") if m.group(k))
+            i = starts.get(m.end())
+            if i is None:
+                continue
+            taken = self._cue_name(text, tokens, i, lowercase_ok=kind in ("strong", "civ"))
+            if not taken:
+                continue
+            if kind == "civ" and not (
+                _given_any_case(taken[0], 500) or any(t.is_upper for t in taken[1:])
+            ):
+                continue  # « Monsieur le maire », « madame la directrice »
+            start, end = taken[0].start, taken[-1].start + len(taken[-1].bare)
+            if taken[-1].is_initial:
+                end = taken[-1].end
+            if text[end : end + 1] == "@":
+                continue
+            score = {"strong": 0.85, "civ": 0.8, "field": 0.75, "closing": 0.7}[kind]
+            attrs = {"rule": "indice"}
+            if kind == "civ":
+                attrs["gender"] = CIVILITIES.get(normalize(m.group("civ")), "")
+            out.append(_result(EntityType.PERSON, start, end, score, **attrs))
+        return out
+
+    def _cue_name(
+        self, text: str, tokens: list[_Token], i: int, *, lowercase_ok: bool
+    ) -> list[_Token]:
+        """Name tokens from ``tokens[i]`` (same line, at most four words)."""
+        while i < len(tokens) and civility_of(tokens[i].text) is not None:
+            if i + 1 >= len(tokens) or not self._glued(text, tokens[i], tokens[i + 1]):
+                return []
+            i += 1  # « Signataire : Mme Durand »: the civility stays outside
+        taken: list[_Token] = []
+        j = i
+        while j < len(tokens) and len(taken) < 4:
+            tok = tokens[j]
+            if taken and not self._glued(text, taken[-1], tok):
+                break
+            key = tok.key
+            if key in PARTICLES and not tok.is_upper and taken:
+                after = self._particles(text, tokens, j)
+                if after is None:
+                    break
+                taken.extend(tokens[j:after])
+                j = after
+                continue
+            if key in STOP_WORDS or tok.bare in ACRONYMS or key in _NOT_NAME_AFTER_CUE:
+                break
+            if "'" in tok.text[:2] or "’" in tok.text[:2]:
+                break  # « L'équipe », « d'Assistance »
+            if len(tok.bare) < 2 and not tok.is_initial:
+                break  # « a », « à »
+            lower = tok.bare.islower()
+            common = is_common_word(tok.bare)
+            given = _given_any_case(tok, 200)
+            if lower and common and not given:
+                break  # « signé par erreur », « nom : inconnu »
+            if lower and not lowercase_ok and not given:
+                break
+            taken.append(tok)
+            j += 1
+        while taken and taken[-1].key in PARTICLES:
+            taken.pop()
+        if not taken:
+            return []
+        name_like = any(
+            t.is_upper or _given_any_case(t, 200) or not is_common_word(t.bare) for t in taken
+        )
+        return taken if name_like else []
+
+    def _mixed_case(self, text: str, tokens: list[_Token]) -> list[Any]:
+        """``jean DUPONT`` / ``DUPONT jean``: a lower-case given name next to a surname
+        in capitals (OCR, signature panels, form exports)."""
+        out: list[Any] = []
+        for a, b in pairwise(tokens):
+            if not self._glued(text, a, b):
+                continue
+            if a.bare.islower() and _upper_surname(b) and _lower_given(a):
+                given, surname = a, b
+            elif b.bare.islower() and _upper_surname(a) and _lower_given(b):
+                given, surname = b, a
+            else:
+                continue
+            first, last = (given, surname) if given.start < surname.start else (surname, given)
+            if last is surname:
+                k = len(tokens)  # extend a surname in capitals: « jean LE GOFF »
+                idx = tokens.index(last)
+                while idx + 1 < k and self._glued(text, tokens[idx], tokens[idx + 1]):
+                    if not _upper_surname(tokens[idx + 1]):
+                        break
+                    idx += 1
+                last = tokens[idx]
+            end = last.start + len(last.bare)
+            score = 0.6 if is_common_word(given.bare) else 0.7
+            out.append(_result(EntityType.PERSON, first.start, end, score, rule="casse"))
+        return out
 
     @staticmethod
     def _glued(text: str, left: _Token, right: _Token) -> bool:

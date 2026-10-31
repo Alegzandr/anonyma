@@ -16,6 +16,7 @@ from anonyma.models import (
     Regime,
     ReviewDecisions,
     Segment,
+    Severity,
 )
 from anonyma.pipeline import QUARANTINE_DIR, CancelToken, Pipeline, collect_inputs
 from anonyma.store import InMemoryMappingStore
@@ -407,3 +408,158 @@ def test_person_file_name_keeps_one_substitute(tmp_path: Path) -> None:
     assert len(names) == 1
     folder_part, file_part = names[0].split("/")[-2:]
     assert file_part == f"CV {folder_part}.txt"  # same tag, extension intact
+
+
+# -- file names ------------------------------------------------------------------------
+
+
+def test_names_are_anonymized_whatever_the_separators(
+    tmp_path: Path, canary_config: Config
+) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    body = f"Courrier de {CANARY_PERSON}.\n"
+    for name in (
+        "Contrat_zephyrin_QUINTAVALLE_signe.txt",
+        "QUINTAVALLE-Zephyrin.txt",
+        "zephyrin.quintavalle.txt",
+    ):
+        (src / name).write_text(body, encoding="utf-8")
+    result = Pipeline(canary_config).run([src], tmp_path / "out")
+    names = sorted(r.output_name for r in result.results)
+    assert all("zephyrin" not in n.casefold() and "uintavalle" not in n.casefold() for n in names)
+    assert any(n.endswith("Contrat_[PERSONNE_001]_signe.txt") for n in names), names
+    assert {r.status for r in result.results} == {DocumentStatus.ANONYMIZED}
+
+
+def test_original_name_in_content_is_a_residue(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A copy of the original file name left in the output (e.g. a title property)."""
+    registry.load_plugins()
+
+    class _NameLeakWriter(TextWriter):
+        def write(self, document, plan, destination, ctx):  # type: ignore[no-untyped-def]
+            destination.write_text(f"Titre : {Path(document.name).stem}\n", encoding="utf-8")
+            return []
+
+    monkeypatch.setitem(registry._writers, "txt", _NameLeakWriter)
+    src = tmp_path / "in" / "Projet_Zorvalix_v3.txt"
+    src.parent.mkdir()
+    src.write_text("Rien de personnel.\n", encoding="utf-8")
+    config = Config(profile=Profile.LIGHT, workers=1, neutral_filenames=True)
+    result = Pipeline(config).run([src], tmp_path / "out")
+    top = result.results[0]
+    assert top.output_name == "document_0001.txt"
+    assert top.status is DocumentStatus.RESIDUE
+    assert top.verification is not None
+    assert "nom_origine" in {r.detector for r in top.verification.residues}
+
+
+def test_neutral_filenames(tmp_path: Path, canary_config: Config) -> None:
+    import zipfile
+
+    src = tmp_path / f"Dossier {CANARY_PERSON}"
+    (src / "sous").mkdir(parents=True)
+    (src / f"CV {CANARY_PERSON}.txt").write_text(f"{CANARY_PERSON}\n", encoding="utf-8")
+    (src / "sous" / "note.txt").write_text("Note.\n", encoding="utf-8")
+    with zipfile.ZipFile(src / "pieces.zip", "w") as archive:
+        archive.writestr(f"dir/{CANARY_PERSON}.txt", "Bonjour.\n")
+        archive.writestr("autre.txt", "Rien.\n")
+    canary_config.neutral_filenames = True
+    canary_config.regime = Regime.PSEUDONYMIZATION
+    store = InMemoryMappingStore()
+    result = Pipeline(canary_config, store=store).run([src], tmp_path / "out")
+    names = [r.output_name for r in result.results]
+    assert names == [
+        "dossier_0001/document_0001.txt",
+        "dossier_0001/document_0002.zip",
+        "dossier_0001/dossier_0002/document_0003.txt",
+    ]
+    archive_result = result.results[1]
+    assert [c.output_name for c in archive_result.children] == [
+        "piece_jointe_0001.txt",
+        "piece_jointe_0002.txt",
+    ]
+    assert archive_result.output_path is not None
+    with zipfile.ZipFile(archive_result.output_path) as archive:
+        assert sorted(archive.namelist()) == ["piece_jointe_0001.txt", "piece_jointe_0002.txt"]
+    assert {r.status for r in result.results} == {DocumentStatus.ANONYMIZED}
+    mapping = {e.output_name: e.original for e in store.filenames()}
+    assert (
+        mapping["dossier_0001/document_0001.txt"]
+        == f"Dossier {CANARY_PERSON}/CV {CANARY_PERSON}.txt"
+    )
+    assert (
+        mapping["dossier_0001/document_0002.zip/piece_jointe_0001.txt"]
+        == f"Dossier {CANARY_PERSON}/pieces.zip/dir/{CANARY_PERSON}.txt"
+    )
+    assert len({e.batch_id for e in store.filenames()}) == 1
+
+
+def test_neutral_names_not_stored_in_anonymization(tmp_path: Path, canary_config: Config) -> None:
+    src = tmp_path / "in" / f"{CANARY_PERSON}.txt"
+    src.parent.mkdir()
+    src.write_text("x\n", encoding="utf-8")
+    canary_config.neutral_filenames = True
+    store = InMemoryMappingStore()
+    result = Pipeline(canary_config, store=store).run([src], tmp_path / "out")
+    assert result.results[0].output_name == "document_0001.txt"
+    assert store.filenames() == []
+
+
+def test_ocr_gap_at_analysis_is_never_anonymized(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma.extractors.text import TextExtractor
+
+    registry.load_plugins()
+
+    class _GapExtractor(TextExtractor):
+        def extract(self, source, document, ctx):  # type: ignore[no-untyped-def]
+            super().extract(source, document, ctx)
+            document.add_issue(Severity.WARNING, "pdf.ocr_unavailable", "OCR indisponible.")
+
+    monkeypatch.setitem(registry._extractors, "txt", _GapExtractor)
+    src = tmp_path / "in" / "a.txt"
+    src.parent.mkdir()
+    src.write_text("Rien.\n", encoding="utf-8")
+    top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.NEEDS_REVIEW
+    assert "analyse.ocr_incomplete" in {i.code for i in top.issues}
+
+
+def test_ocr_gap_at_verification_goes_to_quarantine(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma import pipeline as pipeline_module
+    from anonyma.extractors.text import TextExtractor
+
+    registry.load_plugins()
+    verifying = {"on": False}
+
+    class _GapExtractor(TextExtractor):
+        def extract(self, source, document, ctx):  # type: ignore[no-untyped-def]
+            super().extract(source, document, ctx)
+            if verifying["on"]:
+                document.add_issue(Severity.ERROR, "ocr.failed", "Échec de l'OCR.")
+
+    original = pipeline_module._verify_output
+
+    def verify(*args, **kwargs):  # type: ignore[no-untyped-def]
+        verifying["on"] = True
+        try:
+            return original(*args, **kwargs)
+        finally:
+            verifying["on"] = False
+
+    monkeypatch.setitem(registry._extractors, "txt", _GapExtractor)
+    monkeypatch.setattr(pipeline_module, "_verify_output", verify)
+    src = tmp_path / "in" / "a.txt"
+    src.parent.mkdir()
+    src.write_text(f"{CANARY_PERSON}\n", encoding="utf-8")
+    top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.NEEDS_REVIEW
+    assert top.output_path is not None and QUARANTINE_DIR in top.output_path.parts
+    assert "verify.incomplete" in {i.code for i in top.issues}
+    assert top.verification is not None and top.verification.unread == 1

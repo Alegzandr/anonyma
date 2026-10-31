@@ -198,7 +198,8 @@ MONTHS_EN = (
 )
 
 DOB_CONTEXT = (
-    "ne le", "nee le", "ne(e) le", "ne(e)", "ne (e)", "nee", "ne a", "nee a", "ne en",
+    "ne le", "nee le", "ne(e) le", "ne(e)", "ne (e)", "nee", "ne a", "nee a", "ne en", "nele",
+    "neele",
     "nee en", "date de naissance", "naissance", "naiss", "ddn", "d.d.n", "dob", "d.o.b",
     "date of birth", "birth date", "birthdate", "born", "birthday", "anniversaire",
 )  # fmt: skip
@@ -717,26 +718,52 @@ RULES: tuple[Rule, ...] = (
     ),
 )
 
+#: Time zone after a time: ``Z``, ``UTC``, ``+01:00``, ``+0100``, ``(UTC+1)``, ``CEST``.
+TIME_ZONE = (
+    r"(?:Z(?![\w])|" + SP + r"?(?:\(?(?:UTC|GMT)(?:" + SP + r"?[+\-]" + SP
+    + r"?\d{1,2}(?::?\d{2})?)?\)?|CEST|CET|HNEC|HAEC)(?![\w])|"
+    + SP + r"?[+\-](?:0\d|1[0-4])(?::?[0-5]\d|'[0-5]\d'?)(?![\d]))"
+)  # fmt: skip
+#: Time of day: ``14:22``, ``14:22:05``, ``14:22:05,123``, ``14h22``, ``14 h 30``,
+#: ``14h22min05``; seconds and time zone optional.
+TIME_OF_DAY = (
+    r"(?:[01]?\d|2[0-3])(?:" + SP + r"?:" + SP + r"?[0-5]\d(?::[0-5]\d(?:[.,]\d{1,6})?)?"
+    r"|" + SP + r"?[hH]" + SP + r"?(?:[0-5]\d(?:" + SP + r"?(?:min|mn|m)?" + SP
+    + r"?[0-5]\d(?:" + SP + r"?s)?(?![\w])|(?:" + SP + r"?(?:min|mn))?)?(?![\w]))?)"
+    r"(?:" + TIME_ZONE + r")?"
+)  # fmt: skip
+#: Optional time glued to a date: ``31/10/2026 à 14:22``, ``31/10/2026, 14h22``,
+#: ``31/10/2026 - 14:22:05 +01:00``, ``2026-10-31T14:22:05Z``.
+TIME_AFTER_DATE = (
+    r"(?:(?:T|,?" + SP + r"*(?:(?:à|a|at|@|-|–|,)" + SP + r"*)?|" + SP
+    + r"+)(?=\d)" + TIME_OF_DAY + r"(?<=\d|[hH]|[a-zA-Z)']))?"
+)  # fmt: skip
+
 DATE_RULES: tuple[Rule, ...] = (
     Rule(
         "date_numerique",
         EntityType.DATE,
         r"(?<![\d/.\-])(?:0?[1-9]|[12]\d|3[01])([/.\-])(?:0?[1-9]|1[0-2])\1(?:19|20)?\d{2}"
-        r"(?![\d/\-]|\.\d)",
+        r"(?![\d/\-]|\.\d)" + TIME_AFTER_DATE,
         0.65,
+        flags=regex.MULTILINE | regex.IGNORECASE,
     ),
     Rule(
         # US order with an unambiguous day (``03/14/1985``): the French rule rejects it.
         "date_us",
         EntityType.DATE,
-        r"(?<![\d/.\-])(?:0?[1-9]|1[0-2])/(?:1[3-9]|2\d|3[01])/(?:19|20)\d{2}(?![\d/\-]|\.\d)",
+        r"(?<![\d/.\-])(?:0?[1-9]|1[0-2])/(?:1[3-9]|2\d|3[01])/(?:19|20)\d{2}(?![\d/\-]|\.\d)"
+        + TIME_AFTER_DATE,
         0.65,
+        flags=regex.MULTILINE | regex.IGNORECASE,
     ),
     Rule(
         "date_iso",
         EntityType.DATE,
-        r"(?<![\d\-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?![\d\-])",
+        r"(?<![\d\-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?![\d\-])"
+        + TIME_AFTER_DATE,
         0.65,
+        flags=regex.MULTILINE | regex.IGNORECASE,
     ),
     Rule(
         "date_textuelle",
@@ -747,7 +774,35 @@ DATE_RULES: tuple[Rule, ...] = (
         + MONTHS_FR
         + r")\.?"
         + SP
-        + r"+(?:19|20)\d{2}(?![\w])",
+        + r"+(?:19|20)\d{2}(?![\w])"
+        + TIME_AFTER_DATE,
+        0.65,
+        flags=regex.MULTILINE | regex.IGNORECASE,
+    ),
+    Rule(
+        # Year first with dots or slashes (``2026.10.31``: signature appearances).
+        "date_annee_points",
+        EntityType.DATE,
+        r"(?<![\d/.\-])(?:19|20)\d{2}([./])(?:0[1-9]|1[0-2])\1(?:0[1-9]|[12]\d|3[01])"
+        r"(?![\d/]|\.\d)" + TIME_AFTER_DATE,
+        0.65,
+        flags=regex.MULTILINE | regex.IGNORECASE,
+    ),
+    Rule(
+        # PDF date strings (signature dictionaries, visible signing panels).
+        "horodatage_pdf",
+        EntityType.DATE,
+        r"(?<![\w])D:(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:\d{2}){0,3}"
+        r"(?:Z(?:00'?00'?)?|[+\-]\d{2}'?(?:\d{2}'?)?)?",
+        0.65,
+        skip_kinds=frozenset({SegmentKind.METADATA}),
+    ),
+    Rule(
+        # A time alone: kept only next to a signature cue or a person (see the
+        # detector), never as an ordinary date.
+        "heure",
+        EntityType.DATE,
+        r"(?<![\w:.,/\-+])" + TIME_OF_DAY + r"(?<=\d|[hH]|[a-zA-Z)'])(?![\w:/]|[.,]\d)",
         0.65,
         flags=regex.MULTILINE | regex.IGNORECASE,
     ),
@@ -766,7 +821,8 @@ DATE_RULES: tuple[Rule, ...] = (
         + MONTHS_EN
         + r")\.?,?"
         + SP
-        + r"+(?:19|20)\d{2})(?![\w])",
+        + r"+(?:19|20)\d{2})(?![\w])"
+        + TIME_AFTER_DATE,
         0.6,
         flags=regex.MULTILINE | regex.IGNORECASE,
     ),

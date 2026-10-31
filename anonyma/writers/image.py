@@ -1,4 +1,5 @@
-"""Image writer: opaque boxes over every replaced OCR span, all metadata stripped.
+"""Image writer: opaque boxes over every replaced OCR span and barcode, all metadata
+stripped.
 
 EXIF orientation is applied to the pixels, every page/frame is kept, the format
 and (as far as possible) the compression settings are preserved; only the ICC
@@ -37,6 +38,7 @@ _PIL_FORMATS = {
     "bmp": "BMP",
     "webp": "WEBP",
     "heic": "HEIF",
+    "gif": "GIF",
 }
 
 
@@ -51,7 +53,7 @@ def drawable(frame: Image.Image, fmt: str) -> Image.Image:
         return frame.convert("I")
     if fmt in ("jpeg", "bmp") and frame.mode in ("RGBA", "LA", "RGBa", "La"):
         return frame.convert("RGB" if frame.mode.startswith("RGB") else "L")
-    if fmt in ("webp", "heic") and frame.mode not in ("RGB", "RGBA", "L"):
+    if fmt in ("webp", "heic", "gif") and frame.mode not in ("RGB", "RGBA", "L"):
         return frame.convert("RGBA" if "A" in frame.mode else "RGB")
     return frame
 
@@ -74,6 +76,9 @@ def _colors(mode: str) -> tuple[Any, Any]:
 def redaction_boxes(segment: Segment, plan: ReplacementPlan) -> list[tuple[BBox, str]]:
     boxes: list[tuple[BBox, str]] = []
     line = segment.context.bbox
+    if segment.context.kind is SegmentKind.BARCODE:
+        # The whole code (its bbox already includes a quiet-zone margin).
+        return [(line, "")] if line is not None and plan.for_segment(segment.id) else []
     for rep in plan.for_segment(segment.id):
         box = segment.span_bbox(rep.start, rep.end) or line
         if box is None:
@@ -148,7 +153,7 @@ def save_frames(
             params["loop"] = original.info.get("loop", 0)
     elif fmt == "heic":
         params.update(quality=90, exif=None, xmp=None)
-    elif fmt == "png" and rest:
+    elif fmt in ("png", "gif") and rest:
         params["duration"] = original.info.get("duration", 100)
         params["loop"] = original.info.get("loop", 0)
     if rest:
@@ -192,7 +197,7 @@ class ImageWriter(Writer):
     ) -> list[Issue]:
         by_page: dict[int, list[Segment]] = {}
         for segment in document.segments:
-            if segment.context.kind is SegmentKind.OCR:
+            if segment.context.kind in (SegmentKind.OCR, SegmentKind.BARCODE):
                 by_page.setdefault(segment.context.page or 0, []).append(segment)
         with Image.open(document.source) as image:
             frames: list[Image.Image] = []

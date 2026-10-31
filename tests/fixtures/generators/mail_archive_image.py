@@ -107,6 +107,20 @@ def png_bytes() -> bytes:
     return buffer.getvalue()
 
 
+def write_gif() -> None:
+    """Two frames, canaries in the pixels and in the comment extension."""
+    page2 = canary_image((f"Image 2 : {CANARY_PERSON}", f"Courriel {CANARY_EMAIL}"))
+    canary_image().save(
+        OUT / "animation.gif",
+        "GIF",
+        save_all=True,
+        append_images=[page2],
+        duration=500,
+        loop=0,
+        comment=f"Auteur {CANARY_PERSON} {CANARY_EMAIL}".encode(),
+    )
+
+
 def write_images() -> None:
     (OUT / "scan.png").write_bytes(png_bytes())
     canary_image().save(OUT / "photo.jpg", "JPEG", quality=92, exif=exif_bytes(), xmp=xmp_packet())
@@ -123,6 +137,7 @@ def write_images() -> None:
         tiffinfo=tiff_info,
     )
     canary_image().convert("L").save(OUT / "capture.bmp", "BMP")
+    write_gif()
     canary_image().save(OUT / "photo.webp", "WEBP", quality=95, exif=exif_bytes(), xmp=xmp_packet())
     import pillow_heif
 

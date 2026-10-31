@@ -80,3 +80,44 @@ def test_bundled_engine_reads_text() -> None:
     for line in lines:
         assert line.char_boxes is not None and len(line.char_boxes) == len(line.text)
         assert line.bbox.x0 >= 0 and line.bbox.x1 <= 900
+
+
+def test_vertical_boxes_follow_reading_direction() -> None:
+    box = BBox(10, 0, 20, 40)
+    assert ocr.is_vertical(box) and not ocr.is_vertical(BBox(0, 0, 40, 10))
+    down = ocr.vertical_boxes("abcd", box, upward=False)
+    up = ocr.vertical_boxes("abcd", box, upward=True)
+    assert down[0] == BBox(10, 0, 20, 10) and down[-1] == BBox(10, 30, 20, 40)
+    assert up[0] == BBox(10, 30, 20, 40) and up[-1] == BBox(10, 0, 20, 10)
+
+
+def _skeleton(text: str) -> str:
+    return "".join(c for c in text.casefold() if c.isalnum())
+
+
+@pytest.mark.slow
+def test_bundled_engine_reads_vertical_text() -> None:
+    """Timestamps written along a margin (90° and 270°) inside a page of text."""
+    engine = ocr.create_engine(Config())
+    assert engine is not None
+    font = ImageFont.load_default(size=18)
+    page = Image.new("RGB", (1654, 2339), "white")
+    draw = ImageDraw.Draw(page)
+    for i in range(25):
+        draw.text((100, 100 + i * 60), f"Ligne {i} du document courant", fill="black", font=font)
+    block = Image.new("RGB", (700, 80), "white")
+    block_draw = ImageDraw.Draw(block)
+    block_draw.text((5, 2), "Horodatage 14/03/2026 10:22:31", fill="black", font=font)
+    block_draw.text((5, 26), "Ref 9f86d081884c7d659a2feaa0c55ad015", fill="black", font=font)
+    block_draw.text((5, 50), "Signataire Zephyrin Quintavalle", fill="black", font=font)
+    page.paste(block.rotate(90, expand=True), (1450, 300))
+    page.paste(block.rotate(-90, expand=True), (1300, 1300))
+    lines = engine.recognize(page)
+    margin = [ln for ln in lines if ln.bbox.x0 > 1250]
+    read = " ".join(_skeleton(ln.text) for ln in margin)
+    for expected in ("14032026", "9f86d081884c7d659a2feaa0c55ad015", "quintavalle"):
+        assert read.count(expected) >= 2, expected  # both orientations
+    for line in margin:
+        assert ocr.is_vertical(line.bbox)
+        assert line.char_boxes is not None and len(line.char_boxes) == len(line.text)
+        assert all(line.bbox.y0 - 1 <= b.y0 <= b.y1 <= line.bbox.y1 + 1 for b in line.char_boxes)

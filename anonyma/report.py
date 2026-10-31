@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from anonyma.brand import app_svg_data_uri
 from anonyma.models import DocumentResult, DocumentStatus, Severity
 from anonyma.pipeline import BatchResult
 
@@ -22,6 +23,12 @@ STATUS_LABELS = {
     DocumentStatus.PENDING: "En attente",
     DocumentStatus.EXTRACTED: "Extrait",
 }
+
+INCOMPLETE_INTRO = (
+    "Certaines images ou pages de ces fichiers n'ont pas pu être relues par l'OCR : leur "
+    "contenu n'a pas été vérifié. Les fichiers sont « À revoir » et placés en quarantaine "
+    "(_quarantaine) : contrôlez-les visuellement avant toute diffusion."
+)
 
 #: Extensions accepted by :meth:`BatchReport.save`.
 REPORT_EXTENSIONS = (".json", ".md", ".html")
@@ -37,6 +44,9 @@ class BatchReport:
     files: list[dict[str, Any]] = field(default_factory=list)
     residues: list[dict[str, str]] = field(default_factory=list)
     failures: list[dict[str, Any]] = field(default_factory=list)
+    #: Files whose verification could not read every image or page (OCR): never
+    #: anonymized, kept in quarantine for a visual check.
+    incomplete: list[dict[str, Any]] = field(default_factory=list)
     #: Non-sensitive batch settings (profile, mode, regime...), French labels.
     settings: dict[str, str] = field(default_factory=dict)
 
@@ -62,6 +72,10 @@ class BatchReport:
                             "problemes": [f"{i.code} : {i.message}" for i in r.issues],
                         }
                     )
+            if top.verification and not top.verification.complete:
+                report.incomplete.append(
+                    {"fichier": top.output_name, "non_relus": top.verification.unread}
+                )
             if top.verification:
                 for res in top.verification.residues:
                     report.residues.append(
@@ -87,6 +101,7 @@ class BatchReport:
             "fichiers": self.files,
             "residus": self.residues,
             "echecs": self.failures,
+            "verifications_incompletes": self.incomplete,
         }
         if self.settings:
             data["parametres"] = self.settings
@@ -131,6 +146,12 @@ class BatchReport:
                 f"| {c(r['emplacement'])} | {c(r['zone'])} | {c(r['type'])} | {c(r['origine'])} |"
                 for r in self.residues
             ]
+        if self.incomplete:
+            lines += ["", "## Vérification incomplète", "", INCOMPLETE_INTRO, ""]
+            lines += [
+                f"- **{c(f['fichier'])}** : {f['non_relus']} image(s) ou page(s) non relue(s)"
+                for f in self.incomplete
+            ]
         if self.failures:
             lines += ["", "## Échecs", ""]
             for f in self.failures:
@@ -168,7 +189,9 @@ class BatchReport:
             '<html lang="fr"><head><meta charset="utf-8">',
             '<meta name="viewport" content="width=device-width, initial-scale=1">',
             f"<title>Rapport du lot {e(self.batch_id)}</title>",
+            f'<link rel="icon" href="{app_svg_data_uri()}">',
             f"<style>{_CSS}</style></head><body><main>",
+            f'<p class=brand><img src="{app_svg_data_uri()}" width=28 height=28 alt="">Anonyma</p>',
             f"<h1>Rapport du lot <code>{e(self.batch_id)}</code></h1>",
             f"<p class=meta>Début : {e(self.started_at)} · Fin : {e(self.finished_at)} · "
             f"{len(self.files)} fichier(s) · {total_entities} entité(s) masquée(s)</p>",
@@ -201,6 +224,19 @@ class BatchReport:
                     rows,
                     intro="Ces fichiers ont été placés en quarantaine (<code>_quarantaine</code>) "
                     "et ne doivent pas être diffusés.",
+                )
+            )
+        if self.incomplete:
+            rows = "".join(
+                f"<tr><td>{e(f['fichier'])}</td><td class=n>{e(f['non_relus'])}</td></tr>"
+                for f in self.incomplete
+            )
+            parts.append(
+                _section(
+                    "Vérification incomplète",
+                    ["Fichier", "#Images ou pages non relues"],
+                    rows,
+                    intro=e(INCOMPLETE_INTRO),
                 )
             )
         if self.failures:
@@ -251,6 +287,7 @@ _CSS = (
     "font:15px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}"
     "main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}"
     "h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 8px}"
+    ".brand{display:flex;align-items:center;gap:10px;margin:0 0 16px;font-weight:600}"
     ".meta{color:#5b6573;margin:0 0 8px}"
     ".settings{display:flex;flex-wrap:wrap;gap:4px 24px;margin:12px 0}"
     ".settings dt{font-size:.8rem;color:#5b6573}.settings dd{margin:0;font-weight:600}"

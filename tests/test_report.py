@@ -121,3 +121,27 @@ def test_report_from_real_pipeline(tmp_path: Path, canary_config: Config) -> Non
     for render in (report.to_html(), report.to_markdown(), json.dumps(report.to_dict())):
         assert "uintavalle" not in render
     assert report.entity_counts == {"PERSONNE": 2}
+
+
+def test_incomplete_verification_is_reported(tmp_path: Path) -> None:
+    unread = DocumentResult(
+        "d3",
+        "_quarantaine/document_0001.pdf",
+        "pdf",
+        "pdf",
+        DocumentStatus.NEEDS_REVIEW,
+        verification=VerificationResult(verified=True, unread=2),
+    )
+    result = BatchResult(
+        "20260101-000000-abcdef",
+        tmp_path,
+        [unread],
+        started_at=datetime(2026, 1, 1, 10, 0, 0),
+        finished_at=datetime(2026, 1, 1, 10, 1, 0),
+    )
+    report = BatchReport.from_result(result)
+    assert report.to_dict()["verifications_incompletes"] == [
+        {"fichier": "_quarantaine/document_0001.pdf", "non_relus": 2}
+    ]
+    assert "## Vérification incomplète" in report.to_markdown()
+    assert "Vérification incomplète" in report.to_html()

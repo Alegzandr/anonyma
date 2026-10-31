@@ -11,6 +11,22 @@ Two independent checks on every segment of the re-extracted output tree:
    it is an allowed value, scores below ``min_score``, or is covered by substitutes
    (what remains outside them is only punctuation, civilities or stop words).
    Residue reason ``detector``, detector = its name.
+3. **OCR forms**: in text read by OCR, the same values are also searched in a
+   "skeleton" form where characters OCR confuses are merged (``0``/``O``,
+   ``1``/``l``/``I``, ``5``/``S``...) and hyphens, underscores and dots count as
+   spaces (detector ``table_ocr``).
+4. **Original names**: the names of the input file and of every embedded item (each
+   path component and its stem) must not survive anywhere in the output (detector
+   ``nom_origine``, certain), unless they are still part of the output names (then
+   nothing was hidden in them). Their distinctive words (not common words, not in
+   the output names) are possible residues.
+
+Every value and detector hit kept by the organization policy (``policy.keeps``:
+whitelisted publishers, domains, public URLs) is ignored.
+
+Incomplete verification: a re-extracted item carrying an OCR issue (OCR disabled,
+unavailable or failed on an image or page) is still scanned, but counted in
+``VerificationResult.unread``: the pipeline never marks such an output anonymized.
 
 Short-value policy: values shorter than 3 characters (after normalisation) and
 numbers shorter than 4 digits are not searched; single words that are also common
@@ -20,10 +36,12 @@ words (``Petit``, ``Rose``) only count when capitalized.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from pathlib import PurePosixPath
 
 from anonyma import checksums
 from anonyma.config import Config
+from anonyma.data import is_common_word
 from anonyma.detectors._custom import STOP_WORDS
 from anonyma.models import (
     Detector,
@@ -34,23 +52,63 @@ from anonyma.models import (
     Issue,
     Residue,
     Segment,
+    SegmentKind,
     Severity,
     VerificationResult,
 )
 from anonyma.names import PARTICLES, civility_of
+from anonyma.policy import keeps
 from anonyma.replacer import BLACKOUT_CHAR
 from anonyma.resolver import NAME_TYPES, cluster_forms
 from anonyma.textsearch import MultiMatcher, leftmost_longest
-from anonyma.textutils import normalize, normalize_with_map
+from anonyma.textutils import normalize, normalize_with_map, strip_accents
 
 ORIGINAL_VALUE = "original_value"
 DETECTOR_HIT = "detector"
 TABLE_DETECTOR = "table"
 TABLE_VARIANT_DETECTOR = "table_variante"
+TABLE_OCR_DETECTOR = "table_ocr"
+NAME_DETECTOR = "nom_origine"
+#: Residue type of an original file name found in an output.
+FILENAME_TYPE = "NOM_FICHIER"
 MIN_VALUE_LENGTH = 3
 MIN_DIGITS = 4
+#: Skeleton (OCR) forms shorter than this are not searched; longer than
+#: ``CERTAIN_OCR_LENGTH`` they are certain residues.
+MIN_OCR_LENGTH = 5
+CERTAIN_OCR_LENGTH = 8
+#: Original names (and stems) shorter than this are not searched.
+MIN_NAME_LENGTH = 6
+#: Words of original names shorter than this are not searched.
+MIN_NAME_WORD = 4
 #: Blackout substitutes (any length) count as substitutes.
 _BLACKOUT = re.compile(re.escape(BLACKOUT_CHAR) + "+")
+#: File name / path separators read as spaces when names are compared.
+_NAME_SEPARATORS = str.maketrans({c: " " for c in "_-.+~"})
+#: Characters OCR confuses, merged in skeleton forms (applied after normalisation).
+_SKELETON = str.maketrans({"0": "o", "1": "l", "i": "l", "|": "l", "!": "l", "5": "s", "8": "b"})
+_NAME_WORD = re.compile(r"[^\W\d_]+|\d+")
+
+
+def spaced_name(text: str) -> str:
+    """``text`` with file name separators (``_ - . + ~``) as spaces (same length)."""
+    return text.translate(_NAME_SEPARATORS)
+
+
+def skeleton(text: str) -> str:
+    """OCR-tolerant form of ``text``, same length: accents dropped, lower case,
+    confusable characters merged, separators as spaces."""
+    out = []
+    for ch in text:
+        base = strip_accents(ch).casefold()
+        out.append(base if len(base) == 1 else ch)
+    return spaced_name("".join(out)).translate(_SKELETON)
+
+
+def is_ocr_issue(code: str) -> bool:
+    """True for issue codes telling that OCR could not read an image or a page
+    (``ocr.unavailable``, ``ocr.failed``, ``pdf.ocr_unavailable``...)."""
+    return any(part.startswith("ocr") for part in code.split("."))
 
 
 def worth_checking(value: str) -> bool:
@@ -74,12 +132,15 @@ class Verifier:
         sensitive: Sequence[tuple[str, str]],
         substitutes: set[str],
         allowed: Sequence[str] = (),
+        *,
+        names: Sequence[str] = (),
     ) -> VerificationResult:
         """Check a re-extracted output tree.
 
         ``sensitive``: every original ``(value, entity_type)`` of the batch.
         ``substitutes``: values introduced by the replacer (ignored by detectors).
         ``allowed``: values the user chose to keep (whitelist, rejected clusters).
+        ``names``: original names of the input file and of its embedded items.
         """
         result = VerificationResult(verified=True)
         allowed_keys = {normalize(a) for a in allowed} | self.config.whitelist_keys()
@@ -87,16 +148,27 @@ class Verifier:
             ("table", tuple(sensitive), frozenset(allowed_keys)),
             lambda: self._table(sensitive, allowed_keys),
         )
+        ocr_table = _cached(
+            ("ocr", tuple(sensitive), frozenset(allowed_keys)),
+            lambda: self._ocr_table(sensitive, allowed_keys),
+        )
         subs = _cached(("subs", frozenset(substitutes)), lambda: _substitutes(substitutes))
         # Values the user kept may contain masked values (a whitelisted e-mail holding a
         # masked surname): text inside them is not a residue.
         kept = frozenset([*allowed, *self.config.whitelist])
         kept_matcher = _cached(("kept", kept), lambda: _substitutes(set(kept)))
+        name_table = _name_table(names, [d.name for d in output.walk()], allowed_keys)
 
         for doc in output.walk():
-            if doc.status is not DocumentStatus.EXTRACTED or doc.has_errors:
+            gaps = [
+                i for i in doc.issues if is_ocr_issue(i.code) and i.severity is not Severity.INFO
+            ]
+            result.unread += len(gaps)
+            errors = [i for i in doc.issues if i.severity is Severity.ERROR]
+            ocr_only = bool(errors) and all(is_ocr_issue(i.code) for i in errors)
+            readable = doc.status is DocumentStatus.EXTRACTED and not errors
+            if not readable and not (doc.status is DocumentStatus.FAILED and ocr_only):
                 result.verified = False
-                errors = [i for i in doc.issues if i.severity is Severity.ERROR]
                 result.issues.append(
                     errors[0]
                     if errors
@@ -117,10 +189,31 @@ class Verifier:
                     (m.start, m.end) for m in kept_matcher.find(segment.text, prepared=prepared)
                 ]
                 covered[segment.id] = spans
+                hits: list[tuple[int, int, str, str, bool]] = []
                 for m in leftmost_longest(table.find(segment.text, prepared=prepared)):
-                    if _inside(m.start, m.end, spans):
+                    if not _inside(m.start, m.end, spans):
+                        entity_type, source = m.payloads[0]
+                        hits.append((m.start, m.end, entity_type, source, True))
+                if segment.context.kind is SegmentKind.OCR and len(ocr_table):
+                    for om in leftmost_longest(ocr_table.find(skeleton(segment.text))):
+                        if not _inside(om.start, om.end, spans):
+                            ocr_type, length = om.payloads[0]
+                            sure = length >= CERTAIN_OCR_LENGTH
+                            hits.append((om.start, om.end, ocr_type, TABLE_OCR_DETECTOR, sure))
+                if len(name_table):
+                    for nm in leftmost_longest(name_table.find(spaced_name(segment.text))):
+                        if not _inside(nm.start, nm.end, spans):
+                            hits.append(
+                                (nm.start, nm.end, FILENAME_TYPE, NAME_DETECTOR, nm.payloads[0])
+                            )
+                flagged: list[tuple[int, int]] = []
+                for start, end, entity_type, source, certain in hits:
+                    value = segment.text[start:end]
+                    if _overlaps(start, end, flagged):
                         continue
-                    entity_type, source = m.payloads[0]
+                    if keeps(entity_type, value, self.config):
+                        continue
+                    flagged.append((start, end))
                     result.residues.append(
                         Residue(
                             location=doc.name,
@@ -128,7 +221,8 @@ class Verifier:
                             entity_type=entity_type,
                             reason=ORIGINAL_VALUE,
                             detector=source,
-                            value=segment.text[m.start : m.end],
+                            value=value,
+                            certain=certain,
                         )
                     )
             segments = {s.id: s for s in doc.segments}
@@ -142,6 +236,8 @@ class Verifier:
                     if normalize(value) in allowed_keys:
                         continue
                     if _neutral_outside(segment, entity.start, entity.end, covered[segment.id]):
+                        continue
+                    if keeps(entity.entity_type, value, self.config):
                         continue
                     result.residues.append(
                         Residue(
@@ -158,16 +254,22 @@ class Verifier:
         return result
 
     @staticmethod
-    def _table(
+    def _values(
         sensitive: Sequence[tuple[str, str]], allowed_keys: set[str]
-    ) -> MultiMatcher[tuple[str, str]]:
-        table: MultiMatcher[tuple[str, str]] = MultiMatcher()
+    ) -> dict[str, set[str]]:
         by_type: dict[str, set[str]] = {}
         for value, entity_type in sensitive:
             if normalize(value) in allowed_keys or not worth_checking(value):
                 continue
             by_type.setdefault(entity_type, set()).add(value)
-        for entity_type, values in by_type.items():
+        return by_type
+
+    @classmethod
+    def _table(
+        cls, sensitive: Sequence[tuple[str, str]], allowed_keys: set[str]
+    ) -> MultiMatcher[tuple[str, str]]:
+        table: MultiMatcher[tuple[str, str]] = MultiMatcher()
+        for entity_type, values in cls._values(sensitive, allowed_keys).items():
             for value in values:
                 table.add(
                     value,
@@ -179,6 +281,21 @@ class Verifier:
                     table.add(form, (entity_type, TABLE_VARIANT_DETECTOR), require_capital=cap)
         return table
 
+    @classmethod
+    def _ocr_table(
+        cls, sensitive: Sequence[tuple[str, str]], allowed_keys: set[str]
+    ) -> MultiMatcher[tuple[str, int]]:
+        """Skeleton forms of every value, searched in OCR text only."""
+        table: MultiMatcher[tuple[str, int]] = MultiMatcher()
+        for entity_type, values in cls._values(sensitive, allowed_keys).items():
+            forms = set(values) | {f for f, _ in _derived(entity_type, values)}
+            for form in forms:
+                key = skeleton(form)
+                length = len(re.sub(r"\W+", "", key))
+                if length >= MIN_OCR_LENGTH and normalize(form) not in allowed_keys:
+                    table.add(key, (entity_type, length))
+        return table
+
 
 #: Per-process cache: every document of a batch shares the same table and substitutes.
 _CACHE: dict[object, object] = {}
@@ -186,8 +303,13 @@ _CACHE: dict[object, object] = {}
 #: Deterministic detector hits below this score are only possible residues.
 CERTAIN_DETECTOR_SCORE = 0.8
 #: Tags as altered by formats or OCR: brackets dropped or replaced (sheet names,
-#: defined names), digits misread as letters (``PERSONNE_O01``).
-_TAG_LIKE = re.compile(r"[\[(<{]?\b[A-Z][A-Z_]{1,40}_[0-9OoIl]{3,}\b[\])>}]?")
+#: defined names), digits misread as letters (``PERSONNE_O01``). Both numberings:
+#: sequential (``PERSONNE_001``) and random ids (``PERSONNE_K7Q2``: 4-5 characters
+#: holding at least one digit, so that plain words such as ``TODO_LIST`` never count).
+_TAG_LIKE = re.compile(
+    r"[\[(<{]?\b[A-Z][A-Z_]{1,40}_(?:[0-9OoIl]{3,}|(?=[A-Za-z0-9]{0,4}[0-9])[A-Za-z0-9]{4,5})\b"
+    r"[\])>}]?"
+)
 _CACHE_SIZE = 4
 
 
@@ -214,8 +336,11 @@ def _needs_capital(entity_type: str, value: str) -> bool:
 
 
 def _derived(entity_type: str, values: set[str]) -> Iterator[tuple[str, bool]]:
-    """Derived forms of the batch values (same rules as propagation)."""
-    if entity_type not in (
+    """Derived forms of the batch values (same rules as propagation), plus, for names
+    and addresses, every form with its hyphens as spaces or glued (OCR and file names
+    drop or add hyphens: ``QUINTAVALLE BREZAC``, ``QuintavalleBrezac``)."""
+    forms: dict[str, bool] = {}
+    if entity_type in (
         EntityType.PERSON,
         EntityType.PHONE,
         EntityType.IBAN,
@@ -224,16 +349,76 @@ def _derived(entity_type: str, values: set[str]) -> Iterator[tuple[str, bool]]:
         EntityType.SIRET,
         EntityType.NIR,
     ):
-        return
-    for value in values:
-        cluster = EntityCluster(id="", entity_type=entity_type, canonical=value, variants={value})
-        for form, cap in cluster_forms(cluster):
-            if form != value:
-                yield form, cap
+        for value in values:
+            cluster = EntityCluster(
+                id="", entity_type=entity_type, canonical=value, variants={value}
+            )
+            for form, cap in cluster_forms(cluster):
+                if form != value:
+                    forms.setdefault(form, cap)
+    if entity_type in (*NAME_TYPES, EntityType.ADDRESS):
+        for form in [*values, *forms]:
+            if "-" in form:
+                spaced = " ".join(form.replace("-", " ").split())
+                forms.setdefault(spaced, _needs_capital(entity_type, spaced))
+                forms.setdefault("".join(spaced.split()), False)
+    for form, cap in forms.items():
+        if form not in values:
+            yield form, cap
 
 
 def _inside(start: int, end: int, spans: Sequence[tuple[int, int]]) -> bool:
     return any(s <= start and end <= e for s, e in spans)
+
+
+def _overlaps(start: int, end: int, spans: Sequence[tuple[int, int]]) -> bool:
+    return any(s < end and start < e for s, e in spans)
+
+
+def _name_words(text: str) -> list[str]:
+    return _NAME_WORD.findall(text)
+
+
+def _distinctive_word(word: str) -> bool:
+    """A word of a file name that may identify someone (not common, not a number)."""
+    key = normalize(word)
+    return (
+        len(key) >= MIN_NAME_WORD
+        and not key.isdigit()
+        and key not in STOP_WORDS
+        and key not in PARTICLES
+        and civility_of(word) is None
+        and not is_common_word(word)
+    )
+
+
+def _name_table(
+    names: Iterable[str], output_names: Sequence[str], allowed_keys: set[str]
+) -> MultiMatcher[bool]:
+    """Original names to search in an output (payload: certain residue).
+
+    Each path component and its stem (certain) when distinctive and absent from the
+    output names; their distinctive words absent from the output names (possible).
+    Everything is compared with separators as spaces.
+    """
+    table: MultiMatcher[bool] = MultiMatcher()
+    in_output = normalize(spaced_name(" / ".join(output_names)))
+    output_words = {normalize(w) for n in output_names for w in _name_words(n)}
+    for name in names:
+        for part in name.replace("\\", "/").split("/"):
+            stem = PurePosixPath(part).stem if "." in part.strip(".") else part
+            words = [w for w in _name_words(stem) if _distinctive_word(w)]
+            if not words:
+                continue
+            for form in {part, stem}:
+                key = normalize(spaced_name(form))
+                if len(key) >= MIN_NAME_LENGTH and key not in in_output and key not in allowed_keys:
+                    table.add(spaced_name(form), True)
+            for word in words:
+                key = normalize(word)
+                if key not in output_words and key not in allowed_keys:
+                    table.add(word, False)
+    return table
 
 
 def _neutral_outside(
@@ -265,4 +450,15 @@ def _neutral_outside(
     return True
 
 
-__all__ = ["DETECTOR_HIT", "ORIGINAL_VALUE", "Verifier", "worth_checking"]
+__all__ = [
+    "DETECTOR_HIT",
+    "FILENAME_TYPE",
+    "NAME_DETECTOR",
+    "ORIGINAL_VALUE",
+    "TABLE_OCR_DETECTOR",
+    "Verifier",
+    "is_ocr_issue",
+    "skeleton",
+    "spaced_name",
+    "worth_checking",
+]

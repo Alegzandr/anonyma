@@ -96,6 +96,8 @@ class EntityType(enum.StrEnum):
     PROPER_NOUN = "NOM_PROPRE"  # paranoid mode
     SUSPICIOUS_TOKEN = "SEQUENCE_SUSPECTE"  # paranoid mode
     BUSINESS_TERM = "TERME_METIER"  # business lists without explicit type
+    OPAQUE_ID = "IDENTIFIANT_TECHNIQUE"  # high-entropy tokens: hashes, UUIDs, transaction ids
+    BARCODE = "CODE_BARRES"  # QR code / Data Matrix / barcode: always masked as a whole
 
 
 #: Direct identifiers: the benchmark requires >= 99 % recall on these.
@@ -127,6 +129,12 @@ class SegmentKind(enum.StrEnum):
     NOTE = "note"  # speaker notes, footnotes
     FILENAME = "filename"  # file / entry / attachment name (added by the pipeline)
     HIDDEN = "hidden"  # hidden sheets/text, form fields, alt text not otherwise covered
+    #: Decoded content of a QR code / barcode. ``context.bbox`` and every char box
+    #: are the code's region: the "codes" detector masks the whole segment.
+    BARCODE = "barcode"
+    #: Text of an embedded digital signature (signer, certificate, timestamps),
+    #: exposed for detection only: the writer deletes the signature itself.
+    SIGNATURE = "signature"
 
 
 class DocumentStatus(enum.StrEnum):
@@ -414,6 +422,15 @@ class VerificationResult:
     verified: bool
     residues: list[Residue] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
+    #: Images/pages of the output that could not be read back (OCR disabled,
+    #: unavailable or failed): their content was never checked. A result with
+    #: ``unread`` is never marked anonymized (review + quarantine).
+    unread: int = 0
+
+    @property
+    def complete(self) -> bool:
+        """Every image and page of the output was read back."""
+        return self.unread == 0
 
     @property
     def certain_residues(self) -> list[Residue]:

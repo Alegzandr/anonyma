@@ -16,6 +16,11 @@ stored in clear:
 * rollback journal (no WAL), ``secure_delete`` on, temp store in memory, one
   commit per write so that a crash never loses a mapping already used in an
   output file.
+
+Neutral output names (``Config.neutral_filenames``) are kept in a second table,
+``filenames``: batch id, neutral path and original path encrypted together under the
+same key, row addressed by ``HMAC(k_lookup, "filename" || batch || neutral path)``.
+The table is created on first open, so older stores gain it transparently.
 """
 
 from __future__ import annotations
@@ -51,6 +56,7 @@ class WrongPassphraseError(StoreError):
 class InMemoryMappingStore:
     def __init__(self) -> None:
         self._data: dict[tuple[str, str], tuple[str, str]] = {}
+        self._names: dict[tuple[str, str], str] = {}
 
     def lookup(self, entity_type: str, key: str) -> str | None:
         entry = self._data.get((entity_type, key))
@@ -72,6 +78,16 @@ class InMemoryMappingStore:
         for (entity_type, _), (original, substitute) in self._data.items():
             yield MappingEntry(entity_type, original, substitute)
 
+    def save_filename(self, batch_id: str, output_name: str, original: str) -> None:
+        self._names[(batch_id, output_name)] = original
+
+    def filenames(self, batch_id: str | None = None) -> list[FilenameEntry]:
+        return sorted(
+            FilenameEntry(batch, output, original)
+            for (batch, output), original in self._names.items()
+            if batch_id is None or batch == batch_id
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class MappingEntry:
@@ -81,6 +97,18 @@ class MappingEntry:
 
     def __repr__(self) -> str:  # never show values
         return f"MappingEntry(entity_type={self.entity_type!r})"
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class FilenameEntry:
+    """A neutral output name and the original name it replaces."""
+
+    batch_id: str
+    output_name: str
+    original: str
+
+    def __repr__(self) -> str:  # never show the original name
+        return f"FilenameEntry(batch_id={self.batch_id!r}, output_name={self.output_name!r})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,6 +207,7 @@ class EncryptedMappingStore:
                 keys = cls._unlock(db, passphrase)
             else:
                 keys = cls._initialize(db, passphrase, kdf or KdfParams())
+            cls._ensure_filenames(db)
         except BaseException:
             db.close()
             raise
@@ -193,6 +222,16 @@ class EncryptedMappingStore:
             db.execute("PRAGMA synchronous=FULL")
         except sqlite3.DatabaseError as exc:
             raise StoreError("Ce fichier n'est pas une table de correspondance Anonyma.") from exc
+
+    @staticmethod
+    def _ensure_filenames(db: sqlite3.Connection) -> None:
+        try:
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS filenames (id BLOB PRIMARY KEY, entry BLOB NOT NULL)"
+                " WITHOUT ROWID"
+            )
+        except sqlite3.Error as exc:
+            raise StoreError("Impossible de préparer la table de correspondance.") from exc
 
     @staticmethod
     def _initialize(
@@ -364,6 +403,34 @@ class EncryptedMappingStore:
     def used_substitutes(self) -> set[str]:
         return {entry.substitute for entry in self.items()}
 
+    # -- neutral file names ----------------------------------------------------
+
+    def save_filename(self, batch_id: str, output_name: str, original: str) -> None:
+        """Keep ``original`` behind the neutral ``output_name`` of a batch."""
+        data = f"filename\0{batch_id}\0{output_name}".encode()
+        index = hmac.new(self._idx_key, data, hashlib.sha256).digest()
+        entry = self._seal(f"{batch_id}\0{output_name}\0{original}", b"f" + index)
+        with self._lock:
+            try:
+                self._conn().execute(
+                    "INSERT INTO filenames (id, entry) VALUES (?, ?)"
+                    " ON CONFLICT(id) DO UPDATE SET entry = excluded.entry",
+                    (index, entry),
+                )
+            except sqlite3.Error as exc:
+                raise StoreError("Écriture impossible dans la table de correspondance.") from exc
+
+    def filenames(self, batch_id: str | None = None) -> list[FilenameEntry]:
+        """Every neutral name of the store (of one batch when ``batch_id`` is given)."""
+        with self._lock:
+            rows = self._conn().execute("SELECT id, entry FROM filenames").fetchall()
+        entries = []
+        for index, entry in rows:
+            batch, output, original = self._open(bytes(entry), b"f" + bytes(index)).split("\0", 2)
+            if batch_id is None or batch == batch_id:
+                entries.append(FilenameEntry(batch, output, original))
+        return sorted(entries)
+
     # -- extras ----------------------------------------------------------------
 
     def items(self) -> Iterator[MappingEntry]:
@@ -393,6 +460,7 @@ class EncryptedMappingStore:
 
 __all__ = [
     "EncryptedMappingStore",
+    "FilenameEntry",
     "InMemoryMappingStore",
     "KdfParams",
     "MappingEntry",

@@ -1,0 +1,145 @@
+# Liste blanche par défaut des organisations (politique « tout masquer sauf la liste
+# blanche ») : éditeurs de logiciels, prestataires de signature électronique et de
+# certification, hébergeurs, domaines publics génériques. Ces noms, leurs logos (texte
+# reconnu) et leurs adresses web génériques restent visibles ; les données personnelles
+# contenues dans leurs adresses (identifiants, paramètres) restent masquées.
+#
+# Une entrée par ligne : un nom (« Adobe ») ou un domaine (« adobe.com », « gouv.fr »).
+# Un nom couvre aussi ses domaines (Adobe : adobe.com, ns.adobe.com…).
+
+# Éditeurs de logiciels
+Adobe
+Acrobat
+Acrobat Reader
+Adobe Acrobat Sign
+Microsoft
+Microsoft Office
+Microsoft Word
+Microsoft Excel
+Microsoft Outlook
+Office 365
+Microsoft 365
+Google
+Google Workspace
+Google Docs
+Apple
+Mozilla
+Mozilla Firefox
+Thunderbird
+LibreOffice
+The Document Foundation
+documentfoundation.org
+OpenOffice
+Apache OpenOffice
+Oracle
+IBM
+Foxit
+Nitro PDF
+PDF-XChange
+Ghostscript
+Artifex
+MuPDF
+iText
+Atlassian
+Salesforce
+SAP
+GitHub
+GitLab
+Dropbox
+Cisco Webex
+Slack
+
+# Signature électronique, horodatage, certification
+DocuSign
+Yousign
+Universign
+LexPersona
+Lex Persona
+Docaposte
+Certinomis
+ChamberSign
+Certigna
+Dhimyotis
+CertEurope
+Certeurope
+Signaturit
+OneSpan
+Adobe Sign
+Dropbox Sign
+HelloSign
+PandaDoc
+Oodrive
+Sell&Sign
+sellandsign.com
+Contralia
+Wacom
+GlobalSign
+DigiCert
+Sectigo
+Entrust
+Let's Encrypt
+letsencrypt.org
+Verisign
+Thawte
+Comodo
+Buypass
+QuoVadis
+Swisscom
+SwissSign
+D-Trust
+Bundesdruckerei
+InfoCert
+Namirial
+Aruba PEC
+ANSSI
+Agence nationale de la sécurité des systèmes d'information
+
+# Hébergeurs et services techniques
+Amazon
+Amazon Web Services
+AWS
+amazonaws.com
+cloudfront.net
+Microsoft Azure
+azure.com
+windows.net
+microsoftonline.com
+office.com
+office365.com
+live.com
+sharepoint.com
+onedrive.com
+googleapis.com
+gstatic.com
+googleusercontent.com
+Cloudflare
+Akamai
+akamaized.net
+Fastly
+OVH
+OVHcloud
+Scaleway
+Outscale
+Ionos
+
+# Domaines publics génériques (normes, espaces de noms, portails publics)
+w3.org
+W3C
+schema.org
+purl.org
+ietf.org
+iso.org
+xmlsoap.org
+openxmlformats.org
+oasis-open.org
+ecma-international.org
+unicode.org
+xmp.org
+iptc.org
+ns.adobe.com
+gouv.fr
+service-public.fr
+europa.eu
+eur-lex.europa.eu
+wikipedia.org
+wikimedia.org

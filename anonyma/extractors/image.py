@@ -1,7 +1,9 @@
 """Raster images: OCR text (per line, with character boxes) and metadata.
 
-Formats: png, jpeg, tiff (every page), bmp, heic/heif, webp. Text is recognised by
-``ctx.ocr``; without an OCR engine the image cannot be verified and gets an ERROR.
+Formats: png, jpeg, tiff (every page), gif (every frame), bmp, heic/heif, webp.
+Text is recognised by ``ctx.ocr`` (vertical text included); without an OCR engine
+the image cannot be verified and gets an ERROR, as does an OCR failure. QR codes,
+Data Matrix and barcodes become BARCODE segments (``config.decode_barcodes``).
 Metadata (EXIF incl. XP* and UserComment, GPS, XMP, IPTC, PNG text chunks, JPEG
 comments, Photoshop resources) is exposed as METADATA segments; the writer strips
 all of it anyway (ICC profiles excepted).
@@ -15,6 +17,7 @@ from typing import Any
 
 from PIL import ExifTags, Image, ImageOps, IptcImagePlugin
 
+from anonyma.extractors._raster import BARCODE_LABEL, code_boxes, decode_codes, recognize
 from anonyma.models import (
     Document,
     ExtractionContext,
@@ -24,7 +27,6 @@ from anonyma.models import (
     SegmentKind,
     Severity,
 )
-from anonyma.ocr import proportional_boxes
 from anonyma.registry import register_extractor
 
 try:  # HEIC/HEIF support (optional at import time, required for the heic format)
@@ -45,6 +47,7 @@ IMAGE_EXTENSIONS = {
     ".tiff": "tiff",
     ".bmp": "bmp",
     ".dib": "bmp",
+    ".gif": "gif",
     ".webp": "webp",
     **({".heic": "heic", ".heif": "heic", ".hif": "heic"} if HEIF_AVAILABLE else {}),
 }
@@ -76,6 +79,8 @@ def sniff_image(head: bytes) -> str | None:
         return "tiff"
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return "webp"
+    if head[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
     if HEIF_AVAILABLE and head[4:8] == b"ftyp" and head[8:12] in _HEIF_BRANDS:
         return "heic"
     if (
@@ -320,28 +325,37 @@ class ImageExtractor(Extractor):
                     "ocr.unavailable",
                     "OCR désactivé ou indisponible : le texte de l'image ne peut pas être vérifié.",
                 )
-                return
             for page in range(frames):
                 ctx.check_cancelled()
                 image.seek(page)
                 frame = prepare_frame(image)
-                for i, line in enumerate(engine.recognize(ocr_view(frame))):
-                    if not line.text.strip():
-                        continue
-                    boxes = line.char_boxes
-                    if not boxes or len(boxes) != len(line.text):
-                        boxes = proportional_boxes(line.text, line.bbox)
+                label = f"page {page + 1}" if frames > 1 else "image"
+                view = ocr_view(frame)
+                lines = recognize(engine, view, document) if engine is not None else None
+                for i, line in enumerate(lines or []):
                     document.segments.append(
                         Segment(
                             id=f"o{page}.{i}",
                             text=line.text,
                             locator=("ocr", page, i),
                             context=SegmentContext(
-                                SegmentKind.OCR,
-                                label=f"page {page + 1}" if frames > 1 else "image",
-                                page=page,
-                                bbox=line.bbox,
+                                SegmentKind.OCR, label=label, page=page, bbox=line.bbox
                             ),
-                            char_boxes=boxes,
+                            char_boxes=line.char_boxes,
+                        )
+                    )
+                for i, code in enumerate(decode_codes(view, ctx.config, document)):
+                    document.segments.append(
+                        Segment(
+                            id=f"c{page}.{i}",
+                            text=code.text,
+                            locator=("code", page, i),
+                            context=SegmentContext(
+                                SegmentKind.BARCODE,
+                                label=f"{BARCODE_LABEL} {label}",
+                                page=page,
+                                bbox=code.bbox,
+                            ),
+                            char_boxes=code_boxes(code),
                         )
                     )

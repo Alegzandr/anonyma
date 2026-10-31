@@ -41,12 +41,14 @@ from anonyma.models import (
     DocumentStatus,
     Entity,
     EntityCluster,
+    EntityType,
     ExpansionBudget,
     ExtractionContext,
     Issue,
     MappingStore,
     OcrEngine,
     Profile,
+    Regime,
     ReviewDecisions,
     ReviewStatus,
     Segment,
@@ -55,12 +57,22 @@ from anonyma.models import (
     Severity,
     VerificationResult,
     WriteContext,
+    Writer,
     new_id,
 )
+from anonyma.policy import apply_policies
 from anonyma.replacer import Replacer, SubstitutionTable, build_plan
-from anonyma.resolver import DOCUMENT_LOCAL_TYPES, propagate, resolve
+from anonyma.resolver import (
+    DOCUMENT_LOCAL_TYPES,
+    PROPAGATION_DETECTOR,
+    TYPE_PRIORITY,
+    cluster_forms,
+    propagate,
+    resolve,
+)
+from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import find_all, normalize, safe_filename
-from anonyma.verifier import Verifier
+from anonyma.verifier import Verifier, is_ocr_issue, spaced_name
 
 log = get_logger("pipeline")
 
@@ -450,9 +462,13 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
             else [s for s in doc.segments if s.id == FILENAME_SEGMENT_ID]
         )
         texts = {s.id: s.text for s in segments}
+        # Detectors read file names with their separators as spaces
+        # (``Contrat_jean_DUPONT.pdf`` -> ``Contrat jean DUPONT pdf``); offsets and
+        # values still refer to the real name.
+        view = [_name_view(s) if s.id == FILENAME_SEGMENT_ID else s for s in segments]
         for detector in detectors:
             try:
-                found = detector.detect(segments, doc.id)
+                found = detector.detect(view, doc.id)
             except Exception as exc:
                 log.warning(
                     "detector %s failed on %s: %s", detector.name, doc.id, type(exc).__name__
@@ -481,6 +497,183 @@ def _analyze_one(
 ) -> tuple[Document, list[Entity]]:
     doc = extract_file(source, name, config, work_dir)
     return doc, detect_tree(doc, config)
+
+
+# ---------------------------------------------------------------------------
+# File names
+# ---------------------------------------------------------------------------
+
+#: Segments that often hold file names or paths (properties, attributes, headers):
+#: batch values are also searched there with separators read as spaces.
+NAME_LIKE_KINDS = frozenset(
+    {
+        SegmentKind.FILENAME,
+        SegmentKind.METADATA,
+        SegmentKind.ATTRIBUTE,
+        SegmentKind.HEADER,
+        SegmentKind.HIDDEN,
+    }
+)
+NEUTRAL_DOCUMENT = "document"
+NEUTRAL_CHILD = "piece_jointe"
+NEUTRAL_FOLDER = "dossier"
+#: Entity type under which neutral file names are kept in the encrypted store.
+FILENAME_STORE_TYPE = "NOM_FICHIER"
+
+
+def _name_view(segment: Segment) -> Segment:
+    """``segment`` (a file name) as detectors should read it: ``_``, ``+`` and the
+    extension dot become spaces. Same length, so offsets stay valid."""
+    text = segment.text.replace("_", " ").replace("+", " ")
+    stem, dot, _ = text.rpartition(".")
+    if dot and stem and "/" not in text[len(stem) :]:
+        text = f"{stem} {text[len(stem) + 1 :]}"
+    return replace(segment, text=text)
+
+
+def propagate_names(
+    documents: Sequence[Document],
+    clusters: Mapping[str, EntityCluster],
+    existing: Sequence[Entity],
+) -> list[Entity]:
+    """Batch values in file names, paths and properties, separators ignored.
+
+    ``propagate`` already finds ``DUPONT`` in ``Contrat_jean_DUPONT.pdf``; this pass
+    also finds the full forms whatever the separators (``jean_DUPONT``,
+    ``DUPONT-Jean``, ``Quintavalle_Brezac``) so that no given name or compound part
+    is left behind. Only new spans (or longer ones) are returned.
+    """
+    matcher: MultiMatcher[tuple[str, str, float]] = MultiMatcher()
+    for cluster in clusters.values():
+        if cluster.review is ReviewStatus.REJECTED or cluster.entity_type in DOCUMENT_LOCAL_TYPES:
+            continue
+        for form, cap in cluster_forms(cluster):
+            needle = spaced_name(form)
+            if len(normalize(needle)) >= 3:
+                target = (cluster.id, cluster.entity_type, cluster.max_score)
+                matcher.add(needle, target, require_capital=cap)
+    if not len(matcher):
+        return []
+    taken: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for e in existing:
+        taken.setdefault((e.document_id, e.segment_id), []).append((e.start, e.end))
+    found: list[Entity] = []
+    for root in documents:
+        for doc in root.walk():
+            readable = doc.status is DocumentStatus.EXTRACTED
+            for segment in doc.segments:
+                if segment.context.kind not in NAME_LIKE_KINDS:
+                    continue
+                if not readable and segment.id != FILENAME_SEGMENT_ID:
+                    continue
+                spans = taken.get((doc.id, segment.id), [])
+                for match in leftmost_longest(matcher.find(spaced_name(segment.text))):
+                    if any(s <= match.start and match.end <= e for s, e in spans):
+                        continue
+                    cluster_id, entity_type, score = max(
+                        match.payloads,
+                        key=lambda t: (t[1] == EntityType.PERSON, TYPE_PRIORITY.get(t[1], 30)),
+                    )
+                    found.append(
+                        Entity(
+                            entity_type=entity_type,
+                            value=segment.text[match.start : match.end],
+                            document_id=doc.id,
+                            segment_id=segment.id,
+                            start=match.start,
+                            end=match.end,
+                            score=score,
+                            detector=PROPAGATION_DETECTOR,
+                            cluster_id=cluster_id,
+                            review=(
+                                ReviewStatus.MANUAL
+                                if clusters[cluster_id].review is ReviewStatus.MANUAL
+                                else ReviewStatus.AUTO
+                            ),
+                        )
+                    )
+    return found
+
+
+def _output_shape(doc: Document) -> tuple[Writer | None, str, bool]:
+    """(writer, output extension, packed folder) of a document."""
+    writer = registry.writer_for(doc.format) if doc.status is DocumentStatus.EXTRACTED else None
+    extension = writer.output_extension(doc) if writer else PurePosixPath(doc.name).suffix
+    # Embedded folder outputs are packed into a zip (containers need one file).
+    pack_folder = writer is not None and writer.directory_output and doc.depth > 0
+    if pack_folder:
+        extension += ".zip"
+    return writer, extension, pack_folder
+
+
+def neutral_names(documents: Sequence[Document]) -> dict[str, str]:
+    """``document id -> neutral output name`` for the whole batch.
+
+    Top-level files: ``document_0001.pdf``... in input order; their folders
+    ``dossier_0001``... (the tree is kept); embedded items (attachments, archive
+    members, mails of a mailbox): ``piece_jointe_0001.pdf``... numbered per
+    container in their order of appearance (flat: inner folders are dropped).
+    Extensions are those of the produced files.
+    """
+    names: dict[str, str] = {}
+    folders: dict[tuple[str, ...], str] = {}
+
+    def child_names(parent: Document) -> None:
+        for number, child in enumerate(parent.children, start=1):
+            names[child.id] = f"{NEUTRAL_CHILD}_{number:04d}{_output_shape(child)[1]}"
+            child_names(child)
+
+    for number, doc in enumerate(documents, start=1):
+        parts = [p for p in doc.name.replace("\\", "/").split("/") if p not in ("", ".", "..")]
+        neutral_dirs = []
+        for depth in range(1, len(parts)):
+            key = tuple(normalize(p) for p in parts[:depth])
+            if key not in folders:
+                folders[key] = f"{NEUTRAL_FOLDER}_{len(folders) + 1:04d}"
+            neutral_dirs.append(folders[key])
+        extension = _output_shape(doc)[1]
+        names[doc.id] = "/".join([*neutral_dirs, f"{NEUTRAL_DOCUMENT}_{number:04d}{extension}"])
+        child_names(doc)
+    return names
+
+
+def _logical_path(doc: Document, parents: Mapping[str, Document], names: Mapping[str, str]) -> str:
+    """Full path of ``doc`` inside the batch (``archive.zip/dossier/x.pdf``)."""
+    parts = [names.get(doc.id, doc.name)]
+    current = doc
+    while current.parent_id is not None and current.parent_id in parents:
+        current = parents[current.parent_id]
+        parts.append(names.get(current.id, current.name))
+    return "/".join(reversed(parts))
+
+
+def store_neutral_names(
+    store: MappingStore, batch_id: str, documents: Sequence[Document], names: Mapping[str, str]
+) -> None:
+    """Keep ``neutral path -> original path`` in the encrypted store (pseudonymization)."""
+    save = getattr(store, "save_filename", None)
+    if save is None:
+        return
+    parents = {d.id: d for root in documents for d in root.walk()}
+    for root in documents:
+        for doc in root.walk():
+            if doc.id in names:
+                save(batch_id, _logical_path(doc, parents, names), _logical_path(doc, parents, {}))
+
+
+def original_names(root: Document) -> list[str]:
+    """Every original name of a top-level document's tree (sensitive)."""
+    return sorted({d.name for d in root.walk() if d.name})
+
+
+def ocr_gaps(root: Document) -> int:
+    """Images/pages of a document tree that OCR could not read at analysis."""
+    return sum(
+        1
+        for d in root.walk()
+        for i in d.issues
+        if is_ocr_issue(i.code) and i.severity is not Severity.INFO
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -525,6 +718,10 @@ class _WriteJob:
     config: Config
     output_dir: Path
     work_dir: Path
+    #: Original names of the tree (searched in the output by the verifier).
+    names: list[str] = field(default_factory=list)
+    #: ``document id -> neutral name`` when ``config.neutral_filenames``.
+    neutral_names: dict[str, str] = field(default_factory=dict)
 
 
 def _counts(entities: Sequence[Entity]) -> dict[str, int]:
@@ -540,13 +737,8 @@ def _write_tree(
     """Write ``doc`` (children first). Top-level goes to the output folder, children
     to the work folder. Returns the result and the written path."""
     entities = by_doc.get(doc.id, [])
-    writer = registry.writer_for(doc.format) if doc.status is DocumentStatus.EXTRACTED else None
-    extension = writer.output_extension(doc) if writer else PurePosixPath(doc.name).suffix
-    # Embedded folder outputs are packed into a zip (containers need one file).
-    pack_folder = writer is not None and writer.directory_output and doc.depth > 0
-    if pack_folder:
-        extension += ".zip"
-    name = anonymized_name(doc, entities, job.table, extension)
+    writer, extension, pack_folder = _output_shape(doc)
+    name = job.neutral_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
     result = DocumentResult(
         document_id=doc.id,
         output_name=name,
@@ -652,21 +844,46 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
                 Issue(
                     Severity.WARNING,
                     "verify.possible_residue",
-                    f"{result.possible_residue_count} résidu(s) possible(s) signalé(s) par "
-                    "un détecteur statistique : à vérifier.",
+                    f"{result.possible_residue_count} résidu(s) possible(s) signalé(s) : "
+                    "à vérifier.",
                 )
             )
-        needs_review = result.review_count or result.possible_residue_count
-        _set_status(
-            result, DocumentStatus.NEEDS_REVIEW if needs_review else DocumentStatus.ANONYMIZED
+        gaps = ocr_gaps(job.document)
+        if gaps:
+            result.issues.append(
+                Issue(
+                    Severity.WARNING,
+                    "analyse.ocr_incomplete",
+                    f"Analyse incomplète : {gaps} image(s) ou page(s) n'ont pas pu être lues "
+                    "par l'OCR. Fichier à revoir.",
+                )
+            )
+        needs_review = result.review_count or result.possible_residue_count or gaps
+        if verification.complete:
+            _set_status(
+                result, DocumentStatus.NEEDS_REVIEW if needs_review else DocumentStatus.ANONYMIZED
+            )
+            return result
+        # Some image or page of the output could not be read back: what it shows was
+        # never checked. Never anonymized: to review, kept out of the clean set.
+        _set_status(result, DocumentStatus.NEEDS_REVIEW)
+        result.issues.append(
+            Issue(
+                Severity.WARNING,
+                "verify.incomplete",
+                f"Vérification incomplète : {verification.unread} image(s) ou page(s) du "
+                "fichier produit n'ont pas pu être lues par l'OCR. Fichier placé en "
+                "quarantaine, à contrôler visuellement.",
+            )
         )
-        return result
 
     quarantined = _unique_path(job.output_dir / QUARANTINE_DIR / result.output_name)
     quarantined.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(written, quarantined)
     result.output_path = quarantined
-    if verification.verified:
+    if verification.clean:
+        pass  # incomplete verification: status and issue set above
+    elif verification.verified:
         _set_status(result, DocumentStatus.RESIDUE)
         result.status = DocumentStatus.RESIDUE
         result.issues.append(
@@ -695,7 +912,13 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
     try:
         output_doc = extract_file(path, name, job.config, verify_dir)
         verifier = Verifier(job.config, detectors_for(job.config))
-        return verifier.verify(output_doc, job.sensitive, job.table.all_substitutes(), job.allowed)
+        return verifier.verify(
+            output_doc,
+            job.sensitive,
+            job.table.all_substitutes(),
+            job.allowed,
+            names=job.names,
+        )
     except Exception as exc:
         log.warning("verification failed for %s: %s", job.document.id, type(exc).__name__)
         return VerificationResult(
@@ -833,8 +1056,10 @@ class Pipeline:
 
         entities, clusters = resolve(entities, self.config)
         extra = propagate(documents, clusters, entities, self.config)
+        extra += propagate_names(documents, clusters, [*entities, *extra])
         entities, clusters = resolve([*entities, *extra], self.config, clusters)
         entities = drop_inside_whitelist(documents, entities, self.config)
+        entities, clusters = apply_policies(documents, entities, clusters, self.config)
         return BatchAnalysis(
             batch_id,
             self.config,
@@ -860,7 +1085,7 @@ class Pipeline:
 
         resolved = self.resolve_decisions(analysis, decisions)
         entities, active = resolved.entities, resolved.clusters
-        table = Replacer(self.config, self.store).assign(active, entities)
+        table = Replacer(self.config, self.store).assign(active, entities, analysis.documents)
         local = {cid for cid, c in active.items() if c.entity_type in DOCUMENT_LOCAL_TYPES}
         batch_wide = sorted(
             {
@@ -872,6 +1097,11 @@ class Pipeline:
         )
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)
         review = {cid for cid, c in active.items() if c.needs_review}
+        neutral: dict[str, str] = {}
+        if self.config.neutral_filenames:
+            neutral = neutral_names(analysis.documents)
+            if self.store is not None and self.config.regime is Regime.PSEUDONYMIZATION:
+                store_neutral_names(self.store, analysis.batch_id, analysis.documents, neutral)
 
         jobs: list[tuple[Any, ...]] = []
         for doc in analysis.documents:
@@ -894,6 +1124,8 @@ class Pipeline:
                         config=self.config,
                         output_dir=output_dir,
                         work_dir=analysis.work_dir / f"w-{new_id()[:8]}",
+                        names=original_names(doc),
+                        neutral_names={d.id: neutral[d.id] for d in doc.walk() if d.id in neutral},
                     ),
                 )
             )
@@ -969,6 +1201,7 @@ def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> Re
         manual = manual_entities(analysis, decisions)
         entities, clusters = resolve([*entities, *manual], config, clusters)
         extra = propagate(analysis.documents, clusters, entities, config)
+        extra += propagate_names(analysis.documents, clusters, [*entities, *extra])
         entities, clusters = resolve([*entities, *extra], config, clusters)
     for cid in decisions.confirmed_clusters:
         if cid in clusters:
@@ -988,6 +1221,7 @@ def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> Re
     # same value is not masked elsewhere (otherwise it is a genuine residue).
     allowed |= {e.value for e in dropped if normalize(e.value) not in kept_values}
     entities = drop_inside_whitelist(analysis.documents, entities, config)
+    entities, active = apply_policies(analysis.documents, entities, active, config, discover=False)
     return ResolvedDecisions(entities, active, sorted(allowed))
 
 
@@ -1079,6 +1313,8 @@ __all__ = [
     "drop_inside_whitelist",
     "extract_file",
     "manual_entities",
+    "neutral_names",
+    "propagate_names",
     "resolve_decisions",
     "validate_output_dir",
 ]

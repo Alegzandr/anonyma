@@ -2,8 +2,13 @@
 
 Modes:
 
-* TAG: ``[PERSONNE_001]``, numbered per type in order of first appearance, stable for
-  the whole batch; a civility in the mention is kept (``M. [PERSONNE_001]``).
+* TAG: ``[PERSONNE_001]``, numbered per batch and per type in order of first
+  appearance (input order, then segment order: independent of worker scheduling),
+  stable for the whole batch; a civility in the mention is kept
+  (``M. [PERSONNE_001]``). With ``tag_numbering = "aleatoire"``, short random ids
+  (``[PERSONNE_K7Q2]``) reveal neither counts nor order. In pseudonymization, known
+  values keep their stored tag and new values always get a random id: sequential
+  numbers would have to skip the stored ones and so reveal the size of the table.
 * REALISTIC: Faker ``fr_FR`` / INSEE given names, deterministic per cluster within a
   batch (and across batches through the mapping store), same gender, same shape
   (case, initials, order, separators), valid checksums, dates shifted by one
@@ -21,7 +26,7 @@ import hashlib
 import hmac
 import random
 import secrets
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from anonyma import checksums
@@ -51,6 +56,10 @@ from anonyma.resolver import identity_key, phone_key
 from anonyma.textutils import normalize
 
 BLACKOUT_CHAR = "█"
+#: Characters of random tag ids: no 0/O, 1/I/L (unambiguous when read back or OCR'd).
+TAG_ID_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+TAG_ID_DIGITS = "23456789"
+TAG_ID_LENGTH = 4
 #: Pseudo entity type used to persist batch parameters in the mapping store.
 PARAMETER_TYPE = "__parametre__"
 DATE_SHIFT_KEY = "decalage_dates"
@@ -106,27 +115,40 @@ class Replacer:
         self._salt = secrets.token_bytes(32)
 
     def assign(
-        self, clusters: Mapping[str, EntityCluster], entities: Sequence[Entity]
+        self,
+        clusters: Mapping[str, EntityCluster],
+        entities: Sequence[Entity],
+        documents: Sequence[Document] | None = None,
     ) -> SubstitutionTable:
         """Give every cluster a substitute, stable for the whole batch (and across
-        batches through the store in pseudonymization)."""
+        batches through the store in pseudonymization).
+
+        ``documents`` (top-level, in input order) fixes the order of first appearance
+        used by sequential tags; without it, the order of ``entities`` is used."""
         table = SubstitutionTable(mode=self.config.mode)
-        first_seen = {e.cluster_id: i for i, e in reversed(list(enumerate(entities)))}
-        ordered = sorted(clusters.values(), key=lambda c: (first_seen.get(c.id, 0), c.id))
+        first_seen = appearance_order(entities, documents)
+        last = (len(first_seen) + 1, 0, 0, 0)
+
+        def order(c: EntityCluster) -> tuple[tuple[int, int, int, int], str, str]:
+            return (first_seen.get(c.id, last), c.entity_type, normalize(c.canonical))
+
+        ordered = sorted(clusters.values(), key=order)
         if self.config.mode is ReplacementMode.REALISTIC:
             _Realistic(self, clusters, table).run(ordered)
         else:
-            self._tags(ordered, table, self.store.used_substitutes() if self.store else set())
+            self._tags(ordered, table)
         return table
 
     # -- tags ------------------------------------------------------------------
 
-    def _tags(
-        self, ordered: Sequence[EntityCluster], table: SubstitutionTable, used: set[str]
-    ) -> None:
-        counters: dict[str, int] = {}
+    def tag_allocator(self) -> TagAllocator:
+        used = self.store.used_substitutes() if self.store else set()
+        return TagAllocator(self.config, self.store, used)
+
+    def _tags(self, ordered: Sequence[EntityCluster], table: SubstitutionTable) -> None:
+        tags = self.tag_allocator()
         for cluster in ordered:
-            tag = self._tag_for(cluster, counters, used)
+            tag = tags.tag_for(cluster)
             table.by_cluster[cluster.id] = tag
             if cluster.entity_type == EntityType.PERSON:
                 for variant in cluster.variants:
@@ -136,20 +158,6 @@ class Replacer:
                             f"{person.civility} {tag}"
                         )
 
-    def _tag_for(self, cluster: EntityCluster, counters: dict[str, int], used: set[str]) -> str:
-        key = self.store_key(cluster)
-        if self.store and (known := self.store.lookup(cluster.entity_type, key)):
-            return known
-        while True:
-            counters[cluster.entity_type] = counters.get(cluster.entity_type, 0) + 1
-            tag = f"[{cluster.entity_type}_{counters[cluster.entity_type]:03d}]"
-            if tag not in used:
-                break
-        used.add(tag)
-        if self.store:
-            self.store.save(cluster.entity_type, key, cluster.canonical, tag)
-        return tag
-
     @staticmethod
     def store_key(cluster: EntityCluster) -> str:
         return identity_key(cluster.entity_type, cluster.canonical)
@@ -157,6 +165,87 @@ class Replacer:
     def rng(self, *parts: str) -> random.Random:
         digest = hmac.new(self._salt, "\x00".join(parts).encode("utf-8"), hashlib.sha256)
         return random.Random(int.from_bytes(digest.digest()[:8], "big"))
+
+
+def appearance_order(
+    entities: Sequence[Entity], documents: Sequence[Document] | None = None
+) -> dict[str, tuple[int, int, int, int]]:
+    """Cluster id -> position of its first mention (document, segment, offsets).
+
+    Documents are ranked in input order (depth-first through containers), segments
+    in extraction order: the result never depends on how workers were scheduled.
+    """
+    doc_rank: dict[str, int] = {}
+    seg_rank: dict[tuple[str, str], int] = {}
+    for root in documents or ():
+        for doc in root.walk():
+            doc_rank.setdefault(doc.id, len(doc_rank))
+            for j, seg in enumerate(doc.segments):
+                seg_rank.setdefault((doc.id, seg.id), j)
+    for e in entities:  # documents not given (or unknown ones): order of the list
+        doc_rank.setdefault(e.document_id, len(doc_rank))
+        seg_rank.setdefault((e.document_id, e.segment_id), len(seg_rank))
+    first: dict[str, tuple[int, int, int, int]] = {}
+    for e in entities:
+        if e.cluster_id is None:
+            continue
+        key = (doc_rank[e.document_id], seg_rank[(e.document_id, e.segment_id)], e.start, e.end)
+        if e.cluster_id not in first or key < first[e.cluster_id]:
+            first[e.cluster_id] = key
+    return first
+
+
+class TagAllocator:
+    """Tags of one batch: sequential per type, or random short ids.
+
+    Random ids (``[PERSONNE_K7Q2]``: 4 characters, at least one digit and one
+    letter) are used with ``tag_numbering = "aleatoire"`` and, whatever the setting,
+    for values new to the mapping store in pseudonymization, so that a tag never
+    reveals how many values were processed before. They never collide with a tag of
+    the store or of the batch.
+    """
+
+    def __init__(self, config: Config, store: MappingStore | None, used: Iterable[str]) -> None:
+        self.store = store
+        self.random = config.tag_numbering == "aleatoire" or store is not None
+        self.used = set(used)
+        self.counters: dict[str, int] = {}
+        self._rng = random.SystemRandom()
+
+    def tag_for(self, cluster: EntityCluster) -> str:
+        key = Replacer.store_key(cluster)
+        if self.store and (known := self.store.lookup(cluster.entity_type, key)):
+            self.used.add(known)
+            return known
+        entity_type = cluster.entity_type
+        tag = self._random(entity_type) if self.random else self._next(entity_type)
+        self.used.add(tag)
+        if self.store:
+            self.store.save(entity_type, key, cluster.canonical, tag)
+        return tag
+
+    def _next(self, entity_type: str) -> str:
+        while True:
+            self.counters[entity_type] = self.counters.get(entity_type, 0) + 1
+            tag = f"[{entity_type}_{self.counters[entity_type]:03d}]"
+            if tag not in self.used:
+                return tag
+
+    def _random(self, entity_type: str) -> str:
+        length = TAG_ID_LENGTH
+        attempts = 0
+        while True:
+            chars = [self._rng.choice(TAG_ID_ALPHABET) for _ in range(length)]
+            if not any(c in TAG_ID_DIGITS for c in chars):
+                chars[self._rng.randrange(length)] = self._rng.choice(TAG_ID_DIGITS)
+            if all(c in TAG_ID_DIGITS for c in chars):
+                continue
+            tag = f"[{entity_type}_{''.join(chars)}]"
+            if tag not in self.used:
+                return tag
+            attempts += 1
+            if attempts > 1000:  # crowded id space: lengthen the ids
+                length, attempts = length + 1, 0
 
 
 class _Realistic:
@@ -198,10 +287,7 @@ class _Realistic:
                             self.forbidden_tokens.add(key)
         self.forbidden.discard("")
         self.shift = self._date_shift()
-        self.tagger = Replacer(
-            Config(mode=ReplacementMode.TAG, regime=replacer.config.regime), replacer.store
-        )
-        self.counters: dict[str, int] = {}
+        self.tags = replacer.tag_allocator()
 
     # -- orchestration -----------------------------------------------------------
 
@@ -257,8 +343,9 @@ class _Realistic:
             self.store.save(cluster.entity_type, key, cluster.canonical, base)
 
     def _tag(self, cluster: EntityCluster) -> None:
-        tag = self.tagger._tag_for(cluster, self.counters, self.used)
+        tag = self.tags.tag_for(cluster)
         self.table.by_cluster[cluster.id] = tag
+        self.used.add(normalize(tag))
 
     def _acceptable(self, cluster: EntityCluster, result: Mapping[str, str]) -> bool:
         for substitute in result.values():
@@ -438,14 +525,17 @@ def _dates(
     st: _Realistic, cluster: EntityCluster, rng: random.Random, known: str | None
 ) -> dict[str, str]:
     out: dict[str, str] = {}
+
+    def shifted(value: str) -> str:
+        return (
+            fk.shift_date(value, st.shift)
+            or fk.shift_timestamp(value, st.shift, rng)
+            or fk.random_like(value, rng)
+        )
+
     for variant in cluster.variants:
-        shifted = fk.shift_date(variant, st.shift)
-        out[variant] = shifted if shifted is not None else fk.random_like(variant, rng)
-    base = (
-        known
-        or fk.shift_date(cluster.canonical, st.shift)
-        or fk.random_like(cluster.canonical, rng)
-    )
+        out[variant] = shifted(variant)
+    base = known or shifted(cluster.canonical)
     out[""] = base
     return out
 
@@ -528,6 +618,7 @@ GENERATORS: dict[str, Generator] = {
     EntityType.JOB_TITLE: _shared(fk.fake_job),
     EntityType.USERNAME: _shared(fk.fake_username),
     EntityType.CASE_NUMBER: _shared(fk.random_like),
+    EntityType.OPAQUE_ID: _shared(fk.random_like),
     EntityType.SUSPICIOUS_TOKEN: _shared(fk.random_like),
     EntityType.PROPER_NOUN: _shared(fk.fake_last_name),
 }
@@ -553,7 +644,8 @@ def build_plan(
         text = texts.get(segment_id)
         if text is None:
             continue
-        items.sort(key=lambda e: (e.start, -(e.end - e.start)))
+        # On equal spans a whole-code entity gives the substitute ([CODE_BARRES_001]).
+        items.sort(key=lambda e: (e.start, -(e.end - e.start), e.entity_type != EntityType.BARCODE))
         merged: list[tuple[int, int, Entity]] = []
         for e in items:
             if e.start < 0 or e.end > len(text) or e.start >= e.end:
@@ -595,4 +687,11 @@ def _extend(text: str, start: int, end: int, head: Entity, substitute: str) -> s
     return f"{lead}{substitute}{trail}"
 
 
-__all__ = ["BLACKOUT_CHAR", "Replacer", "SubstitutionTable", "build_plan"]
+__all__ = [
+    "BLACKOUT_CHAR",
+    "Replacer",
+    "SubstitutionTable",
+    "TagAllocator",
+    "appearance_order",
+    "build_plan",
+]

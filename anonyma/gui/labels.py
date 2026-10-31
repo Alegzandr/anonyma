@@ -47,6 +47,8 @@ KIND_LABELS: dict[SegmentKind, str] = {
     SegmentKind.NOTE: "Notes",
     SegmentKind.FILENAME: "Nom de fichier",
     SegmentKind.HIDDEN: "Contenu masqué",
+    SegmentKind.BARCODE: "Codes-barres et QR codes",
+    SegmentKind.SIGNATURE: "Signatures électroniques",
 }
 
 #: Status -> badge level (see ``theme.BADGE_LEVELS``).
@@ -96,6 +98,8 @@ ENTITY_TYPE_LABELS: dict[str, str] = {
     EntityType.PROPER_NOUN: "Nom propre",
     EntityType.SUSPICIOUS_TOKEN: "Séquence suspecte",
     EntityType.BUSINESS_TERM: "Terme métier",
+    EntityType.OPAQUE_ID: "Identifiant technique",
+    EntityType.BARCODE: "Code-barres / QR code",
 }
 
 

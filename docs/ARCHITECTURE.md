@@ -81,6 +81,40 @@ reported in `registry.unavailable` and its format becomes "non supporté".
 * Outputs that fail verification go to `<output>/_quarantaine/` and are never
   marked anonymized.
 
+## Verification and statuses
+
+The written output is re-extracted with the same extractors (so every page is
+rendered and OCR'd, codes decoded, invisible text and metadata read) and checked by
+`Verifier.verify` against every value detected in the batch (with derived, mixed-case,
+hyphen-free and OCR-tolerant forms), every detector of the profile, and the original
+names of the file and of its embedded items (each path component and its stem,
+certain; their distinctive words, possible). Values kept by the organization policy
+(`policy.keeps`) are not residues.
+
+| Outcome | Status | Output |
+|---|---|---|
+| certain residue | RESIDUE | `_quarantaine/` |
+| output not re-extractable | FAILED | `_quarantaine/` |
+| an image/page of the **output** could not be OCR'd (`VerificationResult.unread`, any `ocr` issue: OCR disabled, unavailable, failed) | NEEDS_REVIEW + `verify.incomplete` | `_quarantaine/` (content never checked) |
+| possible residue, uncertain entities, or an image/page of the **input** not OCR'd (`analyse.ocr_incomplete`) | NEEDS_REVIEW | output folder |
+| none of the above | ANONYMIZED | output folder |
+
+An issue is an OCR gap when one of the dot-separated parts of its code starts with
+`ocr` (`ocr.failed`, `pdf.ocr_unavailable`). The CLI exits with code 1 when any output
+is in quarantine.
+
+## File names
+
+Names go through detection like any text: the pipeline adds a FILENAME segment to
+every document (detectors read it with `_`, `+` and the extension dot as spaces), and
+`propagate_names` searches every batch value in names, metadata, attributes and
+headers with separators ignored (`Contrat_jean_DUPONT.pdf`, `DUPONT-Jean.pdf`).
+With `Config.neutral_filenames`, outputs are named `document_0001.ext` (input order),
+their folders `dossier_0001`, and embedded items `piece_jointe_0001.ext` (numbered per
+container, inner folders dropped); in pseudonymization the correspondence is saved in
+the encrypted store (`save_filename` / `filenames`, `anonyma reidentifier --noms`).
+Reports, logs and CLI messages only show output names, never input paths.
+
 ## Tests
 
 `tests/test_contracts.py` runs every fixture of `tests/fixtures/contract/` through

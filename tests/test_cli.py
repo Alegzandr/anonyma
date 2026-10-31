@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -240,7 +241,11 @@ def test_pseudonymization_roundtrip(tmp_path: Path, corpus: Path, business_list:
     assert table.is_file()
     assert CANARY_PERSON.encode() not in table.read_bytes()
 
-    result = invoke("reidentifier", "--balise", "[PERSONNE_001]", "--table", table, env=env)
+    # Pseudonymization: new values get random ids (never the size of the table).
+    written = next(out.rglob("lettre.txt")).read_text(encoding="utf-8")
+    tag = re.search(r"\[PERSONNE_[A-Z2-9]{4}\]", written)
+    assert tag is not None
+    result = invoke("reidentifier", "--balise", tag.group(), "--table", table, env=env)
     assert result.exit_code == 0
     assert CANARY_PERSON in result.output
     result = invoke("reidentifier", "-b", "[PERSONNE_404]", "--table", table, env=env)
@@ -390,3 +395,95 @@ def test_models_download(
     assert "non commercial" in result.output
     result = invoke("modeles", "telecharger", "modele-test", input="n\n")
     assert result.exit_code == 1
+
+
+# -- protection options (global fix) --------------------------------------------------
+
+
+def test_run_protection_options(tmp_path: Path, corpus: Path, business_list: Path) -> None:
+    orgs = tmp_path / "organisations.txt"
+    orgs.write_text("Éditions Exemplaires\nexemple.test\n", encoding="utf-8")
+    out = tmp_path / "sortie"
+    result = invoke(
+        *_run_args(
+            corpus,
+            out,
+            business_list,
+            "--noms-neutres",
+            "--sans-ocr",
+            "--sans-codes-barres",
+            "--conserver-identifiants",
+            "--identifiant-autorise",
+            "re:^REF-",
+            "--organisations",
+            "sauf_liste_blanche",
+            "--organisations-blanches",
+            orgs,
+            "--numerotation",
+            "aleatoire",
+            "--rapport",
+            tmp_path / "rapport.json",
+        )
+    )
+    assert result.exit_code == 0, result.output
+    assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*.*")) == [
+        "dossier_0001/document_0001.txt",
+        "dossier_0001/document_0002.md",
+    ]
+    report = json.loads((tmp_path / "rapport.json").read_text(encoding="utf-8"))
+    assert report["parametres"]["Noms des fichiers"] == "neutres"
+    assert report["parametres"]["OCR"] == "non"
+    assert "uintavalle" not in (tmp_path / "rapport.json").read_text(encoding="utf-8")
+
+
+def test_apply_protection_options() -> None:
+    config = Config()
+    cli._apply_protection(
+        config,
+        cli.ProtectionOptions(
+            ocr=False,
+            ocr_pages=False,
+            barcodes=False,
+            remove_invisible=False,
+            opaque_ids=False,
+            opaque_whitelist=["re:^X"],
+            organizations=cli.OrganizationChoice.BLACKLIST,
+            neutral_names=True,
+            numbering=cli.NumberingChoice.RANDOM,
+        ),
+    )
+    assert not (config.ocr_enabled or config.ocr_full_pages or config.decode_barcodes)
+    assert not (config.remove_invisible_text or config.mask_opaque_ids)
+    assert config.opaque_id_whitelist == ["re:^X"]
+    assert config.organization_policy == "liste_noire"
+    assert config.neutral_filenames and config.tag_numbering == "aleatoire"
+
+
+def test_missing_input_path_is_not_echoed(tmp_path: Path) -> None:
+    result = invoke("run", tmp_path / f"CV {CANARY_PERSON}.pdf", "-o", tmp_path / "o")
+    assert result.exit_code == 2
+    assert "introuvable" in result.output and "uintavalle" not in result.output
+
+
+def test_config_set_organization_whitelist(tmp_path: Path) -> None:
+    conf = tmp_path / "c.json"
+    key = "organization_whitelist"
+    assert (
+        invoke("config", "definir", key, "Exemple, exemple.test", "--config", conf).exit_code == 0
+    )
+    assert Config.load(conf).organization_whitelist == ["Exemple", "exemple.test"]
+    assert invoke("config", "definir", key, "defaut", "--config", conf).exit_code == 0
+    assert Config.load(conf).organization_whitelist is None
+
+
+def test_reidentifier_neutral_names(tmp_path: Path, corpus: Path, business_list: Path) -> None:
+    table = tmp_path / "table.anonyma"
+    env = {cli.PASSPHRASE_ENV: SECRET}
+    args = _run_args(corpus, tmp_path / "sortie", business_list, "--noms-neutres")
+    result = invoke(*args, "--regime", "pseudonymisation", "--table", table, env=env)
+    assert result.exit_code == 0, result.output
+    assert CANARY_PERSON.encode() not in table.read_bytes()
+    result = invoke("reidentifier", "--noms", "--table", table, env=env)
+    assert result.exit_code == 0, result.output
+    assert "document_0002.md" in result.output
+    assert f"note {CANARY_PERSON}.md" in result.output

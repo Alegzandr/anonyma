@@ -14,7 +14,7 @@ from anonyma.models import (
     SegmentKind,
     Severity,
 )
-from anonyma.verifier import DETECTOR_HIT, ORIGINAL_VALUE, Verifier, worth_checking
+from anonyma.verifier import DETECTOR_HIT, ORIGINAL_VALUE, Verifier, is_ocr_issue, worth_checking
 
 
 def output(*texts: str, label: str = "") -> Document:
@@ -116,3 +116,80 @@ def test_residue_location_and_label() -> None:
     result = verify(output("Jean Dupont", label="dc:creator"), [("Jean Dupont", "PERSONNE")], set())
     (res,) = result.residues
     assert res.location == "sortie.txt" and res.segment_label == "dc:creator"
+
+
+def _ocr_output(*texts: str) -> Document:
+    doc = Document(source=Path("x"), name="scan.png", format="png", status=DocumentStatus.EXTRACTED)
+    doc.segments = [
+        Segment(f"o{i}", t, ("ocr", 0, i), SegmentContext(SegmentKind.OCR, "image"))
+        for i, t in enumerate(texts)
+    ]
+    return doc
+
+
+def test_mixed_case_and_hyphen_variants() -> None:
+    sensitive = [("Zéphyrin Quintavalle-Brezac", "PERSONNE")]
+    for text in (
+        "signé zéphyrin QUINTAVALLE-BREZAC",
+        "QUINTAVALLE BREZAC",
+        "par QuintavalleBrezac",
+    ):
+        assert verify(output(text), sensitive, set()).certain_residues, text
+
+
+def test_ocr_skeleton_forms() -> None:
+    sensitive = [("Zéphyrin Quintavalle", "PERSONNE"), ("9f3a7c21e8b04d56a1f2", "IDENTIFIANT")]
+    misread = _ocr_output("Signé par Zephyrln Qu1ntavalle", "Ref 9f3a7c2le8bO4d56alf2")
+    result = verify(misread, sensitive, set())
+    assert {r.detector for r in result.residues} == {"table_ocr"}
+    assert len(result.certain_residues) == 2
+    # Only OCR text is read with this tolerance.
+    assert verify(output("Zephyrln Qu1ntavalle"), sensitive, set()).clean
+
+
+def test_original_names_are_searched() -> None:
+    doc = output("Titre : Contrat_zephyrin_QUINTAVALLE_signe", "voir Quintavalle demain")
+    doc.name = "Contrat_[PERSONNE_001]_signe.pdf"
+    result = Verifier(Config(), []).verify(
+        doc, [], set(), names=["Dossier/Contrat_zephyrin_QUINTAVALLE_signe.pdf"]
+    )
+    by_value = {r.value: r for r in result.residues}
+    assert by_value["Contrat_zephyrin_QUINTAVALLE_signe"].certain
+    assert by_value["Contrat_zephyrin_QUINTAVALLE_signe"].entity_type == "NOM_FICHIER"
+    assert not by_value["Quintavalle"].certain  # a word of the name: possible only
+
+
+def test_names_still_in_output_names_are_not_residues() -> None:
+    doc = output("Rapport annuel Zorvalix 2026")
+    doc.name = "Rapport_Zorvalix_2026.pdf"
+    result = Verifier(Config(), []).verify(doc, [], set(), names=["Rapport_Zorvalix_2026.pdf"])
+    assert result.clean and not result.residues
+    # Common words alone never count.
+    plain = output("Le rapport annuel")
+    plain.name = "document_0001.pdf"
+    assert (
+        not Verifier(Config(), []).verify(plain, [], set(), names=["rapport_annuel.pdf"]).residues
+    )
+
+
+def test_ocr_issues_make_verification_incomplete() -> None:
+    doc = output("rien")
+    doc.add_issue(Severity.WARNING, "pdf.ocr_unavailable", "OCR indisponible.")
+    child = _ocr_output()
+    child.status = DocumentStatus.FAILED
+    child.add_issue(Severity.ERROR, "ocr.unavailable", "OCR indisponible.")
+    child.segments.append(
+        Segment(
+            "m0", "Auteur Zéphyrin Quintavalle", ("meta", 0), SegmentContext(SegmentKind.METADATA)
+        )
+    )
+    doc.children.append(child)
+    result = verify(doc, [("Zéphyrin Quintavalle", "PERSONNE")], set())
+    assert result.verified and not result.complete and result.unread == 2
+    # The readable part of an item whose OCR failed is still scanned.
+    assert [r.segment_label for r in result.residues] == [""]
+
+
+def test_is_ocr_issue() -> None:
+    assert is_ocr_issue("ocr.failed") and is_ocr_issue("pdf.ocr_unavailable")
+    assert not is_ocr_issue("office.media_blanked") and not is_ocr_issue("extract.error")

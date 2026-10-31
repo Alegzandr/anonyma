@@ -37,14 +37,40 @@ from anonyma.gui.context import AppContext
 from anonyma.gui.controller import DEFAULT_STORE_NAME, REVIEW_POLICIES, review_policy
 from anonyma.gui.dialogs import normalize_type
 from anonyma.gui.labels import MODE_LABELS, PROFILE_LABELS, REGIME_LABELS
-from anonyma.gui.widgets import Banner, button, muted, page_header, primary_button
+from anonyma.gui.widgets import (
+    Banner,
+    button,
+    left_header,
+    muted,
+    pad_spin,
+    page_header,
+    primary_button,
+)
 from anonyma.logs import get_logger
 from anonyma.model_catalog import ModelKind
 from anonyma.models import EntityType, Profile, Regime, ReplacementMode
+from anonyma.policy import (
+    POLICY_ALL,
+    POLICY_BLACKLIST,
+    POLICY_EXCEPT_WHITELIST,
+    default_whitelist,
+    effective_whitelist,
+)
 
 log = get_logger("gui.settings")
 
 LISTS_DIR = "listes"
+ORGANIZATION_POLICY_LABELS: dict[str, str] = {
+    POLICY_EXCEPT_WHITELIST: (
+        "Toutes, sauf la liste blanche (éditeurs, prestataires, sites publics)"
+    ),
+    POLICY_ALL: "Toutes, sans exception",
+    POLICY_BLACKLIST: "Uniquement celles de la liste noire",
+}
+TAG_NUMBERING_LABELS: dict[str, str] = {
+    "sequentiel": "Séquentielle par lot — [PERSONNE_001]",
+    "aleatoire": "Aléatoire — [PERSONNE_K7Q2] (ne révèle ni le nombre ni l'ordre)",
+}
 
 
 def business_lists_dir() -> Path:
@@ -70,6 +96,7 @@ def _two_column_table(headers: tuple[str, str]) -> QTableWidget:
     table = QTableWidget(0, 2)
     table.setHorizontalHeaderLabels(list(headers))
     table.verticalHeader().hide()
+    left_header(table)
     table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
     table.setColumnWidth(1, 200)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -120,6 +147,7 @@ class SettingsPage(QWidget):
             spin.setRange(0.0, 1.0)
             spin.setSingleStep(0.05)
             spin.setDecimals(2)
+        pad_spin(self.min_score, self.review_threshold)
         f.addRow("Score minimal retenu", self.min_score)
         f.addRow("Seuil d'envoi en revue", self.review_threshold)
         thresholds_hint = muted(
@@ -136,6 +164,18 @@ class SettingsPage(QWidget):
         self.llm_model = QComboBox()
         f.addRow("Modèle GLiNER", self.gliner_model)
         f.addRow("Modèle de langue", self.llm_model)
+        self.detect_dates = QCheckBox("Masquer toutes les dates")
+        self.detect_dates.setObjectName("DetectDates")
+        f.addRow("", self.detect_dates)
+        f.addRow(
+            "",
+            muted("Les dates de naissance et les horodatages de signature sont toujours masqués."),
+        )
+        self.mask_opaque_ids = QCheckBox(
+            "Masquer les identifiants techniques (empreintes, UUID, jetons, n° de transaction)"
+        )
+        self.mask_opaque_ids.setObjectName("MaskOpaqueIds")
+        f.addRow("", self.mask_opaque_ids)
         form_layout.addWidget(detection)
 
         # Replacement --------------------------------------------------------------------
@@ -154,6 +194,21 @@ class SettingsPage(QWidget):
         for key, label in REVIEW_POLICIES.items():
             self.review_policy.addItem(label, key)
         f.addRow("Relecture avant écriture", self.review_policy)
+        self.tag_numbering = QComboBox()
+        self.tag_numbering.setObjectName("TagNumbering")
+        for key, label in TAG_NUMBERING_LABELS.items():
+            self.tag_numbering.addItem(label, key)
+        f.addRow("Numérotation des balises", self.tag_numbering)
+        tags_hint = muted(
+            "En pseudonymisation, une nouvelle valeur reçoit toujours un identifiant aléatoire."
+        )
+        tags_hint.setWordWrap(False)
+        f.addRow("", tags_hint)
+        self.neutral_filenames = QCheckBox(
+            "Noms de fichiers neutres en sortie (document_0001.pdf, dossier_0001…)"
+        )
+        self.neutral_filenames.setObjectName("NeutralFilenames")
+        f.addRow("", self.neutral_filenames)
         store_row = QHBoxLayout()
         self.store_path = QLineEdit()
         self.store_path.setPlaceholderText(str(paths.data_dir() / DEFAULT_STORE_NAME))
@@ -212,6 +267,53 @@ class SettingsPage(QWidget):
         lv.addLayout(row)
         form_layout.addWidget(lists)
 
+        # Organizations ----------------------------------------------------------------------
+        organizations = QGroupBox("Organisations, sites et domaines")
+        ov = QVBoxLayout(organizations)
+        of = QFormLayout()
+        self.organization_policy = QComboBox()
+        self.organization_policy.setObjectName("OrganizationPolicy")
+        for key, label in ORGANIZATION_POLICY_LABELS.items():
+            self.organization_policy.addItem(label, key)
+        of.addRow("Organisations masquées", self.organization_policy)
+        ov.addLayout(of)
+        ov.addWidget(
+            muted(
+                "Une décision vaut partout : nom dans le texte, logo, adresses web et domaines. "
+                "Les données personnelles d'une adresse conservée restent masquées."
+            )
+        )
+        ov.addWidget(
+            QLabel("<b>Liste blanche</b> — organisations ou domaines jamais masqués, un par ligne")
+        )
+        self.organization_whitelist = QPlainTextEdit()
+        self.organization_whitelist.setObjectName("OrganizationWhitelist")
+        self.organization_whitelist.setMinimumHeight(110)
+        ov.addWidget(self.organization_whitelist)
+        row = QHBoxLayout()
+        reset_whitelist = button("Rétablir la liste par défaut", "undo")
+        reset_whitelist.clicked.connect(self._reset_organization_whitelist)
+        row.addWidget(reset_whitelist)
+        row.addStretch(1)
+        ov.addLayout(row)
+        ov.addWidget(QLabel("<b>Liste noire</b> — organisations ou domaines toujours masqués"))
+        self.organization_blacklist = QPlainTextEdit()
+        self.organization_blacklist.setObjectName("OrganizationBlacklist")
+        self.organization_blacklist.setMinimumHeight(70)
+        ov.addWidget(self.organization_blacklist)
+        ov.addWidget(
+            QLabel(
+                "<b>Identifiants techniques jamais masqués</b> — valeurs exactes, ou "
+                "expressions régulières préfixées « re: »"
+            )
+        )
+        self.opaque_id_whitelist = QPlainTextEdit()
+        self.opaque_id_whitelist.setObjectName("OpaqueIdWhitelist")
+        self.opaque_id_whitelist.setMinimumHeight(60)
+        self.opaque_id_whitelist.setPlaceholderText(r"ex. re:FACT-\d{6}")
+        ov.addWidget(self.opaque_id_whitelist)
+        form_layout.addWidget(organizations)
+
         # Advanced detection ------------------------------------------------------------------
         advanced = QGroupBox("Détection avancée")
         av = QVBoxLayout(advanced)
@@ -248,9 +350,22 @@ class SettingsPage(QWidget):
         self.workers = QSpinBox()
         self.workers.setRange(0, 64)
         self.workers.setSpecialValueText("Automatique")
+        pad_spin(self.workers)
         f.addRow("Processus de traitement", self.workers)
         self.ocr = QCheckBox("Reconnaître le texte des images et des documents numérisés (OCR)")
         f.addRow("", self.ocr)
+        self.ocr_full_pages = QCheckBox(
+            "PDF : reconnaître aussi le texte de chaque page rendue (tampons, signatures, "
+            "champs aplatis)"
+        )
+        self.ocr_full_pages.setObjectName("OcrFullPages")
+        f.addRow("", self.ocr_full_pages)
+        self.decode_barcodes = QCheckBox("Lire et masquer les QR codes et codes-barres")
+        self.decode_barcodes.setObjectName("DecodeBarcodes")
+        f.addRow("", self.decode_barcodes)
+        self.remove_invisible_text = QCheckBox("PDF : supprimer le texte invisible")
+        self.remove_invisible_text.setObjectName("RemoveInvisibleText")
+        f.addRow("", self.remove_invisible_text)
         self.use_libreoffice = QCheckBox(
             "Utiliser LibreOffice pour les anciens formats (.doc, .xls…)"
         )
@@ -292,17 +407,38 @@ class SettingsPage(QWidget):
             self.review_policy,
             self.gliner_model,
             self.llm_model,
+            self.tag_numbering,
+            self.organization_policy,
         ):
             w.currentIndexChanged.connect(self._mark_dirty)
         for spin in (self.min_score, self.review_threshold):
             spin.valueChanged.connect(self._mark_dirty)
         self.workers.valueChanged.connect(self._mark_dirty)
-        for check in (self.paranoid, self.ocr, self.use_libreoffice):
+        for check in (
+            self.paranoid,
+            self.ocr,
+            self.use_libreoffice,
+            self.detect_dates,
+            self.mask_opaque_ids,
+            self.neutral_filenames,
+            self.ocr_full_pages,
+            self.decode_barcodes,
+            self.remove_invisible_text,
+        ):
             check.toggled.connect(self._mark_dirty)
         for edit in (self.store_path, self.libreoffice_path):
             edit.textChanged.connect(self._mark_dirty)
-        for text in (self.whitelist, self.case_patterns):
+        for text in (
+            self.whitelist,
+            self.case_patterns,
+            self.organization_whitelist,
+            self.organization_blacklist,
+            self.opaque_id_whitelist,
+        ):
             text.textChanged.connect(self._mark_dirty)
+        self.organization_policy.currentIndexChanged.connect(self._update_organization_lists)
+        self.mask_opaque_ids.toggled.connect(self.opaque_id_whitelist.setEnabled)
+        self.ocr.toggled.connect(self.ocr_full_pages.setEnabled)
         for table in (self.always_mask, self.custom_labels):
             table.itemChanged.connect(self._mark_dirty)
         self.regime.currentIndexChanged.connect(self._update_store_visibility)
@@ -360,8 +496,22 @@ class SettingsPage(QWidget):
             self.use_libreoffice.setChecked(config.use_libreoffice)
             self.libreoffice_path.setText(config.libreoffice_path)
             self._select(self.theme, str(config.ui.get("theme", theme.DEFAULT_THEME)))
+            self.detect_dates.setChecked(config.detect_dates)
+            self.mask_opaque_ids.setChecked(config.mask_opaque_ids)
+            self.opaque_id_whitelist.setPlainText("\n".join(config.opaque_id_whitelist))
+            self._select(self.tag_numbering, config.tag_numbering)
+            self.neutral_filenames.setChecked(config.neutral_filenames)
+            self._select(self.organization_policy, config.organization_policy)
+            self.organization_whitelist.setPlainText("\n".join(effective_whitelist(config)))
+            self.organization_blacklist.setPlainText("\n".join(config.organization_blacklist))
+            self.ocr_full_pages.setChecked(config.ocr_full_pages)
+            self.decode_barcodes.setChecked(config.decode_barcodes)
+            self.remove_invisible_text.setChecked(config.remove_invisible_text)
         finally:
             self._loading = False
+        self.opaque_id_whitelist.setEnabled(self.mask_opaque_ids.isChecked())
+        self.ocr_full_pages.setEnabled(self.ocr.isChecked())
+        self._update_organization_lists()
         self._update_store_visibility()
         self._check_patterns()
         self._set_dirty(False)
@@ -419,6 +569,25 @@ class SettingsPage(QWidget):
         config.use_libreoffice = self.use_libreoffice.isChecked()
         config.libreoffice_path = self.libreoffice_path.text().strip()
         config.ui["theme"] = str(self.theme.currentData())
+        config.detect_dates = self.detect_dates.isChecked()
+        config.mask_opaque_ids = self.mask_opaque_ids.isChecked()
+        opaque = _lines(self.opaque_id_whitelist)
+        errors = validate_patterns([p[3:] for p in opaque if p.startswith("re:")])
+        if errors:
+            raise ValueError("Identifiants techniques : " + " ; ".join(m for _, m in errors) + ".")
+        config.opaque_id_whitelist = opaque
+        config.tag_numbering = str(self.tag_numbering.currentData())
+        config.neutral_filenames = self.neutral_filenames.isChecked()
+        config.organization_policy = str(self.organization_policy.currentData())
+        whitelist = _lines(self.organization_whitelist)
+        # The bundled list is stored as None so that application updates extend it.
+        config.organization_whitelist = (
+            None if whitelist == list(default_whitelist()) else whitelist
+        )
+        config.organization_blacklist = _lines(self.organization_blacklist)
+        config.ocr_full_pages = self.ocr_full_pages.isChecked()
+        config.decode_barcodes = self.decode_barcodes.isChecked()
+        config.remove_invisible_text = self.remove_invisible_text.isChecked()
         config.validate()
         return config
 
@@ -556,6 +725,15 @@ class SettingsPage(QWidget):
         files = dialogs.open_files(self, "Exécutable de LibreOffice", ["soffice*", "libreoffice*"])
         if files:
             self.libreoffice_path.setText(str(files[0]))
+
+    def _reset_organization_whitelist(self) -> None:
+        self.organization_whitelist.setPlainText("\n".join(default_whitelist()))
+
+    def _update_organization_lists(self, *_args: object) -> None:
+        """Only the list the chosen policy uses is editable."""
+        policy = self.organization_policy.currentData()
+        self.organization_whitelist.setEnabled(policy == POLICY_EXCEPT_WHITELIST)
+        self.organization_blacklist.setEnabled(policy != POLICY_ALL)
 
     def _update_store_visibility(self) -> None:
         pseudo = self.regime.currentData() == Regime.PSEUDONYMIZATION.value

@@ -34,6 +34,8 @@ PARTICLES = frozenset(
 )  # fmt: skip
 
 _TOKEN = re.compile(r"[^\s,;:()\"«»<>]+")
+#: File-name style: ``_`` between the words (``zephyrin_QUINTAVALLE``).
+_UNDERSCORE_TOKEN = re.compile(r"[^\s,;:()\"«»<>_]+")
 _INITIAL = re.compile(r"^(?:[A-Za-zÀ-ÿ]\.?)(?:-?[A-Za-zÀ-ÿ]\.?)?$")
 
 
@@ -116,6 +118,15 @@ def tokens_of(value: str) -> list[str]:
 def parse_person(value: str) -> PersonName | None:
     """Parse ``value`` as a person name; None if it holds no name token."""
     tokens = tokens_of(value)
+    if "_" in value:
+        # ``zephyrin_QUINTAVALLE`` reads as two words when the case or a known given
+        # name tells the order; otherwise (``Durand_Zephyrin``) the order is a guess
+        # and the value stays one surname-like token, as before.
+        split = _UNDERSCORE_TOKEN.findall(value)
+        words = [w for w in split if any(c.isalpha() for c in w)]
+        upper = [_is_upper_word(w) for w in words]
+        if (any(upper) and not all(upper)) or any(_given_like(w) for w in words):
+            tokens = split
     civility: list[str] = []
     gender: str | None = None
     while tokens and civility_of(tokens[0]) is not None and len(tokens) > 1:

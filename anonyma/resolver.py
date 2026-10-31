@@ -94,7 +94,9 @@ TYPE_PRIORITY: dict[str, int] = {
     EntityType.USERNAME: 60,
     EntityType.ORGANIZATION: 55,
     EntityType.LOCATION: 50,
+    EntityType.OPAQUE_ID: 45,
     EntityType.DATE: 40,
+    EntityType.BARCODE: 20,
     EntityType.PROPER_NOUN: 10,
     EntityType.SUSPICIOUS_TOKEN: 5,
 }
@@ -295,12 +297,12 @@ def resolve(
     whitelist = config.whitelist_keys()
     whitelist |= {checksums.compact(w).casefold() for w in config.whitelist if w.strip()}
 
-    by_span: dict[tuple[str, str, int, int], Entity] = {}
-    span_detectors: dict[tuple[str, str, int, int], set[str]] = {}
+    by_span: dict[tuple[str, str, int, int, bool], Entity] = {}
+    span_detectors: dict[tuple[str, str, int, int, bool], set[str]] = {}
     for entity in entities:
         if _whitelisted(entity, whitelist):
             continue
-        key = entity.key
+        key = _span_key(entity)
         span_detectors.setdefault(key, set()).add(entity.detector)
         previous = by_span.get(key)
         if previous is None or _better(entity, previous):
@@ -355,7 +357,7 @@ def resolve(
                 clusters[cid] = cluster
             entity.cluster_id = cluster.id
             exact.setdefault(ckey, cluster)
-        _attach(cluster, entity, span_detectors.get(entity.key, {entity.detector}))
+        _attach(cluster, entity, span_detectors.get(_span_key(entity), {entity.detector}))
         if cluster.entity_type == EntityType.PERSON:
             person = person_of(entity) if entity.entity_type == EntityType.PERSON else None
             person = person or parse_person(entity.value)
@@ -368,6 +370,13 @@ def resolve(
             cluster.max_score < config.review_threshold and cluster.review is ReviewStatus.AUTO
         )
     return kept, clusters
+
+
+def _span_key(entity: Entity) -> tuple[str, str, int, int, bool]:
+    """Deduplication key: a whole-code entity never absorbs (nor is absorbed by) a
+    reading of the decoded content on the same span (an URL that is the whole QR
+    code keeps its own cluster and is propagated)."""
+    return (*entity.key, entity.entity_type == EntityType.BARCODE)
 
 
 def _better(entity: Entity, previous: Entity) -> bool:

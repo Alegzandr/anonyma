@@ -18,6 +18,9 @@ from anonyma import paths
 from anonyma.models import EntityType, ExpansionBudget, Profile, Regime, ReplacementMode
 from anonyma.textutils import normalize
 
+ORGANIZATION_POLICIES = ("toutes", "sauf_liste_blanche", "liste_noire")
+TAG_NUMBERINGS = ("sequentiel", "aleatoire")
+
 
 @dataclass(slots=True)
 class ArchiveLimits:
@@ -94,6 +97,35 @@ class Config:
     #: indirect-identifier cues (much slower).
     llm_all_segments: bool = False
 
+    # -- global fix n°1 (shared contract, see docs/ARCHITECTURE.md) --------------
+    #: PDF: render every page and OCR it (vector text, stamps, flattened fields,
+    #: annotation appearances), deduplicated against the text layer.
+    ocr_full_pages: bool = True
+    #: Decode QR codes, Data Matrix and barcodes (zxing-cpp); the code is always
+    #: masked and its decoded content goes through detection.
+    decode_barcodes: bool = True
+    #: PDF: delete invisible text (render mode 3, white, off-page, size 0) instead
+    #: of only anonymizing it.
+    remove_invisible_text: bool = True
+    #: Mask high-entropy opaque identifiers (hex >= 16, base64, UUID, mixed tokens).
+    mask_opaque_ids: bool = True
+    #: Opaque identifiers never masked (exact values or regexes prefixed ``re:``).
+    opaque_id_whitelist: list[str] = field(default_factory=list)
+    #: Organizations: "toutes" (mask all), "sauf_liste_blanche" (mask all except the
+    #: whitelist) or "liste_noire" (mask only the blacklist).
+    organization_policy: str = "sauf_liste_blanche"
+    #: Organizations / domains / public URLs never masked under "sauf_liste_blanche".
+    #: None = the bundled default list (``anonyma/data/organizations_whitelist.txt``).
+    organization_whitelist: list[str] | None = None
+    #: Organizations always masked under "liste_noire".
+    organization_blacklist: list[str] = field(default_factory=list)
+    #: Output names ``document_0001.pdf``... (mapping kept in the encrypted store
+    #: in pseudonymization) instead of anonymized original names.
+    neutral_filenames: bool = False
+    #: Tag numbering: "sequentiel" ([PERSONNE_001], per batch and per type) or
+    #: "aleatoire" (short random ids, e.g. [PERSONNE_K7Q2]).
+    tag_numbering: str = "sequentiel"
+
     # -- derived helpers ---------------------------------------------------
 
     def effective_profile(self) -> Profile:
@@ -151,6 +183,10 @@ class Config:
             raise ValueError("Les seuils doivent être compris entre 0 et 1.")
         if self.workers < 0:
             raise ValueError("Le nombre de processus ne peut pas être négatif.")
+        if self.organization_policy not in ORGANIZATION_POLICIES:
+            raise ValueError("Politique des organisations inconnue.")
+        if self.tag_numbering not in TAG_NUMBERINGS:
+            raise ValueError("Numérotation des balises inconnue.")
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:

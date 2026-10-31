@@ -191,13 +191,16 @@ class RegexDetector(Detector):
 
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         found: list[Entity] = []
+        previous = ""
         for segment in segments:
             if not segment.text.strip() or skip_segment(segment):
                 continue
-            found.extend(self._segment(segment, document_id))
+            found.extend(self._segment(segment, document_id, previous))
+            # OCR lines and PDF blocks: a cue often sits on the line before the date.
+            previous = segment.text[-SIGNATURE_WINDOW:]
         return found
 
-    def _segment(self, segment: Segment, document_id: str) -> list[Entity]:
+    def _segment(self, segment: Segment, document_id: str, previous: str = "") -> list[Entity]:
         text = segment.text
         label = normalize(segment.context.label)
         raw: list[tuple[str, int, int, float, dict[str, str]]] = []
@@ -209,11 +212,20 @@ class RegexDetector(Detector):
                 item = self._post(compiled, text, label, result.start, result.end)
                 if item is not None:
                     raw.append(item)
-        for recognizer in self.custom:
-            for result in recognizer.analyze(text, recognizer.supported_entities):
-                meta = result.recognition_metadata or {}
-                attrs = dict(meta.get("attributes") or {})
-                raw.append((result.entity_type, result.start, result.end, result.score, attrs))
+        views: list[tuple[str, list[int] | None]] = [(text, None)]
+        if segment.context.kind is SegmentKind.OCR:
+            ocr_view = unglued(text)
+            if ocr_view is not None:
+                views.append(ocr_view)
+        for view, index in views:
+            for recognizer in self.custom:
+                for result in recognizer.analyze(view, recognizer.supported_entities):
+                    meta = result.recognition_metadata or {}
+                    attrs = dict(meta.get("attributes") or {})
+                    start, end = result.start, result.end
+                    if index is not None:
+                        start, end = index[start], index[end - 1] + 1
+                    raw.append((result.entity_type, start, end, result.score, attrs))
         raw.extend(self._labels(segment, label))
         value = text.strip()
         if len(value) == 9 and value.isdigit() and value[0] in "67":
@@ -224,7 +236,10 @@ class RegexDetector(Detector):
             # The same with the country code (33612345678): CRM and spreadsheet exports.
             start = text.index(value)
             raw.append((EntityType.PHONE, start, start + 11, 0.65, {"rule": "mobile_indicatif"}))
-        raw = self._dates(raw, text, label)
+        signature = segment.context.kind in (SegmentKind.SIGNATURE, SegmentKind.BARCODE) or (
+            "signat" in label or "signed" in label
+        )
+        raw = self._dates(raw, text, label, signature=signature, previous=previous)
         return [
             Entity(
                 entity_type=t,
@@ -367,24 +382,113 @@ class RegexDetector(Detector):
         return out
 
     def _dates(
-        self, raw: list[tuple[str, int, int, float, dict[str, str]]], text: str, label: str
+        self,
+        raw: list[tuple[str, int, int, float, dict[str, str]]],
+        text: str,
+        label: str,
+        *,
+        signature: bool = False,
+        previous: str = "",
     ) -> list[tuple[str, int, int, float, dict[str, str]]]:
+        """Dates of birth, ordinary dates (``detect_dates``) and timestamps.
+
+        A date or a time next to a signature cue (« Signé le », « horodatage »,
+        « signed by »...) or to a person name identifies a signing event: it is
+        masked even when ``detect_dates`` is off. A time alone is only kept then.
+        """
         out: list[tuple[str, int, int, float, dict[str, str]]] = []
         dob_label = "naissance" in label or "birth" in label
+        persons = [(s, e) for t, s, e, _, _ in raw if t == EntityType.PERSON]
         for item in raw:
             entity_type, start, end, _score, attrs = item
             if entity_type != EntityType.DATE:
                 out.append(item)
                 continue
+            time_only = attrs.get("rule") == "heure"
             window = text[max(0, start - 40) : start]
             for boundary in (". ", "\n", ";", "!", "?"):
                 window = window.rsplit(boundary, 1)[-1]
             window = normalize(window)
-            if dob_label or (self.dob_context is not None and self.dob_context.search(window)):
+            dob = dob_label or (self.dob_context is not None and self.dob_context.search(window))
+            if dob and not time_only:
                 out.append((EntityType.DATE_OF_BIRTH, start, end, 0.95, attrs))
-            elif self.detect_dates:
+                continue
+            if signature or _signature_context(text, start, end, previous, persons):
+                out.append((entity_type, start, end, max(_score, 0.8), attrs))
+            elif self.detect_dates and not time_only:
                 out.append(item)
         return out
+
+
+_GLUED_STREET = regex.compile(
+    r"(?<=\d[ \t]?)(?:rue|avenue|boulevard|place|impasse|all[ée]e|chemin|quai|route|square"
+    r"|cours|passage|r[ée]sidence|lotissement)(?=(?:du|de|des|la|le|aux|d')\p{Lu})",
+    regex.IGNORECASE,
+)
+
+
+def unglued(text: str) -> tuple[str, list[int]] | None:
+    """OCR text with spaces put back between glued words, and the source index of
+    every character (``M.AymericDURAND`` -> ``M. Aymeric DURAND``); None when
+    nothing is glued. E-mail addresses, URLs and paths are left as they are.
+    """
+    protected = [
+        (m.start(), m.end()) for m in regex.finditer(r"\S+", text) if regex.search(r"[@/\\]", m[0])
+    ]
+    # « 2placeduPilori » : the street type glued to its particle.
+    street_ends = {m.end() for m in _GLUED_STREET.finditer(text)}
+    out: list[str] = []
+    index: list[int] = []
+    changed = False
+    for i, ch in enumerate(text):
+        if i > 0 and not any(s < i < e for s, e in protected):
+            prev = text[i - 1]
+            split = (
+                i in street_ends
+                or (prev.islower() and ch.isupper())
+                or (prev in ".,;:" and ch.isalpha() and i > 1 and text[i - 2].isalpha())
+                or (prev.isdigit() and ch.isalpha())
+                or (prev.isalpha() and ch.isdigit())
+            )
+            if split:
+                out.append(" ")
+                index.append(i)
+                changed = True
+        out.append(ch)
+        index.append(i)
+    return ("".join(out), index) if changed else None
+
+
+#: Characters around a date searched for signature cues (and persons).
+SIGNATURE_WINDOW = 100
+_SIGNATURE_CUES = regex.compile(
+    r"(?<![a-z])(?:sign(?:e|ee|es|ees|ed|ature|atures|ataire|ataires|ing|er|atory)"
+    r"|horodat[a-z]*|timestamp|time stamp|certifie[a-z]*|scelle[a-z]*|cachet|valide par"
+    r"|approuve par|approved by|fait (?:a|le)|lu et approuve|signing time)(?![a-z])"
+)
+#: Distance (characters) between a person name and a date read as its timestamp.
+PERSON_DATE_DISTANCE = 60
+_BLANK_LINE = regex.compile(r"\n[ \t]*\n")
+
+
+def _signature_context(
+    text: str,
+    start: int,
+    end: int,
+    previous: str,
+    persons: Sequence[tuple[int, int]],
+) -> bool:
+    before = text[max(0, start - SIGNATURE_WINDOW) : start]
+    if start < SIGNATURE_WINDOW and previous:
+        before = previous[-(SIGNATURE_WINDOW - start) :] + "\n" + before
+    after = text[end : end + 40].split("\n", 1)[0]
+    if _SIGNATURE_CUES.search(normalize(before)) or _SIGNATURE_CUES.search(normalize(after)):
+        return True
+    for s, e in persons:
+        lo, hi = (e, start) if e <= start else (end, s)
+        if 0 <= hi - lo <= PERSON_DATE_DISTANCE and not _BLANK_LINE.search(text, lo, max(lo, hi)):
+            return True
+    return False
 
 
 def _dedupe(
