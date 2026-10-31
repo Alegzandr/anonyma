@@ -109,6 +109,7 @@ def test_email(detector: RegexDetector, text: str) -> None:
         "jean@café-exemple.fr",
         "jean@xn--caf-dma.xn--p1ai",
         "JeanDupont@MonCabinet.fr",
+        "jean.dupont@entreprise.example",
     ],
 )
 def test_email_real_addresses(detector: RegexDetector, address: str) -> None:

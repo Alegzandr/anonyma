@@ -175,7 +175,9 @@ LONG_TLDS = frozenset(
         "tienda", "tips", "tires", "today", "tools", "tours", "town", "toys", "trade", "trading",
         "training", "travel", "tube", "university", "vacations", "ventures", "vet", "viajes",
         "video", "villas", "vin", "vision", "voyage", "wang", "watch", "website", "wedding", "wiki",
-        "win", "wine", "work", "works", "world", "wtf", "xyz", "yoga", "zone", "alsace", "bzh"
+        "win", "wine", "work", "works", "world", "wtf", "xyz", "yoga", "zone", "alsace", "bzh",
+        # Reserved and private names (RFC 2606, 6762): examples, tests, intranets.
+        "example", "exemple", "invalid", "localhost", "internal", "intranet", "localdomain"
     }
 )  # fmt: skip
 #: An unknown top-level domain is accepted up to this length (``.test``, ``.local``).
