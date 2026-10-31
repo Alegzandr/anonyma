@@ -384,6 +384,29 @@ def test_broken_pool_retries_in_fresh_workers_never_inline(
     assert events[-1].done == 4
 
 
+def _crash_twice_then_work(path: Path, *rest: object) -> object:
+    """A worker dying for a reason outside the item: « instable » kills the shared pool,
+    then its first single-worker pool, then works."""
+    import os
+
+    if path.stem == "instable":
+        runs = path.parent / "essais"
+        count = int(runs.read_text(encoding="utf-8")) if runs.exists() else 0
+        runs.write_text(str(count + 1), encoding="utf-8")
+        if count < 2:
+            os._exit(3)
+    return path.name, os.getpid()
+
+
+def test_one_isolated_crash_does_not_fail_an_item(tmp_path: Path, canary_config: Config) -> None:
+    canary_config.workers = 2
+    jobs = [(tmp_path / f"{n}.txt",) for n in ("a", "instable", "b")]
+    results = Pipeline(canary_config)._map(
+        _crash_twice_then_work, jobs, "analyse", None, None, lambda path: ("echec", 0)
+    )
+    assert [r[0] for r in results if r is not None] == ["a.txt", "instable.txt", "b.txt"]
+
+
 def test_crashing_document_fails_with_anonymized_name(
     tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:

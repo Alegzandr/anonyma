@@ -1367,7 +1367,7 @@ class Pipeline:
 
         Worker processes may die (native crash, memory): the items left are then run
         one at a time in a fresh single-worker pool, never in this process, and an
-        item that crashes that pool too gets ``crashed(*job)`` as its result."""
+        item that crashes such a pool twice gets ``crashed(*job)`` as its result."""
         results: list[Any | None] = [None] * len(jobs)
         total = len(jobs)
         finished: set[int] = set()
@@ -1393,11 +1393,18 @@ class Pipeline:
             self._pool(fn, jobs, list(range(total)), self._workers(total), cancel, done)
         except BrokenProcessPool:
             log.warning("worker pool broken during %s; retrying the remaining items", stage)
+            # A worker can also die for reasons outside the item (memory pressure from
+            # other programs): an item fails only after crashing a worker of its own
+            # twice, not on the first crash where it happened to be running.
+            isolated_crashes: dict[int, int] = {}
             while not (cancel and cancel.cancelled):
                 pending = [i for i in range(total) if i not in finished]
                 culprit = self._serial(fn, jobs, pending, cancel, done) if pending else None
                 if culprit is None:
                     break
+                isolated_crashes[culprit] = isolated_crashes.get(culprit, 0) + 1
+                if isolated_crashes[culprit] < 2:
+                    continue
                 log.warning("item %d of %s crashed its worker twice", culprit, stage)
                 done(culprit, crashed(*jobs[culprit]))
         return results
