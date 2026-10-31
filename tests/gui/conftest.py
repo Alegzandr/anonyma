@@ -11,13 +11,14 @@ from typing import Any
 
 import pytest
 
+from anonyma import registry
 from anonyma.config import Config
 from anonyma.gui import dialogs, theme
 from anonyma.gui.context import AppContext
 from anonyma.gui.main_window import MainWindow
 from anonyma.model_catalog import ModelFile, ModelKind, ModelSpec
 from anonyma.model_manager import ModelError, ModelManager, ModelStatus
-from anonyma.models import Profile
+from anonyma.models import Detector, Entity, Profile, Segment
 
 pytest.importorskip("pytestqt")
 
@@ -154,3 +155,75 @@ def window(qtbot: Any, context: AppContext, recorder: DialogRecorder) -> Iterato
     yield win
     win.controller.shutdown(10_000)
     win.models.runner.wait_all(10_000)
+
+
+# ---------------------------------------------------------------------------
+# Batch fixtures and helpers shared by the flow tests
+# ---------------------------------------------------------------------------
+
+FLOW_TIMEOUT = 30_000
+
+
+class _LowScoreDetector(Detector):
+    """Flags « Orsini » with a score below the review threshold."""
+
+    name = "faible"
+
+    def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
+        out = []
+        for s in segments:
+            i = s.text.find("Orsini")
+            if i >= 0:
+                out.append(
+                    Entity("PERSONNE", "Orsini", document_id, s.id, i, i + 6, 0.4, self.name)
+                )
+        return out
+
+
+@pytest.fixture
+def low_score(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry.load_plugins()
+    monkeypatch.setitem(registry._detectors, "faible", _LowScoreDetector)
+
+
+@pytest.fixture
+def batch(tmp_path: Path, gui_config: Config) -> Path:
+    """Two txt files and a business list (CSV) referenced by the configuration."""
+    folder = tmp_path / "Dossiers"
+    folder.mkdir()
+    (folder / "a.txt").write_text(
+        "Contrat Hélios signé par Bérénice Lagarde à Brest.\nContact : Orsini.\n",
+        encoding="utf-8",
+    )
+    (folder / "b.txt").write_text(
+        "Le projet HÉLIOS avance à Brest. Bérénice Lagarde relit.\n", encoding="utf-8"
+    )
+    csv = tmp_path / "liste.csv"
+    csv.write_text("valeur,type\nBérénice Lagarde,PERSONNE\nHélios,PROJET\n", encoding="utf-8")
+    gui_config.business_lists = [str(csv)]
+    return folder
+
+
+def prepare(qtbot: Any, window: MainWindow, folder: Path, out: Path) -> None:
+    window.controller.add_inputs([folder])
+    qtbot.waitUntil(lambda: not window.controller.queue_loading, timeout=FLOW_TIMEOUT)
+    assert window.processing.set_output_dir(out)
+
+
+def analyze(qtbot: Any, window: MainWindow) -> None:
+    with qtbot.waitSignal(window.controller.analysis_ready, timeout=FLOW_TIMEOUT):
+        window.processing.analyze_button.click()
+    assert not window.controller.busy
+    qtbot.waitUntil(window.controller.effective_is_current, timeout=FLOW_TIMEOUT)
+
+
+def select_text(window: MainWindow, text: str) -> None:
+    from PySide6.QtGui import QTextCursor
+
+    window.review.original.moveCursor(QTextCursor.MoveOperation.Start)
+    assert window.review.original.find(text)
+
+
+def settle(qtbot: Any, window: MainWindow) -> None:
+    """Wait for the background preview of the latest decisions."""
+    qtbot.waitUntil(window.controller.effective_is_current, timeout=FLOW_TIMEOUT)

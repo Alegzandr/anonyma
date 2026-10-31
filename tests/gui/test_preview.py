@@ -10,7 +10,6 @@ from PySide6.QtCore import Qt
 
 from anonyma.config import Config
 from anonyma.gui.main_window import MainWindow
-from anonyma.gui.pages.review import display_text
 from anonyma.gui.preview import (
     RowState,
     apply_with_spans,
@@ -20,6 +19,7 @@ from anonyma.gui.preview import (
     preview_segments,
     substitute_spans,
 )
+from anonyma.gui.textview import display_text
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
     ManualEntity,
@@ -132,25 +132,26 @@ def test_review_keyboard_shortcuts(
         window.activateWindow()
     window.show_page("review")
     review = window.review
-    review.table.setFocus()
-    assert review.model.rows
-    review.select_row(0)
-    first = review.current_row()
-    assert first is not None
-    qtbot.keyClick(review.table, Qt.Key.Key_N)
-    if review.table.currentIndex().row() == 0:  # shortcuts need an active window
+    review.queue.setFocus()
+    ids = review.model.ids
+    assert len(ids) == 3
+    review.select_cluster(ids[0])
+    qtbot.keyClick(review.queue, Qt.Key.Key_N)
+    if review.current_cluster_id() == ids[0]:  # shortcuts need an active window
         pytest.skip("window activation unavailable on this platform")
-    assert review.table.currentIndex().row() == 1
-    qtbot.keyClick(review.table, Qt.Key.Key_P)
-    assert review.table.currentIndex().row() == 0
-    qtbot.keyClick(review.table, Qt.Key.Key_R)
-    assert first.cluster_id in window.controller.decisions.rejected_clusters
-    qtbot.keyClick(review.table, Qt.Key.Key_P)
-    qtbot.keyClick(review.table, Qt.Key.Key_U)
-    assert first.cluster_id not in window.controller.decisions.rejected_clusters
-    qtbot.keyClick(review.table, Qt.Key.Key_V)
-    assert first.cluster_id in window.controller.decisions.confirmed_clusters
+    assert review.current_cluster_id() == ids[1]
+    qtbot.keyClick(review.queue, Qt.Key.Key_P)
+    assert review.current_cluster_id() == ids[0]
+    qtbot.keyClick(review.queue, Qt.Key.Key_R)
+    assert ids[0] in window.controller.decisions.rejected_clusters
+    qtbot.waitUntil(lambda: review.current_cluster_id() != ids[0], timeout=5_000)
+    review.select_cluster(ids[0])
+    qtbot.keyClick(review.queue, Qt.Key.Key_U)
+    assert ids[0] not in window.controller.decisions.rejected_clusters
+    qtbot.keyClick(review.queue, Qt.Key.Key_V)
+    assert ids[0] in window.controller.decisions.confirmed_clusters
 
     # Highlighted current entity in the original text, with its type colour legend.
+    review.select_cluster(ids[1])
     assert review.original.extraSelections()
     assert "Personne" in review.legend.text()

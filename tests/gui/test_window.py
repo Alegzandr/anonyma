@@ -59,7 +59,7 @@ def _mime(paths: list[Path]) -> QMimeData:
 
 
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
-def test_drag_and_drop_adds_files(window: MainWindow, tmp_path: Path) -> None:
+def test_drag_and_drop_adds_files(window: MainWindow, tmp_path: Path, qtbot: Any) -> None:
     folder = tmp_path / "entrees"
     (folder / "sous").mkdir(parents=True)
     (folder / "a.txt").write_text("alpha", encoding="utf-8")
@@ -88,21 +88,22 @@ def test_drag_and_drop_adds_files(window: MainWindow, tmp_path: Path) -> None:
     page.drop_area.dropEvent(drop)
 
     assert [p.name for p in window.controller.inputs] == ["entrees", "seul.log"]
-    assert page.table.rowCount() == 3
-    names = sorted(page.table.item(r, 0).text() for r in range(3))
+    # The folder inventory runs in the background.
+    qtbot.waitUntil(lambda: page.model.rowCount() == 3, timeout=10_000)
+    names = sorted(r.name for r in page.model.rows)
     assert names == ["entrees/a.txt", "entrees/sous/b.md", "seul.log"]
-    formats = sorted(page.table.item(r, 1).text() for r in range(3))
+    formats = sorted(r.format for r in page.model.rows)
     assert formats == ["log", "md", "txt"]
 
     # Dropping again, or adding a file inside an added folder, adds nothing.
     page.drop_area.dropEvent(drop)
     window.controller.add_inputs([folder / "a.txt"])
-    assert page.table.rowCount() == 3
+    assert window.controller.inputs == [folder.resolve(), single.resolve()]
 
-    row = next(r for r in range(3) if page.table.item(r, 0).text() == "seul.log")
+    row = next(i for i, r in enumerate(page.model.rows) if r.name == "seul.log")
     page.table.selectRow(row)
     page._remove_selected()
-    assert page.table.rowCount() == 2
+    qtbot.waitUntil(lambda: page.model.rowCount() == 2, timeout=10_000)
 
 
 def test_add_buttons_use_file_chooser(
