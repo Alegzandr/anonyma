@@ -92,6 +92,10 @@ class GlinerOnnx:
         last = max(i for i, w in enumerate(probe.word_ids) if w is not None)
         self._suffix: list[int] = list(probe.ids[last + 1 :])
 
+        # Windows builds emit telemetry events (ETW) by default: keep them off.
+        disable = getattr(ort, "disable_telemetry_events", None)
+        if disable is not None:
+            disable()
         options = ort.SessionOptions()
         options.log_severity_level = 3
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL

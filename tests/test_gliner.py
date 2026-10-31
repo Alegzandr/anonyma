@@ -150,3 +150,45 @@ def test_standard_profile_pipeline(installed: Config, tmp_path: Path) -> None:
     assert top.output_path is not None
     text = top.output_path.read_text(encoding="utf-8")
     assert "Kervella" not in text and "Morvan" not in text
+
+
+def test_onnx_telemetry_is_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ONNX Runtime telemetry (ETW events on Windows) is turned off before loading."""
+    import sys
+    import types
+
+    calls: list[str] = []
+
+    class Encoding:
+        ids = [1, 5, 2]
+        word_ids = [None, 0, None]
+
+    class FakeTokenizer:
+        @staticmethod
+        def from_file(path: str) -> FakeTokenizer:
+            return FakeTokenizer()
+
+        def no_truncation(self) -> None: ...
+        def no_padding(self) -> None: ...
+
+        def encode(self, *args: object, **kwargs: object) -> Encoding:
+            return Encoding()
+
+    class FakeSession:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            calls.append("session")
+
+        def get_inputs(self) -> list[object]:
+            return []
+
+    ort = types.SimpleNamespace(
+        SessionOptions=types.SimpleNamespace,
+        GraphOptimizationLevel=types.SimpleNamespace(ORT_ENABLE_ALL=99),
+        ExecutionMode=types.SimpleNamespace(ORT_SEQUENTIAL=0),
+        InferenceSession=FakeSession,
+        disable_telemetry_events=lambda: calls.append("telemetry off"),
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", ort)
+    monkeypatch.setitem(sys.modules, "tokenizers", types.SimpleNamespace(Tokenizer=FakeTokenizer))
+    GlinerOnnx(tmp_path)
+    assert calls == ["telemetry off", "session"]
