@@ -351,7 +351,7 @@ def msg_bytes() -> bytes:
     _add_props(
         writer,
         "",
-        b"\0" * 8 + struct.pack("<IIII", 1, 1, 1, 1) + b"\0" * 8,
+        b"\0" * 8 + struct.pack("<IIII", 1, 2, 1, 2) + b"\0" * 8,
         {0x0039: (PT_SYSTIME, 134117136000000000)},
         {
             0x001A: "IPM.Note",
@@ -381,6 +381,29 @@ def msg_bytes() -> bytes:
         {0x3705: (PT_LONG, 1), 0x0E21: (PT_LONG, 0)},
         {0x3707: f"CV {CANARY_PERSON}.txt", 0x3704: "CV.txt", 0x370E: "text/plain"},
         {0x3701: f"CV de {CANARY_PERSON}\r\n{CANARY_EMAIL}\r\n".encode()},
+    )
+    # Embedded message (attach method 5): its properties live in a sub-storage.
+    _add_props(
+        writer,
+        "__attach_version1.0_#00000001/",
+        b"\0" * 8,
+        {0x3705: (PT_LONG, 5), 0x0E21: (PT_LONG, 1)},
+        {0x3707: f"Transfert {CANARY_PERSON}", 0x3001: f"Transfert {CANARY_PERSON}"},
+        {},
+    )
+    _add_props(
+        writer,
+        "__attach_version1.0_#00000001/__substg1.0_3701000D/",
+        b"\0" * 24,
+        {},
+        {
+            0x001A: "IPM.Note",
+            0x0037: f"Transfert {CANARY_PERSON}",
+            0x0C1A: CANARY_PERSON,
+            0x5D01: CANARY_EMAIL,
+            0x1000: f"Message transféré de {CANARY_PERSON}.\r\n",
+        },
+        {},
     )
     for name in ("00020102", "00030102", "00040102"):
         writer.addEntry(f"__nameid_version1.0/__substg1.0_{name}", b"")

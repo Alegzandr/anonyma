@@ -33,6 +33,21 @@ from anonyma.registry import register_extractor
 
 logging.getLogger("extract_msg").setLevel(logging.CRITICAL)
 
+
+def _patch_embedded_messages() -> None:
+    """extract-msg 0.58 opens embedded messages through a ``prefixList`` attribute
+    that its ``MSGFile`` no longer has: every .msg with an attached message failed
+    to open. Provide it (path components of the current prefix)."""
+    from extract_msg.msg_classes import MSGFile
+
+    if not hasattr(MSGFile, "prefixList"):
+        MSGFile.prefixList = property(  # type: ignore[attr-defined]
+            lambda self: list(getattr(self.prefix, "parts", ()) or ())
+        )
+
+
+_patch_embedded_messages()
+
 #: Property tags already mapped to the eml (not repeated in the annex).
 _MAPPED_TAGS = frozenset(
     {

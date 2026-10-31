@@ -313,6 +313,10 @@ def test_msg_is_converted_to_eml(tmp_path: Path, canary_config: Config) -> None:
     assert parsed["From"] == "[PERSONNE_001] <[EMAIL_001]>"
     assert parsed["Received"] is not None
     assert any(p.get_filename() == "CV [PERSONNE_001].txt" for p in parsed.walk())
+    embedded = [p for p in parsed.walk() if p.get_content_type() == "message/rfc822"]
+    assert len(embedded) == 1  # the attached .msg became an attached eml
+    assert embedded[0].get_filename() == "Transfert [PERSONNE_001].eml"
+    assert b"uintavalle" not in output.read_bytes().lower()
 
 
 # -- mbox ----------------------------------------------------------------------

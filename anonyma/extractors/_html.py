@@ -87,7 +87,14 @@ class Decoded:
     """Decoded text of a unit and, per character, its ``(start, end)`` source span."""
 
     text: str
-    spans: tuple[tuple[int, int], ...]
+    #: None when every character maps to one source character from ``base``.
+    spans: tuple[tuple[int, int], ...] | None
+    base: int = 0
+
+    def span(self, index: int) -> tuple[int, int]:
+        if self.spans is None:
+            return self.base + index, self.base + index + 1
+        return self.spans[index]
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,10 +256,7 @@ class HtmlSource:
         if cached is None:
             unit = self.units[index]
             if unit.kind in (RAW, COMMENT):
-                cached = Decoded(
-                    self.text[unit.start : unit.end],
-                    tuple((i, i + 1) for i in range(unit.start, unit.end)),
-                )
+                cached = Decoded(self.text[unit.start : unit.end], None, unit.start)
             else:
                 cached = _decode_refs(self.text, unit.start, unit.end)
                 if unit.kind == ATTR and unit.name in _URL_ATTRS:
@@ -336,10 +340,10 @@ class HtmlSource:
             unit = self.units[index]
             decoded = self.decoded(index)
             for start, end, new in unit_edits:
-                if start >= end or end > len(decoded.spans):
+                if start >= end or end > len(decoded.text):
                     continue
                 patches.append(
-                    (decoded.spans[start][0], decoded.spans[end - 1][1], self._encode(unit, new))
+                    (decoded.span(start)[0], decoded.span(end - 1)[1], self._encode(unit, new))
                 )
         for index, value in (values or {}).items():
             unit = self.units[index]
@@ -374,6 +378,8 @@ class HtmlSource:
 
 
 def _decode_refs(src: str, start: int, end: int) -> Decoded:
+    if src.find("&", start, end) == -1:
+        return Decoded(src[start:end], None, start)
     chars: list[str] = []
     spans: list[tuple[int, int]] = []
     pos = start
@@ -440,11 +446,11 @@ def _decode_percent(decoded: Decoded) -> Decoded:
                     ch = ""
                 if len(ch) == 1:
                     chars.append(ch)
-                    spans.append((decoded.spans[i][0], decoded.spans[j - 1][1]))
+                    spans.append((decoded.span(i)[0], decoded.span(j - 1)[1]))
                     i = j
                     continue
         chars.append(text[i])
-        spans.append(decoded.spans[i])
+        spans.append(decoded.span(i))
         i += 1
     return Decoded("".join(chars), tuple(spans))
 

@@ -15,13 +15,13 @@ X-Sender: zephyrin.quintavalle@exemple.test
 Thread-Topic: Dossier =?utf-8?q?Z=C3=A9phyrin?= Quintavalle
 DKIM-Signature: v=1; a=rsa-sha256; d=exemple.test; s=sel; b=AAAA
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="===============2056870064421249691=="
+Content-Type: multipart/mixed; boundary="===============2950393534782231085=="
 
---===============2056870064421249691==
+--===============2950393534782231085==
 Content-Type: multipart/alternative;
- boundary="===============4590889168234663975=="
+ boundary="===============2786984333863359596=="
 
---===============4590889168234663975==
+--===============2786984333863359596==
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: quoted-printable
 
@@ -37,7 +37,7 @@ le.test> a =C3=A9crit :
 --=20
 Z=C3=A9phyrin Quintavalle
 
---===============4590889168234663975==
+--===============2786984333863359596==
 Content-Type: text/html; charset="utf-8"
 Content-Transfer-Encoding: base64
 MIME-Version: 1.0
@@ -47,9 +47,9 @@ aHlyaW4gUXVpbnRhdmFsbGU8L2I+ICg8YSBocmVmPSJtYWlsdG86emVwaHlyaW4ucXVpbnRhdmFs
 bGVAZXhlbXBsZS50ZXN0Ij56ZXBoeXJpbi5xdWludGF2YWxsZUBleGVtcGxlLnRlc3Q8L2E+KS48
 L3A+PC9ib2R5PjwvaHRtbD4NCg==
 
---===============4590889168234663975==--
+--===============2786984333863359596==--
 
---===============2056870064421249691==
+--===============2950393534782231085==
 Content-Type: text/plain
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment;
@@ -59,7 +59,7 @@ MIME-Version: 1.0
 Tm90ZSBjb25jZXJuYW50IFrDqXBoeXJpbiBRdWludGF2YWxsZQ0KQ29udGFjdCA6IHplcGh5cmlu
 LnF1aW50YXZhbGxlQGV4ZW1wbGUudGVzdA0K
 
---===============2056870064421249691==
+--===============2950393534782231085==
 Content-Type: message/rfc822
 Content-Transfer-Encoding: 8bit
 MIME-Version: 1.0
@@ -81,7 +81,7 @@ Cordialement,
 Zéphyrin Quintavalle
 zephyrin.quintavalle@exemple.test
 
---===============2056870064421249691==--
+--===============2950393534782231085==--
 
 From zephyrin.quintavalle@exemple.test Mon Jan  5 09:00:00 2026
 From:
