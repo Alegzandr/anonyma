@@ -314,3 +314,21 @@ def test_street_name_does_not_make_a_timestamp() -> None:
 )
 def test_closings_announce_the_signer(text: str) -> None:
     assert _values(_detect(Config(), text), "PERSONNE")
+
+
+def test_function_mailbox_keeps_its_local_part_in_realistic_mode(tmp_path: Path) -> None:
+    from anonyma.models import ReplacementMode
+    from anonyma.pipeline import Pipeline
+
+    source = tmp_path / "in"
+    source.mkdir()
+    (source / "a.txt").write_text(
+        "Écrire à offres@cartouches.example ou à ysaline.tournesol@cartouches.example.",
+        encoding="utf-8",
+    )
+    config = Config(mode=ReplacementMode.REALISTIC, workers=1)
+    result = Pipeline(config).run([source], tmp_path / "out")
+    assert result.results
+    text = next((tmp_path / "out").rglob("a.txt")).read_text(encoding="utf-8")
+    assert "offres@" in text and "cartouches.example" not in text
+    assert "ysaline" not in text.lower()
