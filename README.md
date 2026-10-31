@@ -1,3 +1,225 @@
 # Anonyma
 
-Work in progress.
+Anonyma anonymise en masse, **entièrement en local**, des documents de tous formats :
+il repère les données personnelles (noms, adresses, courriels, téléphones, IBAN, NIR…),
+les remplace de façon cohérente dans tout le lot, purge les métadonnées, puis
+**relit chaque fichier produit** pour vérifier qu'il ne reste rien.
+
+> [!CAUTION]
+> **Usage interne uniquement.** Anonyma embarque des composants sous licence AGPL-3.0
+> (PyMuPDF) et GPL-3.0 (extract-msg) : il ne doit pas être distribué à des tiers.
+> Voir [LICENSES.md](LICENSES.md).
+
+## Installation
+
+### Dossier portable (recommandé)
+
+Téléchargez l'archive de votre système (`Anonyma-<version>-windows-x86_64.zip`,
+`…-macos-arm64.zip`, `…-linux-x86_64.zip`), décompressez-la où vous voulez (disque
+local, clé USB) et lancez :
+
+| Système | Interface graphique | Ligne de commande |
+|---|---|---|
+| Windows | `Anonyma.exe` | `anonyma-cli.exe` |
+| macOS | `Anonyma.app` | `./anonyma-cli` |
+| Linux | `./Anonyma` | `./anonyma-cli` |
+
+Rien n'est installé sur la machine : configuration, journaux, fichiers temporaires et
+modèles restent dans le dossier (`data/` et `models/`). Pour désinstaller, supprimez le
+dossier. Le dossier doit être accessible en écriture.
+
+**macOS (Gatekeeper).** L'application n'est ni signée ni notarisée. Au premier
+lancement, macOS refuse de l'ouvrir (« développeur non identifié »). Avant toute chose,
+retirez l'attribut de quarantaine de tout le dossier décompressé :
+
+```sh
+xattr -dr com.apple.quarantine /chemin/vers/Anonyma
+```
+
+Sinon, macOS peut aussi exécuter l'application depuis un emplacement temporaire en
+lecture seule (« App Translocation ») : Anonyma ne retrouverait alors ni ses modèles ni
+sa configuration. Ne déplacez pas `Anonyma.app` hors de son dossier : `models/` et
+`data/` doivent rester à côté.
+
+### Depuis les sources
+
+Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python 3.12 si nécessaire).
+
+```sh
+git clone <dépôt> anonyma && cd anonyma
+uv sync
+uv run anonyma --help        # ligne de commande
+uv run python -m anonyma.app # interface graphique
+```
+
+En mode source, `data/` et `models/` sont créés à la racine du projet. La variable
+`ANONYMA_HOME` permet de choisir un autre dossier.
+
+## Interface graphique
+
+_Section à compléter par le chantier de l'interface graphique._
+
+## Utilisation en ligne de commande
+
+Toutes les commandes acceptent `-h` / `--help`.
+
+```sh
+# Anonymiser un dossier (sous-dossiers compris) vers un dossier de sortie
+anonyma-cli run "Dossiers clients" --sortie anonymises --rapport rapport.html
+
+# Choisir le profil, le mode de remplacement, ajouter des listes
+anonyma-cli run courrier.docx -o sortie --profil standard --mode realiste \
+    --liste-metier clients.csv --liste-metier projets.csv --liste-blanche ville.txt
+
+# Analyse à blanc : ce qui serait masqué, sans rien écrire
+anonyma-cli analyser "Dossiers clients"
+anonyma-cli analyser "Dossiers clients" --json
+
+# Matériel, formats, modèles, configuration
+anonyma-cli materiel
+anonyma-cli formats
+anonyma-cli modeles liste
+anonyma-cli config afficher
+anonyma-cli config definir mode realiste
+anonyma-cli config definir limits.max_files 50000
+```
+
+Options principales de `run` :
+
+| Option | Rôle |
+|---|---|
+| `--sortie`, `-o` | dossier de sortie (distinct des originaux, jamais modifiés) |
+| `--profil`, `-p` | `auto` (selon le matériel), `leger`, `standard`, `complet` |
+| `--mode`, `-m` | `balises` (`[PERSONNE_001]`), `realiste` (substituts vraisemblables), `masquage` |
+| `--regime`, `-r` | `anonymisation` (irréversible) ou `pseudonymisation` (table chiffrée) |
+| `--paranoiaque` | masque aussi tout nom propre et toute séquence suspecte |
+| `--liste-blanche FICHIER` | valeurs à ne jamais masquer, une par ligne (`#` = commentaire) |
+| `--liste-metier CSV` | valeurs à toujours masquer, colonnes `valeur[,type]` ; répétable |
+| `--processus N`, `-j N` | nombre de processus (0 = automatique) |
+| `--config FICHIER` | autre fichier de configuration JSON |
+| `--rapport FICHIER` | rapport `.json`, `.md` ou `.html` (aucune donnée d'origine) |
+| `--table FICHIER` | table de correspondance (pseudonymisation) |
+| `--silencieux`, `-q` | sans barre de progression |
+
+Codes de sortie : **0** tous les fichiers sont anonymisés, **1** au moins un fichier
+présente des résidus, a échoué, n'est pas pris en charge ou le traitement a été
+interrompu, **2** erreur d'utilisation (option invalide, phrase secrète incorrecte,
+configuration invalide…). Les fichiers dont la vérification échoue sont placés dans
+`<sortie>/_quarantaine/` et ne doivent pas être diffusés.
+
+## Formats
+
+_Section à compléter : liste des formats pris en charge (voir `anonyma-cli formats`)._
+
+## Profils et matériel
+
+| Profil | Détection | Besoins indicatifs |
+|---|---|---|
+| `leger` | expressions régulières + Presidio + listes métier | toute machine |
+| `standard` | + modèle GLiNER (entités nommées) | 6 Go de mémoire vive |
+| `complet` | + modèle de langage local (Qwen3, GGUF Q4) | 16 Go et 8 processeurs logiques |
+
+`anonyma-cli materiel` affiche la mémoire, les processeurs, la carte graphique, les
+accélérations disponibles pour ONNX Runtime (DirectML sous Windows, Core ML sous macOS,
+processeur sinon) et le profil recommandé. Le modèle de langage recommandé est le plus
+grand du catalogue qui tient dans la mémoire vive (4B, 8B ou 14B). Pour imposer un
+profil : `--profil` ponctuellement, ou `anonyma-cli config definir profile complet`
+(`auto` pour revenir au choix automatique). Un détecteur dont le modèle n'est pas
+installé est ignoré et signalé.
+
+## Modèles
+
+Les modèles d'IA ne sont pas livrés dans l'archive :
+
+```sh
+anonyma-cli modeles liste                    # catalogue et état (installé, vérifié…)
+anonyma-cli modeles telecharger <identifiant>
+anonyma-cli modeles supprimer <identifiant>
+```
+
+Le téléchargement est la **seule** opération réseau d'Anonyma, toujours déclenchée
+explicitement. Avant de télécharger, Anonyma lit la licence publiée sur Hugging Face et
+refuse le modèle si elle est non commerciale (`cc-by-nc…`, « recherche uniquement »…),
+non identifiée (`other`, `unknown`) ou différente de celle du catalogue. Les fichiers
+sont téléchargés à la révision figée par le catalogue, **vérifiés par empreinte
+SHA-256**, puis installés d'un bloc dans `models/<identifiant>/`. Un téléchargement
+interrompu (coupure, Ctrl+C) reprend là où il s'était arrêté.
+
+**Machine sans accès à Internet.** Téléchargez les fichiers du dépôt Hugging Face sur
+une autre machine (à la révision indiquée par `modeles liste`), copiez-les puis :
+
+```sh
+anonyma-cli modeles importer <identifiant> /media/cle-usb/modele/
+```
+
+L'import accepte un dossier ou une liste de fichiers ; chaque fichier est reconnu par
+son nom ou son empreinte et vérifié avant installation.
+
+## Pseudonymisation ou anonymisation
+
+- **Anonymisation** (par défaut) : aucune correspondance n'est conservée ; l'opération
+  est irréversible.
+- **Pseudonymisation** (`--regime pseudonymisation`) : les correspondances
+  « substitut → valeur d'origine » sont enregistrées dans une **table chiffrée**
+  (`data/table-correspondance.anonyma` par défaut, ou `--table`). Une même personne
+  garde le même substitut d'un lot à l'autre.
+
+La table est protégée par une **phrase secrète**, demandée à l'ouverture (saisie
+masquée, confirmée à la création) ou lue dans la variable d'environnement
+`ANONYMA_PASSPHRASE` pour les traitements automatisés. Elle n'est enregistrée nulle
+part : **une phrase secrète perdue rend la table définitivement illisible.** La clé est
+dérivée par Argon2id ; valeurs d'origine et substituts sont chiffrés en AES-256-GCM et
+recherchés par empreintes HMAC : rien n'apparaît en clair dans le fichier.
+
+Ré-identification (pseudonymisation uniquement) :
+
+```sh
+anonyma-cli reidentifier --balise "[PERSONNE_001]"
+anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt, .md, .csv, .json…)
+```
+
+## Sécurité
+
+- **Aucun accès réseau** : toute connexion sortante est bloquée dans le processus, sauf
+  pendant un téléchargement de modèle demandé par l'utilisateur. Aucune télémétrie.
+- **Originaux intacts** : les fichiers sources ne sont jamais modifiés ; le dossier de
+  sortie doit être distinct des entrées.
+- **Fichiers temporaires** : uniquement dans `data/tmp/`, supprimés en fin de lot et au
+  démarrage suivant (en cas d'arrêt brutal).
+- **Vérification systématique** : chaque fichier produit est relu ; s'il reste une valeur
+  sensible ou si la relecture est impossible, il part en **quarantaine**
+  (`_quarantaine/`) et n'est jamais compté comme anonymisé.
+- **Journaux et rapports** : `data/logs/` et les rapports ne contiennent ni valeur
+  sensible ni nom de fichier d'origine (seulement des noms anonymisés, des nombres et des
+  codes).
+
+## Limites connues
+
+- La détection automatique n'est jamais parfaite : relisez les fichiers marqués
+  « À revoir » et les résidus signalés. Le mode paranoïaque réduit les oublis au prix de
+  davantage de faux positifs.
+- La ré-identification de fichiers ne traite que les formats texte ; pour les autres
+  formats, utilisez `--balise`.
+- Seuls les dépôts Hugging Face publics sont pris en charge (aucun jeton n'est envoyé).
+- macOS : application non signée (voir Gatekeeper ci-dessus). Les archives sont
+  construites pour l'architecture du système de construction (Apple Silicon pour macOS).
+- Ne lancez pas deux instances d'Anonyma sur le même dossier portable en même temps :
+  le nettoyage des fichiers temporaires au démarrage pourrait gêner l'autre instance.
+
+## Développement
+
+```sh
+uv sync
+uv run ruff check . && uv run ruff format . && uv run mypy && uv run pytest
+uv run python packaging/build.py          # dossier portable + test de fumée + zip
+uv run python packaging/gen_licenses.py   # régénère LICENSES.md
+```
+
+L'intégration continue (`.github/workflows/ci.yml`) lance l'analyse statique et les
+tests sous Windows, macOS et Linux, puis construit l'archive portable de chaque système
+(brouillon de publication GitHub pour les étiquettes `v*`).
+
+## Licences
+
+Voir [LICENSES.md](LICENSES.md) : licences de chaque dépendance et des modèles du
+catalogue.

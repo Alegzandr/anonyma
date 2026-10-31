@@ -19,7 +19,15 @@ def app_root() -> Path:
     if override:
         return Path(override).resolve()
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
+        executable = Path(sys.executable).resolve()
+        if sys.platform == "darwin":
+            # Anonyma.app/Contents/MacOS/<exe>: never write inside the bundle (it
+            # breaks its signature and may be read-only); the portable folder is
+            # the one that contains the .app.
+            for parent in executable.parents:
+                if parent.suffix == ".app":
+                    return parent.parent
+        return executable.parent
     return Path(__file__).resolve().parent.parent
 
 
