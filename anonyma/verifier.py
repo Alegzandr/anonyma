@@ -48,6 +48,7 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 
 from anonyma import checksums
+from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.data import is_common_word
 from anonyma.detectors._custom import STOP_WORDS
@@ -183,6 +184,7 @@ class Verifier:
         kept_matcher = _cached(("kept", kept), lambda: _substitutes(set(kept)))
         name_table = _name_table(names, [d.name for d in output.walk()], allowed_keys)
         kinds: list[SegmentKind] = []  # of each residue, for neutral labels
+        atomic = AtomicIndex()
 
         for doc in output.walk():
             gaps = [
@@ -235,7 +237,12 @@ class Verifier:
                                 (nm.start, nm.end, FILENAME_TYPE, NAME_DETECTOR, nm.payloads[0])
                             )
                 flagged: list[tuple[int, int]] = []
-                for start, end, entity_type, source, certain in hits:
+                for hit_start, hit_end, entity_type, source, certain in hits:
+                    # A fragment of a GUID or a token is not that value (atomic tokens).
+                    span = atomic.fit(segment.text, hit_start, hit_end)
+                    if span is None:
+                        continue
+                    start, end = span
                     value = segment.text[start:end]
                     if _overlaps(start, end, flagged):
                         continue
@@ -261,6 +268,10 @@ class Verifier:
                     if found is None or entity.score < self.config.min_score:
                         continue
                     segment = found
+                    span = atomic.fit(segment.text, entity.start, entity.end)
+                    if span is None:
+                        continue
+                    entity.start, entity.end = span
                     value = segment.text[entity.start : entity.end]
                     if normalize(value) in allowed_keys:
                         continue

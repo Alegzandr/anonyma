@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 from anonyma import checksums
+from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.data import first_name
 from anonyma.models import (
@@ -593,6 +594,7 @@ def propagate(
         if e.entity_type in DOCUMENT_LOCAL_TYPES and e.cluster_id:
             local_roots.setdefault(e.cluster_id, set()).add(root_of.get(e.document_id, ""))
     found: list[Entity] = []
+    atomic = AtomicIndex()
     for root in documents:
         for doc in root.walk():
             # Unreadable items: only their name (shown in reports) can be searched.
@@ -616,6 +618,12 @@ def propagate(
                         or root.id in local_roots.get(t.cluster_id or "", set())
                     ]
                     if not targets:
+                        continue
+                    # Never inside a GUID or a token (``…4e8a-b93c…`` holds no initials).
+                    if atomic.fit(segment.text, match.start, match.end) != (
+                        match.start,
+                        match.end,
+                    ):
                         continue
                     target = _pick(targets)
                     found.append(

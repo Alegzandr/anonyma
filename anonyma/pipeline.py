@@ -29,6 +29,7 @@ from typing import Any
 
 from anonyma import outputs as output_record
 from anonyma import paths, registry
+from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.errors import failure_reason
 from anonyma.frenchtext import plural
@@ -560,6 +561,7 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
     """Run the detector chain on a document and all its descendants."""
     entities: list[Entity] = []
     detectors = detectors_for(config)
+    atomic = AtomicIndex()
     for doc in root.walk():
         # Unreadable items still get their name analysed: it shows up in reports.
         segments = (
@@ -593,6 +595,11 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
                     continue
                 if e.score < config.min_score:
                     continue
+                # No detector may cut a GUID, a hash or a token (:mod:`anonyma.atomic`).
+                span = atomic.fit(text, e.start, e.end)
+                if span is None:
+                    continue
+                e.start, e.end = span
                 e.value = text[e.start : e.end]
                 e.document_id = doc.id
                 entities.append(e)
