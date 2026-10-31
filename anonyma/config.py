@@ -78,6 +78,17 @@ class Config:
     #: Free-form GUI preferences (theme, window geometry...).
     ui: dict[str, Any] = field(default_factory=dict)
 
+    # -- detection settings (appended by the detection workstream) ---------------
+    #: Mask every complete date as DATE (dates of birth are always masked).
+    detect_dates: bool = True
+    #: GLiNER span threshold (lower = more recall, more review).
+    gliner_threshold: float = 0.3
+    #: Intra-op threads of one GLiNER instance (0 = CPU count / worker processes).
+    gliner_threads: int = 0
+    #: Send every segment to the LLM, not only those with persons/organisations or
+    #: indirect-identifier cues (much slower).
+    llm_all_segments: bool = False
+
     # -- derived helpers ---------------------------------------------------
 
     def effective_profile(self) -> Profile:
