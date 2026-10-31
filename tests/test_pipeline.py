@@ -18,7 +18,13 @@ from anonyma.models import (
     Segment,
     Severity,
 )
-from anonyma.pipeline import QUARANTINE_DIR, CancelToken, Pipeline, collect_inputs
+from anonyma.pipeline import (
+    QUARANTINE_DIR,
+    CancelToken,
+    Pipeline,
+    collect_inputs,
+    resolve_decisions,
+)
 from anonyma.store import InMemoryMappingStore
 from anonyma.writers.text import TextWriter
 from tests.canary import CANARY_EMAIL, CANARY_PERSON
@@ -226,7 +232,7 @@ def test_rejected_mention_survives_manual_propagation(
     decisions = ReviewDecisions(
         rejected_mentions={mention.key}, manual=[ManualEntity("Bérénice", "PERSONNE")]
     )
-    resolved = pipeline.resolve_decisions(analysis, decisions)
+    resolved = resolve_decisions(analysis, decisions)
     assert mention.key not in {e.key for e in resolved.entities}
     assert "Quintavalle" in resolved.allowed
     result = pipeline.apply(analysis, tmp_path / "out", decisions)
@@ -563,3 +569,63 @@ def test_ocr_gap_at_verification_goes_to_quarantine(
     assert top.output_path is not None and QUARANTINE_DIR in top.output_path.parts
     assert "verify.incomplete" in {i.code for i in top.issues}
     assert top.verification is not None and top.verification.unread == 1
+
+
+def test_nothing_reaches_the_output_folder_before_verification(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma import pipeline as pipeline_module
+
+    original = pipeline_module._verify_output
+    seen: list[list[Path]] = []
+
+    def verify(path, name, job):  # type: ignore[no-untyped-def]
+        seen.append(sorted(job.output_dir.rglob("*")))
+        return original(path, name, job)
+
+    monkeypatch.setattr(pipeline_module, "_verify_output", verify)
+    src = tmp_path / "in" / "a.txt"
+    src.parent.mkdir()
+    src.write_text(f"{CANARY_PERSON}\n", encoding="utf-8")
+    top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
+    assert seen == [[]]
+    assert top.status is DocumentStatus.ANONYMIZED
+    assert top.output_path is not None and top.output_path.parent == (tmp_path / "out").resolve()
+
+
+def test_failure_while_placing_leaves_no_output(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma import pipeline as pipeline_module
+
+    def broken(*_args: object) -> Path:
+        raise OSError(f"disque plein pour {CANARY_PERSON}")
+
+    monkeypatch.setattr(pipeline_module, "_place", broken)
+    src = tmp_path / "in" / "a.txt"
+    src.parent.mkdir()
+    src.write_text(f"{CANARY_PERSON}\n", encoding="utf-8")
+    top = Pipeline(canary_config).run([src], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.FAILED
+    assert top.output_path is None
+    assert not list((tmp_path / "out").rglob("*.txt"))
+    assert CANARY_PERSON not in " ".join(i.message for i in top.issues)
+
+
+def test_same_output_name_is_never_overwritten(tmp_path: Path) -> None:
+    from anonyma.pipeline import _place
+
+    out = tmp_path / "out"
+    for content in ("un", "deux"):
+        written = tmp_path / content / "x.txt"
+        written.parent.mkdir()
+        written.write_text(content, encoding="utf-8")
+        _place(written, out, "x.txt")
+    folder = tmp_path / "dossier"
+    (folder / "sous").mkdir(parents=True)
+    (folder / "sous" / "m.eml").write_text("trois", encoding="utf-8")
+    placed = _place(folder, out, "x.txt")
+    assert sorted(p.name for p in out.iterdir()) == ["x (2).txt", "x (3).txt", "x.txt"]
+    assert (out / "x.txt").read_text(encoding="utf-8") == "un"
+    assert (placed / "sous" / "m.eml").read_text(encoding="utf-8") == "trois"
+    assert not folder.exists()

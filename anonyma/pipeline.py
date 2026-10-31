@@ -17,7 +17,6 @@ from __future__ import annotations
 import os
 import shutil
 import threading
-import zipfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import CancelledError, Future, ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
@@ -73,6 +72,7 @@ from anonyma.resolver import (
 from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import find_all, normalize, safe_filename
 from anonyma.verifier import Verifier, is_ocr_issue, spaced_name
+from anonyma.writers.zip import write_zip
 
 log = get_logger("pipeline")
 
@@ -389,12 +389,12 @@ def _extract_folder(
 
 def _zip_folder(folder: Path, destination: Path) -> None:
     """Pack ``folder`` (files and empty dirs) into ``destination`` without metadata."""
-    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(folder.rglob("*")):
-            arcname = path.relative_to(folder).as_posix()
-            info = zipfile.ZipInfo(arcname + ("/" if path.is_dir() else ""))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            archive.writestr(info, b"" if path.is_dir() else path.read_bytes())
+    items = sorted(folder.rglob("*"))
+    write_zip(
+        [(p.relative_to(folder).as_posix(), p) for p in items if p.is_file()],
+        [p.relative_to(folder).as_posix() for p in items if p.is_dir() and not any(p.iterdir())],
+        destination,
+    )
 
 
 def _remove_output(path: Path) -> None:
@@ -651,14 +651,13 @@ def store_neutral_names(
     store: MappingStore, batch_id: str, documents: Sequence[Document], names: Mapping[str, str]
 ) -> None:
     """Keep ``neutral path -> original path`` in the encrypted store (pseudonymization)."""
-    save = getattr(store, "save_filename", None)
-    if save is None:
-        return
     parents = {d.id: d for root in documents for d in root.walk()}
     for root in documents:
         for doc in root.walk():
             if doc.id in names:
-                save(batch_id, _logical_path(doc, parents, names), _logical_path(doc, parents, {}))
+                store.save_filename(
+                    batch_id, _logical_path(doc, parents, names), _logical_path(doc, parents, {})
+                )
 
 
 def original_names(root: Document) -> list[str]:
@@ -734,8 +733,8 @@ def _counts(entities: Sequence[Entity]) -> dict[str, int]:
 def _write_tree(
     doc: Document, job: _WriteJob, by_doc: Mapping[str, list[Entity]]
 ) -> tuple[DocumentResult, Path | None]:
-    """Write ``doc`` (children first). Top-level goes to the output folder, children
-    to the work folder. Returns the result and the written path."""
+    """Write ``doc`` (children first) into the work folder. Returns the result and
+    the written path (None when the document is omitted)."""
     entities = by_doc.get(doc.id, [])
     writer, extension, pack_folder = _output_shape(doc)
     name = job.neutral_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
@@ -767,14 +766,12 @@ def _write_tree(
                 )
             )
 
-    if doc.depth == 0:
-        destination = _unique_path(job.output_dir / name)
-    else:
-        destination = job.work_dir / new_id() / PurePosixPath(name).name
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    # Top-level outputs too: they only reach the output folder once verified.
+    destination = job.work_dir / new_id() / PurePosixPath(name).name
     target = destination.with_name(new_id()) if pack_folder else destination
     plan = build_plan(doc, entities, job.table)
     try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
         result.issues.extend(
             writer.write(doc, plan, target, _WriteContext(job.config, child_outputs, job.work_dir))
         )
@@ -803,14 +800,38 @@ def _write_tree(
     return result, destination
 
 
-def _unique_path(path: Path) -> Path:
-    if not path.exists():
-        return path
-    for i in range(2, 100_000):
-        candidate = path.with_name(f"{path.stem} ({i}){path.suffix}")
-        if not candidate.exists():
-            return candidate
-    raise FileExistsError(path)
+def _place(source: Path, folder: Path, name: str) -> Path:
+    """Move a written output to ``folder/name`` (``x (2).pdf``... when taken).
+
+    The name is reserved by exclusive creation: worker processes place their outputs
+    concurrently and must never overwrite each other."""
+    path = folder / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    is_dir = source.is_dir()
+    for i in range(1, 100_000):
+        candidate = path if i == 1 else path.with_name(f"{path.stem} ({i}){path.suffix}")
+        try:
+            if is_dir:
+                candidate.mkdir()
+            else:
+                candidate.touch(exist_ok=False)
+        except FileExistsError:
+            continue
+        try:
+            try:
+                os.replace(source, candidate)  # same volume (directories: POSIX only)
+            except OSError:
+                if is_dir:
+                    shutil.copytree(source, candidate, dirs_exist_ok=True)
+                    shutil.rmtree(source, ignore_errors=True)
+                else:
+                    shutil.copyfile(source, candidate)
+                    source.unlink()
+        except BaseException:
+            _remove_output(candidate)
+            raise
+        return candidate
+    raise FileExistsError("nom de fichier de sortie indisponible")
 
 
 def _set_status(result: DocumentResult, status: DocumentStatus) -> None:
@@ -828,7 +849,32 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
     result, written = _write_tree(job.document, job, by_doc)
     if written is None:
         return result
+    try:
+        status, folder = _assess(result, written, job)
+        result.output_path = _place(written, folder, result.output_name)
+    except Exception as exc:
+        # Whatever failed, an output whose verification and placement did not
+        # complete never stays anywhere a user could pick it up.
+        log.warning("verification failed for %s: %s", job.document.id, type(exc).__name__)
+        _remove_output(written)  # ``_place`` removes its own partial copy
+        result.output_path = None
+        _set_status(result, DocumentStatus.FAILED)
+        result.issues.append(
+            Issue(
+                Severity.ERROR,
+                "verify.error",
+                f"La vérification a échoué ({type(exc).__name__}).",
+            )
+        )
+        return result
+    _set_status(result, status)
+    return result
 
+
+def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[DocumentStatus, Path]:
+    """Verify ``written`` and fill ``result`` (counters, issues). Returns the status of
+    the tree and the folder the output belongs in: the output folder, or the
+    quarantine (residue, failed or incomplete verification)."""
     verification = _verify_output(written, result.output_name, job)
     result.verification = verification
     result.residue_count = len(verification.certain_residues)
@@ -838,35 +884,47 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
     result.review_count = len(
         {e.cluster_id for e in job.entities if e.document_id in tree_ids} & job.review_clusters
     )
-    if verification.clean:
-        if result.possible_residue_count:
+    quarantine = job.output_dir / QUARANTINE_DIR
+    if not verification.clean:
+        if verification.verified:
             result.issues.append(
                 Issue(
-                    Severity.WARNING,
-                    "verify.possible_residue",
-                    f"{result.possible_residue_count} résidu(s) possible(s) signalé(s) : "
-                    "à vérifier.",
+                    Severity.ERROR,
+                    "verify.residue",
+                    f"{result.residue_count} résidu(s) détecté(s) : fichier placé en quarantaine.",
                 )
             )
-        gaps = ocr_gaps(job.document)
-        if gaps:
-            result.issues.append(
-                Issue(
-                    Severity.WARNING,
-                    "analyse.ocr_incomplete",
-                    f"Analyse incomplète : {gaps} image(s) ou page(s) n'ont pas pu être lues "
-                    "par l'OCR. Fichier à revoir.",
-                )
+            return DocumentStatus.RESIDUE, quarantine
+        result.issues.append(
+            Issue(
+                Severity.ERROR,
+                "verify.failed",
+                "Vérification impossible : fichier placé en quarantaine, non anonymisé.",
             )
-        needs_review = result.review_count or result.possible_residue_count or gaps
-        if verification.complete:
-            _set_status(
-                result, DocumentStatus.NEEDS_REVIEW if needs_review else DocumentStatus.ANONYMIZED
+        )
+        return DocumentStatus.FAILED, quarantine
+
+    if result.possible_residue_count:
+        result.issues.append(
+            Issue(
+                Severity.WARNING,
+                "verify.possible_residue",
+                f"{result.possible_residue_count} résidu(s) possible(s) signalé(s) : à vérifier.",
             )
-            return result
+        )
+    gaps = ocr_gaps(job.document)
+    if gaps:
+        result.issues.append(
+            Issue(
+                Severity.WARNING,
+                "analyse.ocr_incomplete",
+                f"Analyse incomplète : {gaps} image(s) ou page(s) n'ont pas pu être lues "
+                "par l'OCR. Fichier à revoir.",
+            )
+        )
+    if not verification.complete:
         # Some image or page of the output could not be read back: what it shows was
         # never checked. Never anonymized: to review, kept out of the clean set.
-        _set_status(result, DocumentStatus.NEEDS_REVIEW)
         result.issues.append(
             Issue(
                 Severity.WARNING,
@@ -876,35 +934,10 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
                 "quarantaine, à contrôler visuellement.",
             )
         )
-
-    quarantined = _unique_path(job.output_dir / QUARANTINE_DIR / result.output_name)
-    quarantined.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(written, quarantined)
-    result.output_path = quarantined
-    if verification.clean:
-        pass  # incomplete verification: status and issue set above
-    elif verification.verified:
-        _set_status(result, DocumentStatus.RESIDUE)
-        result.status = DocumentStatus.RESIDUE
-        result.issues.append(
-            Issue(
-                Severity.ERROR,
-                "verify.residue",
-                f"{len(verification.certain_residues)} résidu(s) détecté(s) : fichier placé en "
-                "quarantaine.",
-            )
-        )
-    else:
-        _set_status(result, DocumentStatus.FAILED)
-        result.status = DocumentStatus.FAILED
-        result.issues.append(
-            Issue(
-                Severity.ERROR,
-                "verify.failed",
-                "Vérification impossible : fichier placé en quarantaine, non anonymisé.",
-            )
-        )
-    return result
+        return DocumentStatus.NEEDS_REVIEW, quarantine
+    needs_review = result.review_count or result.possible_residue_count or gaps
+    status = DocumentStatus.NEEDS_REVIEW if needs_review else DocumentStatus.ANONYMIZED
+    return status, job.output_dir
 
 
 def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
@@ -996,9 +1029,12 @@ class Pipeline:
                 }
                 for future in as_completed(futures):
                     if cancel and cancel.cancelled:
+                        # Pending jobs are dropped; running ones still finish and are
+                        # kept, so that results match what was written.
                         for f in futures:
                             f.cancel()
-                        break
+                    if future.cancelled():
+                        continue
                     index = futures[future]
                     results[index] = future.result()
                     finished.add(index)
@@ -1080,10 +1116,10 @@ class Pipeline:
     ) -> BatchResult:
         decisions = decisions or ReviewDecisions()
         output_dir = Path(output_dir).resolve()
-        self.check_output_dir(analysis, output_dir)
+        validate_output_dir([*analysis.inputs, *(d.source for d in analysis.documents)], output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        resolved = self.resolve_decisions(analysis, decisions)
+        resolved = resolve_decisions(analysis, decisions)
         entities, active = resolved.entities, resolved.clusters
         table = Replacer(self.config, self.store).assign(active, entities, analysis.documents)
         local = {cid for cid, c in active.items() if c.entity_type in DOCUMENT_LOCAL_TYPES}
@@ -1155,18 +1191,6 @@ class Pipeline:
 
     def close(self, analysis: BatchAnalysis) -> None:
         shutil.rmtree(analysis.work_dir, ignore_errors=True)
-
-    def resolve_decisions(
-        self, analysis: BatchAnalysis, decisions: ReviewDecisions
-    ) -> ResolvedDecisions:
-        return resolve_decisions(analysis, decisions)
-
-    def manual_entities(self, analysis: BatchAnalysis, decisions: ReviewDecisions) -> list[Entity]:
-        return manual_entities(analysis, decisions)
-
-    @staticmethod
-    def check_output_dir(analysis: BatchAnalysis, output_dir: Path) -> None:
-        validate_output_dir([*analysis.inputs, *(d.source for d in analysis.documents)], output_dir)
 
 
 def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> ResolvedDecisions:
@@ -1285,17 +1309,21 @@ OUTPUT_CONFLICT_MESSAGE = (
 )
 
 
+class OutputDirError(ValueError):
+    """The output folder overlaps the inputs (``str(exc)`` is a French message)."""
+
+
 def validate_output_dir(inputs: Sequence[Path], output_dir: Path) -> None:
     """Refuse an output folder that is, contains, or lies inside one of the inputs.
 
-    Raises ``ValueError`` with a French message (usable before any analysis)."""
+    Raises ``OutputDirError`` (usable before any analysis)."""
     output_dir = Path(output_dir).resolve()
     for raw in inputs:
         root = Path(raw).resolve()
         inside_input = root.is_dir() and (output_dir == root or root in output_dir.parents)
         contains_input = output_dir == root or output_dir in root.parents
         if inside_input or contains_input:
-            raise ValueError(OUTPUT_CONFLICT_MESSAGE)
+            raise OutputDirError(OUTPUT_CONFLICT_MESSAGE)
 
 
 __all__ = [
@@ -1304,6 +1332,7 @@ __all__ = [
     "BatchAnalysis",
     "BatchResult",
     "CancelToken",
+    "OutputDirError",
     "Pipeline",
     "ProgressCallback",
     "ProgressEvent",

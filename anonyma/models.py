@@ -500,6 +500,10 @@ class MappingStore(Protocol):
 
     def used_substitutes(self) -> set[str]: ...
 
+    def save_filename(self, batch_id: str, output_name: str, original: str) -> None:
+        """Keep the original path behind a neutral output path."""
+        ...
+
 
 class ArchiveBombError(Exception):
     """Raised when a container exceeds the expansion budget."""
