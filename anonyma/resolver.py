@@ -35,6 +35,7 @@ from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.data import first_name, is_common_word
 from anonyma.detectors._custom import NOT_LONE_GIVEN
+from anonyma.detectors.opaque import IdWhitelist
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
     Document,
@@ -46,9 +47,12 @@ from anonyma.models import (
     Segment,
 )
 from anonyma.names import (
+    PARTICLES,
+    ROLE_WORDS,
     PersonName,
     civility_of,
     given_like,
+    is_functional_name,
     is_initial,
     login_forms,
     match_login_template,
@@ -163,8 +167,50 @@ GENERIC_LOCAL_PARTS = frozenset(
         "standard",
         "reception",
         "agence",
+        *ROLE_WORDS,
     ]
 )
+#: Month and weekday names: never searched alone as a name.
+_CALENDAR_WORDS = frozenset(
+    {
+        "janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre",
+        "octobre", "novembre", "decembre", "lundi", "mardi", "mercredi", "jeudi", "vendredi",
+        "samedi", "dimanche", "january", "february", "march", "april", "may", "june", "july",
+        "august", "september", "october", "november", "december", "monday", "tuesday",
+        "wednesday", "thursday", "friday", "saturday", "sunday",
+    }
+)  # fmt: skip
+
+
+def generic_local(local: str) -> bool:
+    """A mailbox of a function, not of a person: ``contact``, ``service-client``,
+    ``ne-pas-repondre``, ``offres``; never ``jean.dupont`` nor ``jdupont``."""
+    key = local.casefold().strip()
+    if key in GENERIC_LOCAL_PARTS:
+        return True
+    parts = [p for p in re.split(r"[._\-+]", key) if p]
+    if not parts or any(p.isdigit() for p in parts):
+        return False
+    return any(p in GENERIC_LOCAL_PARTS for p in parts) and all(
+        (p in GENERIC_LOCAL_PARTS or is_common_word(p)) and not given_like(p) for p in parts
+    )
+
+
+def reliable_person(person: PersonName) -> bool:
+    """A parsed full name that really reads as a person: a given name of the lexicon,
+    or a word that is not an ordinary one, and not a team (« Service Client »). Only
+    reliable names give derived forms (surname alone, logins, initials)."""
+    words = [*person.given, *person.surname]
+    if is_functional_name(" ".join(words)):
+        return False
+    return any(given_like(w) and not is_initial(w) for w in person.given) or any(
+        not is_common_word(w) and normalize(w) not in PARTICLES for w in words if not is_initial(w)
+    )
+
+
+def _lone_common(form: str) -> bool:
+    """One ordinary word (« Entreprises », « Nouvelle », « offres »)."""
+    return len(form.split()) == 1 and (is_common_word(form) or normalize(form) in _CALENDAR_WORDS)
 
 
 def phone_key(value: str) -> str:
@@ -228,7 +274,7 @@ class _PersonIndex:
     folded_surname: dict[str, set[str]] = field(default_factory=dict)
 
     def add(self, cluster_id: str, person: PersonName) -> None:
-        if not person.is_full:
+        if not person.is_full or not reliable_person(person):
             return
         self.folded.setdefault(_folded_key(person), set()).add(cluster_id)
         self.folded_surname.setdefault(ocr_fold(person.surname_key), set()).add(cluster_id)
@@ -308,8 +354,16 @@ def _canonical_rank(entity_type: str, value: str) -> tuple[int, int, int, int]:
     return (0, 0, has_lower, len(value))
 
 
-def _whitelisted(entity: Entity, whitelist: set[str]) -> bool:
-    if not whitelist or entity.review is ReviewStatus.MANUAL:
+#: Types governed by ``Config.opaque_id_whitelist`` (« --identifiant-autorise »).
+ID_TYPES = frozenset({EntityType.OPAQUE_ID, EntityType.CASE_NUMBER, EntityType.SUSPICIOUS_TOKEN})
+
+
+def _whitelisted(entity: Entity, whitelist: set[str], ids: IdWhitelist | None = None) -> bool:
+    if entity.review is ReviewStatus.MANUAL:
+        return False
+    if ids and entity.entity_type in ID_TYPES and ids.allows(entity.value):
+        return True
+    if not whitelist:
         return False
     if normalize(entity.value) in whitelist:
         return True
@@ -338,11 +392,12 @@ def resolve(
     whitelist = config.whitelist_keys()
     whitelist |= {checksums.compact(w).casefold() for w in config.whitelist if w.strip()}
 
+    ids = IdWhitelist(config.opaque_id_whitelist or [])
     entities = _unwrap_persons(entities, clusters)
     by_span: dict[tuple[str, str, int, int, bool], Entity] = {}
     span_detectors: dict[tuple[str, str, int, int, bool], set[str]] = {}
     for entity in entities:
-        if _whitelisted(entity, whitelist):
+        if _whitelisted(entity, whitelist, ids):
             continue
         key = _span_key(entity)
         span_detectors.setdefault(key, set()).add(entity.detector)
@@ -594,7 +649,7 @@ def _link_emails(clusters: Mapping[str, EntityCluster]) -> None:
         if cluster.entity_type != EntityType.PERSON:
             continue
         person = parse_person(cluster.canonical)
-        if person is None or not person.is_full:
+        if person is None or not person.is_full or not reliable_person(person):
             continue
         for form in login_forms(person).values():
             forms.setdefault(form, set()).add(cluster.id)
@@ -641,8 +696,18 @@ def _grouped(compact: str, size: int = 4) -> str:
 def cluster_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
     """Every surface form worth searching for ``cluster``: (form, needs capital)."""
     entity_type = cluster.entity_type
+    # An uncertain mention, or a « person » made of ordinary words, is masked where it
+    # was found; a lone ordinary word of it is not searched batch-wide (« Nouvelle »
+    # of « Société Nouvelle des… », « Entreprises » of « Facturation Entreprises »).
+    narrow = cluster.needs_review or not _reliable_cluster(cluster)
     for variant in cluster.variants:
         if len(normalize(variant)) < MIN_PROPAGATION_LENGTH:
+            continue
+        if (
+            entity_type in NAME_TYPES
+            and _lone_common(variant)
+            and (narrow or normalize(variant) in _CALENDAR_WORDS)
+        ):
             continue
         cap = entity_type in NAME_TYPES and needs_capital(variant)
         yield variant, cap
@@ -652,9 +717,11 @@ def cluster_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
     if entity_type == EntityType.PERSON:
         yield from _person_forms(cluster)
     elif entity_type == EntityType.EMAIL:
+        # The local part alone, unless it names a function (``offres@`` must not mask
+        # « vos offres commerciales »); an ordinary word only when capitalized.
         local = cluster.canonical.strip("<> ").split("@")[0]
-        if len(local) >= 5 and local.casefold() not in GENERIC_LOCAL_PARTS:
-            yield local, False
+        if len(local) >= 5 and not generic_local(local):
+            yield local, is_common_word(local)
     elif entity_type == EntityType.PHONE:
         key = phone_key(cluster.canonical)
         if len(key) >= 8:
@@ -686,7 +753,16 @@ def _glued(entity_type: str, variant: str) -> str | None:
     return glued
 
 
+def _reliable_cluster(cluster: EntityCluster) -> bool:
+    if cluster.entity_type != EntityType.PERSON:
+        return True
+    person = parse_person(cluster.canonical)
+    return person is None or not person.is_full or reliable_person(person)
+
+
 def _person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
+    if not _reliable_cluster(cluster):
+        return
     seen: set[str] = set()
     for variant in sorted(cluster.variants):
         person = parse_person(variant)
@@ -706,7 +782,12 @@ def _person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
                     seen.add(form)
                     yield form, False
         surname = " ".join(person.surname)
-        if person.surname and len(normalize(surname)) >= MIN_PROPAGATION_LENGTH:
+        if (
+            person.surname
+            and len(normalize(surname)) >= MIN_PROPAGATION_LENGTH
+            and normalize(surname) not in _CALENDAR_WORDS
+            and not (cluster.needs_review and _lone_common(surname))
+        ):
             yield surname, bool(needs_capital(surname))
 
 
@@ -721,7 +802,7 @@ def distinctive_given(cluster: EntityCluster) -> set[str]:
     out: set[str] = set()
     for variant in cluster.variants:
         person = parse_person(variant)
-        if person is not None and person.is_full:
+        if person is not None and person.is_full and reliable_person(person):
             out.update(_distinctive_given(person))
     return out
 
@@ -747,6 +828,8 @@ def _email_person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
     are written as one, capitalized, in the text (« Zéphyrin Quintavalle
     <zephyrin.quintavalle@…> »): the address is the evidence."""
     local = cluster.canonical.strip("<> ").split("@")[0]
+    if generic_local(local):
+        return
     for sep in (".", "_", "-"):
         parts = [p for p in local.split(sep) if p]
         if len(parts) != 2:
@@ -916,18 +999,19 @@ def propagate(
     return found
 
 
-_WORD_BEFORE = re.compile(r"(?<![\w'’\-.@])([^\W\d_]+(?:-[^\W\d_]+)*)[ \t]$")
-_WORD_AFTER = re.compile(r"^[ \t]([^\W\d_]+(?:-[^\W\d_]+)*)(?![\w\-'’@.]\w)")
+#: A word just before / after a name on the same line (a few spaces of layout).
+_WORD_BEFORE = re.compile(r"(?<![\w'’\-.@])([^\W\d_]+(?:-[^\W\d_]+)*)[ \t\u00a0]{1,8}$")
+_WORD_AFTER = re.compile(r"^[ \t\u00a0]{1,8}([^\W\d_]+(?:-[^\W\d_]+)*)(?![\w\-'’@.]\w)")
 
 
 def _with_given_names(text: str, start: int, end: int) -> tuple[int, int]:
     """Widen a propagated name over a given name written next to it, in any case
-    (« ludovic braquemart » around a known « Braquemart »): the given name must not
-    stay visible next to its masked surname."""
-    before = _WORD_BEFORE.search(text, max(0, start - 40), start)
+    (« ludovic braquemart » around a known « Braquemart », « Thi     Lan Lambert »):
+    the given name must not stay visible next to its masked surname."""
+    before = _WORD_BEFORE.search(text, max(0, start - 60), start)
     if before is not None and _adjacent_given(before.group(1)):
         start = before.start(1)
-    after = _WORD_AFTER.match(text[end : end + 40])
+    after = _WORD_AFTER.match(text[end : end + 60])
     if after is not None and _adjacent_given(after.group(1)):
         end += after.end(1)
     return start, end
