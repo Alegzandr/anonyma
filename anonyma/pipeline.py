@@ -72,7 +72,7 @@ from anonyma.resolver import (
     resolve,
 )
 from anonyma.textsearch import MultiMatcher, leftmost_longest
-from anonyma.textutils import find_all, normalize, safe_filename
+from anonyma.textutils import find_all, normalize, safe_filename, safe_suffix
 from anonyma.verifier import Verifier, is_ocr_issue, spaced_name
 from anonyma.writers.zip import write_zip
 
@@ -334,8 +334,7 @@ class _ExtractionContext(ExtractionContext):
 
 
 def _suffix_of(name: str) -> str:
-    suffix = PurePosixPath(name.replace("\\", "/")).suffix.lower()
-    return suffix if suffix.isascii() and len(suffix) <= 10 else ""
+    return safe_suffix(name)
 
 
 def extract_file(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterator
+from pathlib import PurePosixPath
 
 _SPACES = re.compile(r"\s+")
 
@@ -71,17 +72,38 @@ def find_all(haystack: str, needle: str, *, whole_word: bool = True) -> Iterator
         pos = norm.find(target, pos + 1)
 
 
-def safe_filename(name: str) -> str:
-    """Make a single path component safe on Windows, macOS and Linux."""
-    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .")
-    reserved = {
-        "CON",
-        "PRN",
-        "AUX",
-        "NUL",
-        *(f"COM{i}" for i in range(1, 10)),
-        *(f"LPT{i}" for i in range(1, 10)),
+#: Device names Windows reserves whatever the extension (``NUL.txt``, ``COM¹.pdf``),
+#: trailing spaces of the base ignored.
+_RESERVED_NAMES = frozenset(
+    {
+        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+        *(f"{device}{n}" for device in ("COM", "LPT") for n in [*"123456789", "¹", "²", "³"]),
     }
-    if cleaned.split(".")[0].upper() in reserved:
+)  # fmt: skip
+#: Longest name produced, in UTF-8 bytes (Linux limits names to 255 bytes, Windows
+#: paths to 260 characters).
+MAX_NAME_BYTES = 200
+_SUFFIX = re.compile(r"\.[A-Za-z0-9]{1,10}")
+
+
+def safe_filename(name: str) -> str:
+    """Make a single path component safe on Windows, macOS and Linux: no reserved
+    character or device name, at most :data:`MAX_NAME_BYTES` (extension kept)."""
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .")
+    if cleaned.split(".")[0].rstrip(" ").upper() in _RESERVED_NAMES:
         cleaned = f"_{cleaned}"
+    if len(cleaned.encode("utf-8")) > MAX_NAME_BYTES:
+        stem, dot, ext = cleaned.rpartition(".")
+        suffix = f".{ext}" if dot and stem and _SUFFIX.fullmatch(f".{ext}") else ""
+        base = cleaned[: len(cleaned) - len(suffix)] if suffix else cleaned
+        room = MAX_NAME_BYTES - len(suffix.encode("utf-8"))
+        base = base.encode("utf-8")[:room].decode("utf-8", "ignore").rstrip(" .")
+        cleaned = base + suffix
     return cleaned or "_"
+
+
+def safe_suffix(name: str) -> str:
+    """Extension of ``name`` usable for a temporary file (``.pdf``), lower case, or
+    ``""``: never a separator, stream (``:``) or device trick from an archive entry."""
+    suffix = PurePosixPath(name.replace("\\", "/")).suffix.lower()
+    return suffix if _SUFFIX.fullmatch(suffix) else ""
