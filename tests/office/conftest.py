@@ -76,7 +76,7 @@ def run_pipeline(source: Path, tmp_path: Path, config: Config) -> tuple[BatchRes
     """Anonymize ``source`` (copied into an input folder) and return the result and
     the output path of the top-level document."""
     in_dir = tmp_path / "in"
-    in_dir.mkdir(exist_ok=True)
+    in_dir.mkdir(parents=True, exist_ok=True)
     copy = in_dir / source.name
     if source != copy:
         shutil.copy2(source, copy)

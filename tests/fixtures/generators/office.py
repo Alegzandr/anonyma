@@ -747,7 +747,7 @@ def rtf_document(*, picture: bytes | None = None) -> bytes:
     if picture is not None:
         pict = (
             "{\\*\\shppict{\\pict{\\*\\picprop{\\sp{\\sn wzDescription}{\\sv "
-            f"{p}}}}}\\picw10\\pich10\\picwgoal150\\pichgoal150\\pngblip\r\n"
+            f"{p}}}}}}}\\picw10\\pich10\\picwgoal150\\pichgoal150\\pngblip\r\n"
             f"{picture.hex()}}}}}\\par\r\n"
         )
     text = (
@@ -831,6 +831,8 @@ def pdf_document(*, image: bytes | None = None, attachment: bool = True) -> byte
             "keywords": E,
             "creator": P,
             "producer": "Anonyma-fixtures",
+            "creationDate": "D:20240101000000",
+            "modDate": "D:20240101000000",
         }
     )
     doc.set_xml_metadata(
@@ -847,7 +849,7 @@ def pdf_document(*, image: bytes | None = None, attachment: bool = True) -> byte
             filename="note.txt",
             desc=f"Notes de {P}",
         )
-    data = doc.tobytes(garbage=3, deflate=True)
+    data = doc.tobytes(garbage=3, deflate=True, no_new_id=True)
     doc.close()
     return bytes(data)
 

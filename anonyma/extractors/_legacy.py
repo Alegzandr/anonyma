@@ -62,10 +62,12 @@ def ole_metadata(data: bytes) -> Iterator[tuple[str, str]]:
         return
     try:
         ole = olefile.OleFileIO(io.BytesIO(data))
-    except OSError:
+    except Exception:  # malformed container: the converter decides
         return
     try:
         meta = ole.get_metadata()
+    except Exception:
+        return
     finally:
         ole.close()
     codepage = getattr(meta, "codepage", None) or 1252

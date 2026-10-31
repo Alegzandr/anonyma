@@ -107,6 +107,23 @@ def fit_text(page: pymupdf.Page, rect: pymupdf.Rect, text: str) -> None:
     )
 
 
+def remove_javascript(doc: pymupdf.Document) -> None:
+    """Drop JavaScript code, additional actions and the JavaScript name tree."""
+    for xref in range(1, doc.xref_length()):
+        try:
+            source = doc.xref_object(xref, compressed=False)
+        except Exception:
+            continue
+        if not any(token in source for token in ("/JavaScript", "/JS", "/AA")):
+            continue
+        for key in doc.xref_get_keys(xref):
+            kind, value = doc.xref_get_key(xref, key)
+            if key in ("JS", "AA", "JavaScript") or (
+                kind == "dict" and ("/JavaScript" in value or "/JS" in value)
+            ):
+                doc.xref_set_key(xref, key, "null")
+
+
 @register_writer
 class PdfWriter(Writer):
     name = "pdf"
@@ -170,6 +187,7 @@ class PdfWriter(Writer):
             thumbnails=True,
             xml_metadata=True,
         )
+        remove_javascript(doc)
         doc.set_metadata({})
         doc.del_xml_metadata()
         doc.set_toc([])
