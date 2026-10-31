@@ -18,6 +18,7 @@ from PIL import Image
 from anonyma import ocr
 from anonyma.config import Config
 from anonyma.extractors._mailheaders import (
+    exposed_text,
     map_cid_url,
     neutral_date,
     safe_address_list,
@@ -26,6 +27,7 @@ from anonyma.extractors._mailheaders import (
     safe_header,
     safe_message_ids,
     thread_depth,
+    with_hidden_tail,
 )
 from anonyma.models import DocumentStatus, OcrLine, Replacement, ReplacementMode
 from anonyma.pipeline import Pipeline
@@ -146,15 +148,13 @@ def test_placeholders_are_not_residues_but_names_are() -> None:
         "EMAIL_K7Q2@anonyme.invalid",
         "anonyme.invalid",
     ):
-        assert is_mail_placeholder("EMAIL", value), value
-    assert is_mail_placeholder("DATE", "01 Mar 1970 00:03:00 +0000")
+        assert is_mail_placeholder(value), value
     for value in (
         "jean.dupont@anonyme.invalid",
         "JEAN_DUPONT@anonyme.invalid",
         "EMAIL_001@exemple.test",
     ):
-        assert not is_mail_placeholder("EMAIL", value), value
-    assert not is_mail_placeholder("DATE", "01 Mar 1970")
+        assert not is_mail_placeholder(value), value
 
 
 # -- end to end ----------------------------------------------------------------
@@ -328,3 +328,14 @@ def test_msg_cid_and_ids_stay_valid(tmp_path: Path, canary_config: Config) -> No
         assert recipient.email.startswith("EMAIL_")
     finally:
         msg.close()
+
+
+def test_neutral_dates_are_not_exposed_again() -> None:
+    # Re-read for verification, the neutral date must not look like a birth date.
+    assert exposed_text("Date", neutral_date(2)) == ""
+    assert exposed_text("Date", "Tue, 14 Jan 2025 10:12:00 +0100") != ""
+    received = f"from a by b; {neutral_date()}"
+    assert exposed_text("Received", received) == "from a by b"
+    assert with_hidden_tail(received, "from a by b", "from [URL_001] by b") == (
+        f"from [URL_001] by b; {neutral_date()}"
+    )

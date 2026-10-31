@@ -59,10 +59,12 @@ from anonyma.extractors._html import (
 from anonyma.extractors._mailheaders import (
     CONTENT_ID_HEADER,
     content_id_key,
+    exposed_text,
     map_cid_url,
     new_content_id,
     safe_header,
     thread_depth,
+    with_hidden_tail,
 )
 from anonyma.models import (
     ChildOutput,
@@ -401,7 +403,7 @@ def _extract_part(part: Message, path: str, state: _Extraction) -> None:
         lname = name.lower()
         if lname in DROPPED_HEADERS or lname in STRUCTURAL_HEADERS:
             continue
-        text = decode_header_value(str(value))
+        text = exposed_text(name, decode_header_value(str(value)))
         if not text.strip():
             continue
         document.segments.append(
@@ -577,7 +579,11 @@ def _header_lines(part: Message, path: str, state: _Writing) -> list[str]:
         segment = by_index.get(index)
         replacements = state.plan.for_segment(segment.id) if segment is not None else []
         if segment is not None and replacements:
-            new = safe_header(name, segment.text, replacements, depth)
+            decoded = decode_header_value(str(value))
+            if segment.text != decoded:  # a neutral date was left out on extraction
+                new = with_hidden_tail(decoded, segment.text, state.plan.apply(segment))
+            else:
+                new = safe_header(name, segment.text, replacements, depth)
             lines.append(fold_header(name, encode_header_text(new), nl))
         else:
             raw = str(value)

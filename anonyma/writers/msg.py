@@ -24,6 +24,7 @@ from anonyma.extractors._mailheaders import (
     safe_header,
     safe_message_ids,
     thread_depth,
+    with_hidden_tail,
 )
 from anonyma.extractors._mime import (
     DROPPED_HEADERS,
@@ -122,7 +123,11 @@ def _new_text(
                 continue
             replacements = plan.for_segment(segment.id) if segment is not None else []
             if segment is not None and replacements:
-                new = safe_header(name, segment.text, replacements, depth)
+                decoded = decode_header_value(raw)
+                if segment.text != decoded:  # a neutral date was left out on extraction
+                    new = with_hidden_tail(decoded, segment.text, plan.apply(segment))
+                else:
+                    new = safe_header(name, segment.text, replacements, depth)
                 lines.append(fold_header(name, encode_header_text(new), "\r\n"))
             else:
                 lines.append(f"{name}: {re.sub(r'\r?\n', '\r\n', raw.strip('\r\n'))}\r\n")

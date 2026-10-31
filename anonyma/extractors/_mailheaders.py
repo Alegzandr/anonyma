@@ -360,6 +360,32 @@ def safe_date(text: str, depth: int = 0) -> str:
     return value
 
 
+_NEUTRAL_DATE = re.compile(
+    r"(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*)?01 Mar 1970 00:[0-5]\d:00 \+0000"
+)
+
+
+def exposed_text(name: str, text: str) -> str:
+    """The part of header ``name`` (decoded ``text``) the extractors expose: a
+    neutral date written by :func:`safe_date` holds no value and is left out (any
+    detector would read a date there: a birth date for GLiNER, a proper noun « Mar »
+    for the paranoid one), as is the neutral date closing a ``Received`` header."""
+    lname = name.lower()
+    if lname in DATE_HEADERS and _NEUTRAL_DATE.fullmatch(text.strip()):
+        return ""
+    if lname == "received":
+        head, sep, tail = text.rpartition(";")
+        if sep and _NEUTRAL_DATE.fullmatch(tail.strip()):
+            return head
+    return text
+
+
+def with_hidden_tail(decoded: str, exposed: str, new: str) -> str:
+    """``new`` (anonymized ``exposed`` text) followed by what :func:`exposed_text`
+    left out of ``decoded``."""
+    return new + decoded[len(exposed) :] if decoded.startswith(exposed) else new
+
+
 def safe_received(text: str, depth: int = 0) -> str:
     """``Received``: the date after the last ``;`` made valid."""
     head, sep, tail = text.rpartition(";")
