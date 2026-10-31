@@ -3,6 +3,7 @@ sensitive value."""
 
 from __future__ import annotations
 
+import html
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,9 @@ STATUS_LABELS = {
     DocumentStatus.EXTRACTED: "Extrait",
 }
 
+#: Extensions accepted by :meth:`BatchReport.save`.
+REPORT_EXTENSIONS = (".json", ".md", ".html")
+
 
 @dataclass(slots=True)
 class BatchReport:
@@ -33,6 +37,8 @@ class BatchReport:
     files: list[dict[str, Any]] = field(default_factory=list)
     residues: list[dict[str, str]] = field(default_factory=list)
     failures: list[dict[str, Any]] = field(default_factory=list)
+    #: Non-sensitive batch settings (profile, mode, regime...), French labels.
+    settings: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_result(cls, result: BatchResult) -> BatchReport:
@@ -71,7 +77,7 @@ class BatchReport:
         return report
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "lot": self.batch_id,
             "debut": self.started_at,
             "fin": self.finished_at,
@@ -81,44 +87,224 @@ class BatchReport:
             "residus": self.residues,
             "echecs": self.failures,
         }
+        if self.settings:
+            data["parametres"] = self.settings
+        return data
 
     def save_json(self, path: Path) -> None:
         path.write_text(json.dumps(self.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
 
+    # -- Markdown -------------------------------------------------------------
+
     def to_markdown(self) -> str:
+        c = _md_cell
         lines = [
             f"# Rapport du lot {self.batch_id}",
             "",
             f"Début : {self.started_at} · Fin : {self.finished_at}",
             "",
+        ]
+        if self.settings:
+            lines += [f"- {c(k)} : {c(v)}" for k, v in self.settings.items()] + [""]
+        lines += [
             "## Fichiers",
             "",
             "| Fichier | Statut | Entités | Résidus |",
             "|---|---|---|---|",
         ]
         for f in self.files:
-            lines.append(f"| {f['fichier']} | {f['statut']} | {f['entites']} | {f['residus']} |")
+            lines.append(
+                f"| {c(f['fichier'])} | {c(f['statut'])} | {f['entites']} | {f['residus']} |"
+            )
         lines += ["", "## Entités par type", "", "| Type | Nombre |", "|---|---|"]
-        lines += [f"| {t} | {n} |" for t, n in sorted(self.entity_counts.items())]
+        lines += [f"| {c(t)} | {n} |" for t, n in sorted(self.entity_counts.items())]
         if self.residues:
             lines += [
                 "",
                 "## Résidus",
                 "",
-                "| Fichier | Zone | Type | Origine |",
+                "| Emplacement | Zone | Type | Origine |",
                 "|---|---|---|---|",
             ]
             lines += [
-                f"| {r['emplacement']} | {r['zone']} | {r['type']} | {r['origine']} |"
+                f"| {c(r['emplacement'])} | {c(r['zone'])} | {c(r['type'])} | {c(r['origine'])} |"
                 for r in self.residues
             ]
         if self.failures:
             lines += ["", "## Échecs", ""]
             for f in self.failures:
                 lines.append(
-                    f"- **{f['fichier']}** ({f['statut']}) : " + " ; ".join(f["problemes"])
+                    f"- **{c(f['fichier'])}** ({f['statut']}) : " + " ; ".join(f["problemes"])
                 )
         return "\n".join(lines) + "\n"
+
+    def save_markdown(self, path: Path) -> None:
+        path.write_text(self.to_markdown(), encoding="utf-8")
+
+    # -- HTML -----------------------------------------------------------------
+
+    def to_html(self) -> str:
+        """Self-contained HTML page: inline CSS, no script, no external resource."""
+        e = _esc
+        total_entities = sum(self.entity_counts.values())
+        status_rows = "".join(
+            f"<tr><td>{e(_status_label(s))}</td><td class=n>{n}</td></tr>"
+            for s, n in sorted(self.status_counts.items())
+        )
+        file_rows = "".join(
+            f"<tr class={_status_class(str(f['statut']))}><td>{e(f['fichier'])}</td>"
+            f"<td>{e(f.get('format', ''))}</td><td class=st>{e(f['statut'])}</td>"
+            f"<td class=n>{e(f['entites'])}</td><td class=n>{e(f['residus'])}</td>"
+            f"<td class=n>{e(f.get('a_revoir', 0))}</td></tr>"
+            for f in self.files
+        )
+        entity_rows = "".join(
+            f"<tr><td>{e(t)}</td><td class=n>{n}</td></tr>"
+            for t, n in sorted(self.entity_counts.items())
+        )
+        parts = [
+            "<!DOCTYPE html>",
+            '<html lang="fr"><head><meta charset="utf-8">',
+            '<meta name="viewport" content="width=device-width, initial-scale=1">',
+            f"<title>Rapport du lot {e(self.batch_id)}</title>",
+            f"<style>{_CSS}</style></head><body><main>",
+            f"<h1>Rapport du lot <code>{e(self.batch_id)}</code></h1>",
+            f"<p class=meta>Début : {e(self.started_at)} · Fin : {e(self.finished_at)} · "
+            f"{len(self.files)} fichier(s) · {total_entities} entité(s) masquée(s)</p>",
+        ]
+        if self.settings:
+            items = "".join(
+                f"<div><dt>{e(k)}</dt><dd>{e(v)}</dd></div>" for k, v in self.settings.items()
+            )
+            parts.append(f"<dl class=settings>{items}</dl>")
+        parts += [
+            _section("Statuts", ["Statut", "#Fichiers"], status_rows),
+            _section(
+                "Fichiers",
+                ["Fichier", "Format", "Statut", "#Entités", "#Résidus", "#À revoir"],
+                file_rows,
+            ),
+            _section("Entités par type", ["Type", "#Nombre"], entity_rows),
+        ]
+        if self.residues:
+            rows = "".join(
+                f"<tr><td>{e(r['emplacement'])}</td><td>{e(r['zone'])}</td>"
+                f"<td>{e(r['type'])}</td><td>{e(r['origine'])}</td>"
+                f"<td>{e(r['detecteur'])}</td></tr>"
+                for r in self.residues
+            )
+            parts.append(
+                _section(
+                    "Résidus",
+                    ["Emplacement", "Zone", "Type", "Origine", "Détecteur"],
+                    rows,
+                    intro="Ces fichiers ont été placés en quarantaine (<code>_quarantaine</code>) "
+                    "et ne doivent pas être diffusés.",
+                )
+            )
+        if self.failures:
+            items = "".join(
+                f"<li><strong>{e(f['fichier'])}</strong> ({e(f['statut'])})"
+                + (
+                    "<ul>" + "".join(f"<li>{e(p)}</li>" for p in f["problemes"]) + "</ul>"
+                    if f["problemes"]
+                    else ""
+                )
+                + "</li>"
+                for f in self.failures
+            )
+            parts.append(f"<section><h2>Échecs</h2><ul class=failures>{items}</ul></section>")
+        parts += [
+            "<footer>Rapport généré par Anonyma. Il ne contient que des noms anonymisés, "
+            "des nombres et des codes : aucune donnée d'origine.</footer>",
+            "</main></body></html>",
+        ]
+        return "\n".join(parts) + "\n"
+
+    def save_html(self, path: Path) -> None:
+        path.write_text(self.to_html(), encoding="utf-8")
+
+    # -- dispatch ---------------------------------------------------------------
+
+    def save(self, path: Path) -> None:
+        """Write the report in the format given by the extension (.json, .md, .html)."""
+        path = Path(path)
+        writers = {
+            ".json": self.save_json,
+            ".md": self.save_markdown,
+            ".markdown": self.save_markdown,
+            ".html": self.save_html,
+            ".htm": self.save_html,
+        }
+        writer = writers.get(path.suffix.lower())
+        if writer is None:
+            raise ValueError(
+                "Format de rapport non reconnu : utilisez l'extension .json, .md ou .html."
+            )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        writer(path)
+
+
+_CSS = (
+    "body{margin:0;background:#f6f7f9;color:#1d232b;"
+    "font:15px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}"
+    "main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}"
+    "h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 8px}"
+    ".meta{color:#5b6573;margin:0 0 8px}"
+    ".settings{display:flex;flex-wrap:wrap;gap:4px 24px;margin:12px 0}"
+    ".settings dt{font-size:.8rem;color:#5b6573}.settings dd{margin:0;font-weight:600}"
+    ".scroll{overflow-x:auto}"
+    "table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dde1e6}"
+    "th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #e8ebef;"
+    "vertical-align:top;overflow-wrap:anywhere}"
+    "th{background:#eef1f4;font-weight:600}.n{text-align:right;white-space:nowrap}"
+    "tr.ok .st{color:#1f7a3a}tr.warn .st{color:#9a6700}tr.ko .st{color:#b42318;font-weight:600}"
+    "code{font-family:ui-monospace,Consolas,monospace;font-size:.9em}"
+    ".failures li{margin:4px 0}"
+    "footer{margin-top:32px;color:#5b6573;font-size:.85rem}"
+    "@media (prefers-color-scheme:dark){body{background:#15181c;color:#e3e6ea}"
+    "table{background:#1c2026;border-color:#2c323a}th{background:#232830}"
+    "th,td{border-color:#2c323a}.meta,footer,.settings dt{color:#9aa4b1}"
+    "tr.ok .st{color:#5cc27a}tr.warn .st{color:#e0b341}tr.ko .st{color:#f97066}}"
+)
+
+
+def _esc(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _md_cell(value: object) -> str:
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _section(title: str, headers: list[str], rows: str, intro: str = "") -> str:
+    """Table section; a header starting with ``#`` is a right-aligned number column."""
+    head = "".join(
+        f"<th class=n>{_esc(h[1:])}</th>" if h.startswith("#") else f"<th>{_esc(h)}</th>"
+        for h in headers
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(headers)}">Aucun élément.</td></tr>'
+    intro_html = f"<p>{intro}</p>" if intro else ""
+    return (
+        f"<section><h2>{_esc(title)}</h2>{intro_html}<div class=scroll><table>"
+        f"<thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table></div></section>"
+    )
+
+
+def _status_label(status: str) -> str:
+    try:
+        return STATUS_LABELS.get(DocumentStatus(status), status)
+    except ValueError:
+        return status
+
+
+def _status_class(label: str) -> str:
+    if label == STATUS_LABELS[DocumentStatus.ANONYMIZED]:
+        return "ok"
+    if label == STATUS_LABELS[DocumentStatus.NEEDS_REVIEW]:
+        return "warn"
+    return "ko"
 
 
 def _walk(result: DocumentResult) -> list[DocumentResult]:
