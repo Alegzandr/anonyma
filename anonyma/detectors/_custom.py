@@ -171,6 +171,24 @@ STOP_WORDS = frozenset(
         "mr",
         "mrs",
         "ms",
+        # Form labels (« NOM : TOURNESOL   Prénom : Ysaline », « Né le »).
+        "nom",
+        "noms",
+        "prenom",
+        "prenoms",
+        "ne",
+        "nee",
+        "naissance",
+        "adresse",
+        "telephone",
+        "courriel",
+        "email",
+        "e-mail",
+        "matricule",
+        "login",
+        "identifiant",
+        "nationalite",
+        "sexe",
     ]
 )
 
@@ -347,6 +365,12 @@ class _Token:
         return normalize(self.bare)
 
 
+def _ends_sentence(token: _Token) -> bool:
+    """A word ending with a period that is neither an initial (« J. ») nor an
+    abbreviated civility (« Mme. »): the period ends the sentence."""
+    return token.text.endswith(".") and not token.is_initial and civility_of(token.text) is None
+
+
 def _tokens(text: str) -> list[_Token]:
     return [_Token(m.start(), m.end(), m.group()) for m in _WORD.finditer(text)]
 
@@ -401,7 +425,9 @@ _CUE = regex.compile(
     r"|(?:(?:digitally|electronically)[ \t]+)?signed[ \t]+by"
     r"|signataires?|signatory|nom[ \t]+du[ \t]+signataire|nom[ \t]+et[ \t]+pr[ée]noms?"
     r"|pr[ée]noms?[ \t]+et[ \t]+nom|nom[ \t]*,[ \t]*pr[ée]noms?|full[ \t]+name)(?![\w])"
-    r"|(?P<field>nom|name|de|from|exp[ée]diteur|sender)(?=[ \t]*:)"
+    r"|(?P<field>nom(?:[ \t]+(?:de[ \t]+famille|d['’][ \t]*usage|de[ \t]+naissance|usuel))?"
+    r"|pr[ée]noms?|name|first[ \t]*name|last[ \t]*name|surname|given[ \t]*name|de|from"
+    r"|exp[ée]diteur|sender)(?=[ \t]*:)"
     r"|(?P<closing>(?:bien[ \t]+)?cordialement|(?:(?:best|kind|warm)[ \t]+)?regards|sincerely"
     r"|bien[ \t]+[àa][ \t]+(?:vous|toi))(?=[ \t]*,?[ \t]*\r?\n)"
     r"|(?P<civ>M\.|Mme\.?|Mlle\.?|Mr\.?|Mrs\.?|Ms\.?|(?i:monsieur|madame|mademoiselle))"
@@ -409,6 +435,11 @@ _CUE = regex.compile(
     r")[ \t]*[:,]?[ \t]*(?:\r?\n[ \t]*){0,2}",
     regex.IGNORECASE,
 )
+#: Field labels naming one part of a name (first four letters, normalized).
+_FIELD_PARTS = {
+    "nom": "nom", "nom ": "nom", "surn": "nom", "last": "nom",
+    "pren": "prenom", "firs": "prenom", "give": "prenom",
+}  # fmt: skip
 #: Words that end a name after a cue (roles, generic senders).
 _NOT_NAME_AFTER_CUE = frozenset(
     normalize(w)
@@ -478,6 +509,8 @@ class PersonRecognizer(CustomRecognizer):
             attrs = {"rule": "indice"}
             if kind == "civ":
                 attrs["gender"] = CIVILITIES.get(normalize(m.group("civ")), "")
+            elif kind == "field" and (part := _FIELD_PARTS.get(normalize(m.group("field"))[:4])):
+                attrs["field"] = part  # the resolver pairs « Nom : X » with « Prénom : Y »
             out.append(_result(EntityType.PERSON, start, end, score, **attrs))
         return out
 
@@ -556,7 +589,11 @@ class PersonRecognizer(CustomRecognizer):
 
     @staticmethod
     def _glued(text: str, left: _Token, right: _Token) -> bool:
-        return bool(_GAP.match(text[left.end : right.start]))
+        """Adjacent words of one name: a short blank gap, no sentence-ending period
+        (« M. Braquemart. Mme Vasseur »), no civility starting another person."""
+        if not _GAP.match(text[left.end : right.start]):
+            return False
+        return not _ends_sentence(left) and civility_of(right.text) is None
 
     def _upper_surname_start(self, text: str, tokens: list[_Token], k: int) -> int:
         """Extend a capitals surname to the left (``LE GOFF``, ``DE LA TOUR``)."""

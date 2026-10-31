@@ -647,7 +647,8 @@ RULES: tuple[Rule, ...] = (
         "identifiant_chemin_windows",
         EntityType.USERNAME,
         r"(?<=(?:[A-Za-z]:)?\\\\?(?:Users|Utilisateurs|Documents and Settings|home)\\\\?)"
-        r"[^\\/\s:*?\"<>|]{2,64}",
+        # A profile folder may hold spaces (« C:\Users\Jean Dupont\ »).
+        r"(?:[^\\/:*?\"<>|\r\n\t]{2,64}(?=\\)|[^\\/\s:*?\"<>|]{2,64})",
         0.9,
         flags=regex.MULTILINE | regex.IGNORECASE,
     ),
@@ -666,7 +667,8 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "pseudo_arobase",
         EntityType.USERNAME,
-        r"(?<![\w@./+\-])@[A-Za-z0-9_](?:[A-Za-z0-9_.]{1,28}[A-Za-z0-9_])(?![\w@]|\.\w)",
+        # Hyphens inside a handle (« @jean-baptiste ») belong to it.
+        r"(?<![\w@./+\-])@\w(?:[\w.\-]{1,28}\w)(?![\w@\-]|\.\w)",
         0.6,
         context=(
             "twitter",
