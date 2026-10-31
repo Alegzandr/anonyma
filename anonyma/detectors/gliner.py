@@ -168,7 +168,7 @@ class GlinerDetector(Detector):
                             attributes={"label": span.label},
                         )
                     )
-                found.extend(_job_titles_near_people(text, kept))
+                found.extend(job_titles_near_people(text, kept))
         return found
 
 
@@ -188,7 +188,7 @@ def has_words(text: str) -> bool:
 _PARAGRAPH_BREAK = re.compile(r"\n[ \t ]*\n")
 
 
-def _job_titles_near_people(text: str, entities: list[Entity]) -> list[Entity]:
+def job_titles_near_people(text: str, entities: list[Entity]) -> list[Entity]:
     """Drop job titles with no person nearby (« le boucher du marché », « comédien »).
 
     A job title is an indirect identifier only when it describes a given person
@@ -247,4 +247,4 @@ def _tight(text: str, start: int, end: int) -> tuple[int, int]:
     return start, end
 
 
-__all__ = ["LABELS", "GlinerDetector", "model_dir", "model_spec"]
+__all__ = ["LABELS", "GlinerDetector", "job_titles_near_people", "model_dir", "model_spec"]

@@ -14,8 +14,8 @@ from anonyma import paths
 from anonyma.config import Config
 from anonyma.detectors.gliner import (
     GlinerDetector,
-    _job_titles_near_people,
     _skip_leading_words,
+    job_titles_near_people,
     model_dir,
     model_spec,
 )
@@ -60,7 +60,7 @@ def test_job_titles_need_a_person_nearby() -> None:
         "Séance présidée par Eléonore VIDAL, présidente de l'association.\n\n"
         "Le boucher du marché couvert propose désormais des produits bio, comme chaque été."
     )
-    found = _job_titles_near_people(
+    found = job_titles_near_people(
         text,
         [
             _span("PERSONNE", text, "Eléonore VIDAL"),
@@ -71,7 +71,7 @@ def test_job_titles_need_a_person_nearby() -> None:
     assert [e.value for e in found] == ["Eléonore VIDAL", "présidente"]
     # A cell or a signature line made of the title is kept as it is.
     cell = "Responsable RH"
-    assert _job_titles_near_people(cell, [_span("FONCTION", cell, cell)])
+    assert job_titles_near_people(cell, [_span("FONCTION", cell, cell)])
 
 
 def test_person_spans_drop_greetings_and_verbs() -> None:
@@ -245,3 +245,58 @@ def test_short_windows_overlap_by_half_at_most() -> None:
     for w in windows:
         covered |= set(range(w.first_word, w.first_word + w.word_count))
     assert covered == set(range(2000))
+
+
+def test_onnx_telemetry_is_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ONNX Runtime telemetry (ETW events on Windows) is turned off before loading."""
+    import sys
+    import types
+
+    calls: list[str] = []
+
+    class Encoding:
+        ids = [1, 5, 2]
+        word_ids = [None, 0, None]
+
+    class FakeTokenizer:
+        @staticmethod
+        def from_file(path: str) -> FakeTokenizer:
+            return FakeTokenizer()
+
+        def no_truncation(self) -> None: ...
+        def no_padding(self) -> None: ...
+
+        def encode(self, *args: object, **kwargs: object) -> Encoding:
+            return Encoding()
+
+    class FakeSession:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            calls.append("session")
+
+        def get_inputs(self) -> list[object]:
+            return []
+
+    ort = types.SimpleNamespace(
+        SessionOptions=types.SimpleNamespace,
+        GraphOptimizationLevel=types.SimpleNamespace(ORT_ENABLE_ALL=99),
+        ExecutionMode=types.SimpleNamespace(ORT_SEQUENTIAL=0),
+        InferenceSession=FakeSession,
+        disable_telemetry_events=lambda: calls.append("telemetry off"),
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", ort)
+    monkeypatch.setitem(sys.modules, "tokenizers", types.SimpleNamespace(Tokenizer=FakeTokenizer))
+    GlinerOnnx(tmp_path)
+    assert calls == ["telemetry off", "session"]
+
+
+def test_contentless_spans_are_not_plausible() -> None:
+    """GLiNER spans seen on contentless cells: « Bien à vous » (PERSONNE, 0.31) and
+    « Lundi » (LIEU, 0.71); a month that is a first name may still be a person."""
+    from anonyma.detectors._filters import plausible
+
+    assert not plausible("PERSONNE", "Bien à vous", 0.306)
+    assert not plausible("LIEU", "Lundi", 0.714)
+    assert not plausible("ORGANISATION", "Mars 2024", 0.9)
+    assert plausible("PERSONNE", "Avril Kervella", 0.6)
+    assert plausible("PERSONNE", "M. Berger", 0.5)
+    assert plausible("LIEU", "Quimper", 0.5)
