@@ -330,7 +330,7 @@ def test_realistic_nir_follows_the_substitute_birth_date() -> None:
     )
     birth = sub(table, kept, "03/04/1985")
     fake = sub(table, kept, nir)
-    day, month, year = birth.split("/")
+    _day, month, year = birth.split("/")
     assert fake[1:5] == f"{year[2:]}{month}", (birth, fake)
     assert fake[0] == "2" and checksums.nir_valid(fake)
 

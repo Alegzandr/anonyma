@@ -306,3 +306,17 @@ def test_organization_made_of_a_person_and_ordinary_words_is_the_person() -> Non
     assert by_seg["d"] == ("ORGANISATION", "Cabinet Lefèvre")
     person = next(c for c in clusters.values() if "Grégoire Lefèvre" in c.variants)
     assert {e.cluster_id for e in kept if e.segment_id in "abc"} == {person.id}
+
+
+def test_ocr_misreadings_of_a_name_join_its_cluster() -> None:
+    """The scan of a letter reads « Ludovlc Braquernart »: same person, same tag."""
+    entities = [
+        ent("Ludovic Braquemart", seg="a"),
+        ent("Ludovlc Braquernart", seg="b"),
+        ent("BRAQUERNART", seg="c"),
+        ent("Ludivine Braquemart", seg="d"),  # another person of the family
+    ]
+    kept, _clusters = resolve(entities, Config())
+    by_seg = {e.segment_id: e.cluster_id for e in kept}
+    assert by_seg["a"] == by_seg["b"] == by_seg["c"]
+    assert by_seg["d"] != by_seg["a"]

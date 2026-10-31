@@ -222,10 +222,15 @@ class _PersonIndex:
     by_given: dict[str, set[str]] = field(default_factory=dict)
     initials: dict[str, set[str]] = field(default_factory=dict)  # cluster -> initials
     logins: dict[str, set[str]] = field(default_factory=dict)  # "jdupont" -> clusters
+    #: OCR-folded keys (:func:`ocr_fold`) of full names and surnames -> clusters.
+    folded: dict[str, set[str]] = field(default_factory=dict)
+    folded_surname: dict[str, set[str]] = field(default_factory=dict)
 
     def add(self, cluster_id: str, person: PersonName) -> None:
         if not person.is_full:
             return
+        self.folded.setdefault(_folded_key(person), set()).add(cluster_id)
+        self.folded_surname.setdefault(ocr_fold(person.surname_key), set()).add(cluster_id)
         for form in login_forms(person).values():
             self.logins.setdefault(form, set()).add(cluster_id)
         self.full.setdefault(f"{person.given_key}|{person.surname_key}", cluster_id)
@@ -241,7 +246,14 @@ class _PersonIndex:
                 return next(iter(owners))
         if person.is_full:
             swapped = self.full.get(f"{person.surname_key}|{person.given_key}")
-            return self.full.get(f"{person.given_key}|{person.surname_key}") or swapped
+            exact = self.full.get(f"{person.given_key}|{person.surname_key}") or swapped
+            if exact is not None:
+                return exact
+            # The same name read by OCR (« Ludovlc Braquernart »).
+            owners = self.folded.get(_folded_key(person), set()) or self.folded.get(
+                _folded_key(person, swapped=True), set()
+            )
+            return next(iter(owners)) if len(owners) == 1 else None
         if person.surname and person.given:  # initials + surname
             candidates = {
                 cid
@@ -253,6 +265,10 @@ class _PersonIndex:
             candidates = self.by_surname.get(person.surname_key, set())
             if len(candidates) == 1:
                 return next(iter(candidates))
+            if not candidates and len(normalize(person.surname_key)) >= 5:
+                folded = self.folded_surname.get(ocr_fold(person.surname_key), set())
+                if len(folded) == 1:
+                    return next(iter(folded))
             # A lone word may also be a given name ("Martin").
             given = self.by_given.get(person.surname_key, set())
             return next(iter(given)) if not candidates and len(given) == 1 else None
@@ -260,6 +276,23 @@ class _PersonIndex:
             candidates = self.by_given.get(person.given_key, set())
             return next(iter(candidates)) if len(candidates) == 1 else None
         return None
+
+
+#: Characters OCR confuses, merged by :func:`ocr_fold` (after normalisation).
+_OCR_FOLD = str.maketrans({"0": "o", "1": "l", "i": "l", "|": "l", "!": "l", "5": "s", "8": "b"})
+
+
+def ocr_fold(text: str) -> str:
+    """Comparison key of a name tolerant to OCR misreadings: accents, case and
+    separators ignored, confusable characters merged (``1``/``l``/``i``, ``0``/``o``,
+    ``rn``/``m``...)."""
+    key = "".join(c for c in normalize(text) if c.isalnum() or c == "|")
+    return key.replace("rn", "m").replace("vv", "w").translate(_OCR_FOLD)
+
+
+def _folded_key(person: PersonName, *, swapped: bool = False) -> str:
+    given, surname = ocr_fold(person.given_key), ocr_fold(person.surname_key)
+    return f"{surname}|{given}" if swapped else f"{given}|{surname}"
 
 
 @lru_cache(maxsize=65536)
