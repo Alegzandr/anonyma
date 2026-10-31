@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import io
 from pathlib import Path
 
@@ -63,7 +64,9 @@ def _exif(orientation: int | None = None) -> Image.Exif:
     return exif
 
 
+@functools.cache
 def _icc() -> bytes:
+    # Generated once: the profile header embeds a creation timestamp.
     return ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
 
 

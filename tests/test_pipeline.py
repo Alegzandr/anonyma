@@ -344,3 +344,26 @@ def test_possible_residue_means_review_not_quarantine(
     assert top.possible_residue_count == 1 and top.residue_count == 0
     assert top.output_path is not None and QUARANTINE_DIR not in top.output_path.parts
     assert "verify.possible_residue" in [i.code for i in top.issues]
+
+
+def _crash_in_worker(path: Path, *rest: object) -> object:
+    """Simulates a native crash: kills the worker process abruptly."""
+    import os
+
+    if os.environ.get("ANONYMA_TEST_PARENT_PID") != str(os.getpid()):
+        os._exit(3)
+    return path
+
+
+def test_broken_pool_finishes_inline(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    monkeypatch.setenv("ANONYMA_TEST_PARENT_PID", str(os.getpid()))
+    canary_config.workers = 2
+    pipeline = Pipeline(canary_config)
+    jobs = [(tmp_path / f"{i}.txt",) for i in range(3)]
+    events: list[object] = []
+    results = pipeline._map(_crash_in_worker, jobs, "analyse", events.append, None)
+    assert results == [j[0] for j in jobs]

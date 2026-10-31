@@ -20,6 +20,7 @@ import threading
 import zipfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import CancelledError, Future, ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -764,18 +765,38 @@ class Pipeline:
                 if progress:
                     progress(ProgressEvent(stage, i + 1, total, index=i))
             return results
-        with ProcessPoolExecutor(self._workers(total), initializer=_worker_init) as pool:
-            futures: dict[Future[Any], int] = {
-                pool.submit(fn, *job): i for i, job in enumerate(jobs)
-            }
-            for done, future in enumerate(as_completed(futures), start=1):
+        finished: set[int] = set()
+        try:
+            with ProcessPoolExecutor(self._workers(total), initializer=_worker_init) as pool:
+                futures: dict[Future[Any], int] = {
+                    pool.submit(fn, *job): i for i, job in enumerate(jobs)
+                }
+                for future in as_completed(futures):
+                    if cancel and cancel.cancelled:
+                        for f in futures:
+                            f.cancel()
+                        break
+                    index = futures[future]
+                    results[index] = future.result()
+                    finished.add(index)
+                    if progress:
+                        progress(ProgressEvent(stage, len(finished), total, index=index))
+        except BrokenProcessPool:
+            # A worker died (native crash, memory): finish the remaining items here.
+            log.warning(
+                "worker pool broken during %s; finishing %d item(s) inline",
+                stage,
+                total - len(finished),
+            )
+            for index, job in enumerate(jobs):
+                if index in finished:
+                    continue
                 if cancel and cancel.cancelled:
-                    for f in futures:
-                        f.cancel()
                     break
-                results[futures[future]] = future.result()
+                results[index] = fn(*job)
+                finished.add(index)
                 if progress:
-                    progress(ProgressEvent(stage, done, total, index=futures[future]))
+                    progress(ProgressEvent(stage, len(finished), total, index=index))
         return results
 
     # -- public API ----------------------------------------------------------
