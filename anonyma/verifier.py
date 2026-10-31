@@ -140,7 +140,7 @@ class Verifier:
     def __init__(self, config: Config, detectors: Sequence[Detector]) -> None:
         self.config = config
         #: Detectors flagged ``verify = False`` (slow, non-deterministic LLM) are skipped.
-        self.detectors = [d for d in detectors if getattr(d, "verify", True)]
+        self.detectors = [d for d in detectors if d.verify]
 
     def verify(
         self,

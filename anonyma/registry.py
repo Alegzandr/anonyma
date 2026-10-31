@@ -12,7 +12,7 @@ import importlib
 import pkgutil
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from anonyma.logs import get_logger
 from anonyma.models import Detector, Extractor, Profile, Writer
@@ -32,10 +32,6 @@ unavailable: dict[str, str] = {}
 
 _loaded = False
 _lock = threading.Lock()
-
-E = TypeVar("E", bound=type[Extractor])
-W = TypeVar("W", bound=type[Writer])
-D = TypeVar("D", bound=type[Detector])
 
 PLUGIN_PACKAGES = ("anonyma.extractors", "anonyma.writers", "anonyma.detectors")
 

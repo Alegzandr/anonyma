@@ -267,10 +267,6 @@ class ReportPage(QWidget):
         controller.analysis_cleared.connect(self.reload)
         self.reload()
 
-    @staticmethod
-    def html_available() -> bool:
-        return callable(getattr(BatchReport, "save_html", None))
-
     def reload(self) -> None:
         result = self.controller.result
         self.banner.clear()
@@ -365,7 +361,6 @@ class ReportPage(QWidget):
             bool(self.quarantined) and self.controller.analysis is not None
         )
         self.residue_button.setEnabled(bool(self.residue_rows))
-        self.html_button.setVisible(self.html_available())
         if self.quarantined:
             self.banner.show_message(
                 f"{len(self.quarantined)} fichier(s) en quarantaine dans "

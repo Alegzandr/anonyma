@@ -673,6 +673,8 @@ class Detector(ABC):
     #: False for statistical detectors (ML models): their hits on outputs are
     #: reported as possible residues (review) rather than certain ones (quarantine).
     deterministic: ClassVar[bool] = True
+    #: False when the verifier must not run it again on outputs (slow LLM).
+    verify: ClassVar[bool] = True
 
     def __init__(self, config: Config) -> None:
         self.config = config

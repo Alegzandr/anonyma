@@ -185,7 +185,7 @@ class RegexDetector(Detector):
             PlaceRecognizer(),
         ]
         self.dob_context = _context_regex(DOB_CONTEXT)
-        self.detect_dates = bool(getattr(config, "detect_dates", True))
+        self.detect_dates = config.detect_dates
 
     # -- per segment ---------------------------------------------------------
 

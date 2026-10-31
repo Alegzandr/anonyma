@@ -174,8 +174,8 @@ class OpaqueIdDetector(Detector):
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)
-        self.active = bool(getattr(config, "mask_opaque_ids", True))
-        self.whitelist = _Whitelist(getattr(config, "opaque_id_whitelist", []) or [])
+        self.active = config.mask_opaque_ids
+        self.whitelist = _Whitelist(config.opaque_id_whitelist or [])
 
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         if not self.active:

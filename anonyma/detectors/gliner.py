@@ -89,7 +89,7 @@ class GlinerDetector(Detector):
         for label, entity_type in config.custom_labels.items():
             if label.strip():
                 self.labels[label.strip()] = entity_type.strip().upper() or EntityType.BUSINESS_TERM
-        self.threshold = float(getattr(config, "gliner_threshold", 0.3))
+        self.threshold = config.gliner_threshold
         #: File names only hold names, organisations and places worth a model pass;
         #: numbers, e-mails and identifiers there are left to the regex rules.
         self.filename_labels = [
@@ -107,9 +107,7 @@ class GlinerDetector(Detector):
         path = model_dir(spec)
         if path is None:
             raise RuntimeError("GLiNER model files missing")
-        threads = int(getattr(self.config, "gliner_threads", 0)) or default_threads(
-            self.config.workers
-        )
+        threads = self.config.gliner_threads or default_threads(self.config.workers)
         key = (str(path), spec.extra.get("onnx", "model.onnx"), threads)
         with _lock:
             if key not in _models:
