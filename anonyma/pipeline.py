@@ -1232,7 +1232,7 @@ class Pipeline:
     ) -> BatchAnalysis:
         batch_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + new_id()[:6]
         work_dir = paths.tmp_dir() / batch_id
-        work_dir.mkdir(parents=True, exist_ok=True)
+        paths.claim(work_dir)  # kept by clean_tmp() of other instances
         files, links = walk_inputs(inputs)
         if links:
             log.warning("%d link(s) skipped in input folders", len(links))
@@ -1367,6 +1367,7 @@ class Pipeline:
             self.close(analysis)
 
     def close(self, analysis: BatchAnalysis) -> None:
+        paths.release(analysis.work_dir)
         shutil.rmtree(analysis.work_dir, ignore_errors=True)
 
 

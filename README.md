@@ -270,8 +270,6 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
 - Seuls les dépôts Hugging Face publics sont pris en charge (aucun jeton n'est envoyé).
 - macOS : application non signée (voir Gatekeeper ci-dessus), prévue pour les Mac
   Apple Silicon uniquement.
-- Ne lancez pas deux instances d'Anonyma sur le même dossier portable en même temps :
-  le nettoyage des fichiers temporaires au démarrage pourrait gêner l'autre instance.
 - Windows : gardez le chemin du dossier portable sous une centaine de caractères
   (par exemple `C:\Outils\Anonyma`). Au-delà, LibreOffice ne peut plus créer son profil
   temporaire et les `.doc`, `.xls` et `.ppt` échouent (fichiers signalés en échec, jamais
