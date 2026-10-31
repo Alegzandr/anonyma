@@ -335,8 +335,11 @@ pièges et relit les sorties par des moyens indépendants ; méthode et résulta
 L'intégration continue (`.github/workflows/ci.yml`) lance l'analyse statique et les
 tests sous Windows, macOS et Linux (avec LibreOffice installé sur les machines de test,
 les fixtures `.doc`/`.ppt` étant générées si elles sont absentes), puis construit
-l'archive portable complète de chaque système, LibreOffice compris (brouillon de
-publication GitHub pour les étiquettes `v*`). La construction lance l'interface en mode
+l'archive portable complète de chaque système, LibreOffice compris. Pousser une
+étiquette `v*` publie automatiquement une version GitHub avec les trois archives,
+une fois les tests et les constructions réussis ; l'étiquette doit correspondre à
+`__version__` (et à `pyproject.toml`), sinon la publication échoue. Une étiquette
+avec suffixe (`v1.2.0-rc1`) est publiée en préversion. La construction lance l'interface en mode
 hors écran et anonymise avec l'exécutable figé un lot de fixtures (docx, xlsx, pdf, eml,
 msg, zip, png avec OCR, doc, xls, ppt) qui doivent toutes ressortir « Anonymisé » avec
 leur extension d'origine.
