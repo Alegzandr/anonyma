@@ -5,19 +5,46 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterator
+from functools import lru_cache
 from pathlib import PurePosixPath
 
 _SPACES = re.compile(r"\s+")
 
 
 def strip_accents(text: str) -> str:
+    if text.isascii():
+        return text
     decomposed = unicodedata.normalize("NFD", text)
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
+#: Strings up to this length go through the :func:`normalize` cache (words, values).
+_CACHED_LENGTH = 64
+
+
 def normalize(text: str) -> str:
     """Canonical comparison key: no accents, casefolded, single spaces, trimmed."""
+    if len(text) <= _CACHED_LENGTH:
+        return _normalize_short(text)
+    return _normalize(text)
+
+
+def _normalize(text: str) -> str:
     return _SPACES.sub(" ", strip_accents(text).casefold()).strip()
+
+
+@lru_cache(maxsize=131072)
+def _normalize_short(text: str) -> str:
+    return _normalize(text)
+
+
+@lru_cache(maxsize=8192)
+def _normalize_char(ch: str) -> str:
+    return strip_accents(ch).casefold()
+
+
+#: An ASCII run, or one other character (normalized on its own).
+_RUNS = re.compile(r"[\x00-\x7f]+|[^\x00-\x7f]")
 
 
 def normalize_with_map(text: str) -> tuple[str, list[int]]:
@@ -29,18 +56,38 @@ def normalize_with_map(text: str) -> tuple[str, list[int]]:
     out: list[str] = []
     index: list[int] = []
     previous_space = False
-    for i, ch in enumerate(text):
-        if ch.isspace():
-            if previous_space:
+    for run in _RUNS.finditer(text):
+        start = run.start()
+        chunk = run.group()
+        if len(chunk) == 1 and not chunk.isascii():
+            if chunk.isspace():
+                if not previous_space:
+                    out.append(" ")
+                    index.append(start)
+                    previous_space = True
                 continue
-            out.append(" ")
-            index.append(i)
-            previous_space = True
+            previous_space = False
+            normalized = _normalize_char(chunk)
+            out.append(normalized)
+            index.extend([start] * len(normalized))
             continue
-        previous_space = False
-        for n in strip_accents(ch).casefold():
-            out.append(n)
-            index.append(i)
+        # ASCII: lower() is the case folding, one character for one.
+        lowered = chunk.lower()
+        pos = 0
+        for space in _SPACES.finditer(lowered):
+            if space.start() > pos:
+                out.append(lowered[pos : space.start()])
+                index.extend(range(start + pos, start + space.start()))
+                previous_space = False
+            if not previous_space:
+                out.append(" ")
+                index.append(start + space.start())
+                previous_space = True
+            pos = space.end()
+        if pos < len(lowered):
+            out.append(lowered[pos:])
+            index.extend(range(start + pos, start + len(lowered)))
+            previous_space = False
     return "".join(out), index
 
 

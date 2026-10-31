@@ -261,6 +261,7 @@ class _PersonIndex:
         return None
 
 
+@lru_cache(maxsize=65536)
 def _canonical_rank(entity_type: str, value: str) -> tuple[int, int, int, int]:
     has_lower = int(any(c.islower() for c in value))
     if entity_type == EntityType.PERSON:
@@ -718,11 +719,14 @@ def propagate(
             )
             for segment in segments:
                 spans = taken.get((doc.id, segment.id), [])
+                exact = set(spans)
                 for match in leftmost_longest(matcher.find(segment.text)):
                     # A form inside an existing mention adds nothing; a longer one
                     # (``Kowalczyk Jean-Baptiste`` around a detected ``Jean-Baptiste``)
                     # is kept: the replacer merges overlapping spans into their union.
-                    if any(s <= match.start and match.end <= e for s, e in spans):
+                    if (match.start, match.end) in exact or any(
+                        s <= match.start and match.end <= e for s, e in spans
+                    ):
                         continue
                     targets = [
                         t

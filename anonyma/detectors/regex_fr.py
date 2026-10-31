@@ -1,6 +1,6 @@
-"""French regex detector (profile LIGHT) built on Presidio recognizers.
+"""French regex detector (profile LIGHT).
 
-Every rule of :mod:`anonyma.detectors._rules` is a Presidio ``PatternRecognizer``;
+Every rule of :mod:`anonyma.detectors._rules` is one compiled regular expression;
 persons, addresses, organisations and places use the custom recognizers of
 :mod:`anonyma.detectors._custom`. No NLP engine (and no spaCy model) is involved:
 recognizers are called directly, and context handling is done here, accent- and
@@ -16,7 +16,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import regex
-from presidio_analyzer import Pattern, PatternRecognizer
 
 from anonyma import checksums
 from anonyma.config import Config
@@ -91,30 +90,38 @@ def _context_regex(words: Sequence[str]) -> regex.Pattern[str] | None:
     return regex.compile(rf"(?<![a-z0-9])(?:{body})(?![a-z0-9])")
 
 
-class _RuleRecognizer(PatternRecognizer):
-    """Presidio recognizer for one :class:`Rule`; validation is done by the detector."""
-
-    def __init__(self, rule: Rule) -> None:
-        super().__init__(
-            supported_entity=rule.entity_type,
-            name=rule.name,
-            supported_language="fr",
-            patterns=[Pattern(rule.name, rule.pattern, rule.score)],
-            global_regex_flags=rule.flags,
-        )
-        self.rule = rule
-
-    def validate_result(self, pattern_text: str) -> bool | None:
-        return None
+#: Longest time a rule may spend on one segment (catastrophic backtracking guard).
+RULE_TIMEOUT = 60
 
 
 class _Compiled:
-    __slots__ = ("context", "recognizer", "rule")
+    __slots__ = ("context", "context_words", "pattern", "prefilter", "rule")
 
     def __init__(self, rule: Rule) -> None:
         self.rule = rule
-        self.recognizer = _RuleRecognizer(rule)
+        self.pattern = regex.compile(rule.pattern, rule.flags)
+        self.prefilter = regex.compile(rule.prefilter, rule.flags) if rule.prefilter else None
         self.context = _context_regex(rule.context)
+        #: Context words without word boundaries: a rule that needs context is only
+        #: run on a segment holding one of them somewhere (necessary condition).
+        self.context_words = (
+            regex.compile("|".join(regex.escape(normalize(w).rstrip("*")) for w in rule.context))
+            if rule.needs_context and rule.context
+            else None
+        )
+
+    def spans(self, text: str) -> list[tuple[int, int]]:
+        if self.prefilter is not None and not self.prefilter.search(text):
+            return []
+        try:
+            return [
+                m.span()
+                for m in self.pattern.finditer(text, timeout=RULE_TIMEOUT)
+                if m.end() > m.start()
+            ]
+        except TimeoutError:
+            log.warning("rule %s timed out on a segment, skipped", self.rule.name)
+            return []
 
 
 def _label_has(label: str, parts: Sequence[str]) -> bool:
@@ -204,12 +211,18 @@ class RegexDetector(Detector):
         text = segment.text
         label = normalize(segment.context.label)
         raw: list[tuple[str, int, int, float, dict[str, str]]] = []
+        flat: str | None = None
         for compiled in self.compiled:
             rule = compiled.rule
             if segment.context.kind in rule.skip_kinds:
                 continue
-            for result in compiled.recognizer.analyze(text, [rule.entity_type]):
-                item = self._post(compiled, text, label, result.start, result.end)
+            words = compiled.context_words
+            if words is not None and not (compiled.context and compiled.context.search(label)):
+                flat = normalize(text) if flat is None else flat
+                if not words.search(flat):
+                    continue  # no context word anywhere: every match would be dropped
+            for start, end in compiled.spans(text):
+                item = self._post(compiled, text, label, start, end)
                 if item is not None:
                     raw.append(item)
         views: list[tuple[str, list[int] | None]] = [(text, None)]

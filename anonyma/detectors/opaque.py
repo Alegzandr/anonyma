@@ -64,6 +64,7 @@ _BASE64 = regex.compile(r"(?<![0-9A-Za-z+/=_\-@:.])[A-Za-z0-9+/]{20,}={0,2}(?![0
 _GROUP_SEP = regex.compile(r"[\-_]")
 _LETTER_RUN = regex.compile(r"[A-Za-z]+")
 _CHUNK = regex.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
+_DIGIT = regex.compile(r"\d")
 
 
 def _alternations(text: str) -> int:
@@ -235,7 +236,11 @@ class OpaqueIdDetector(Detector):
             if free(m.start(), m.end()) and looks_opaque(token):
                 spans.append((m.start(), m.end(), "base64"))
         for m in _TOKEN.finditer(text):
-            if free(m.start(), m.end()) and looks_opaque(m.group()):
+            token = m.group()
+            # looks_opaque needs 10 alphanumerics, and 20 without a digit: skip words.
+            if len(token) < 10 or (len(token) < 20 and not _DIGIT.search(token)):
+                continue
+            if free(m.start(), m.end()) and looks_opaque(token):
                 spans.append((m.start(), m.end(), "jeton"))
         return [s for s in spans if not _software_build(text, s[0])]
 

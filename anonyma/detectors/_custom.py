@@ -337,32 +337,26 @@ def _result(entity_type: str, start: int, end: int, score: float, **attrs: str) 
 
 
 class _Token:
-    __slots__ = ("end", "start", "text")
+    """A word of :data:`_WORD` (letters, inner apostrophes or hyphens, final period).
+
+    Attributes are computed once: a segment holds thousands of tokens."""
+
+    __slots__ = ("_key", "bare", "end", "is_cap", "is_initial", "is_upper", "start", "text")
 
     def __init__(self, start: int, end: int, text: str) -> None:
         self.start, self.end, self.text = start, end, text
-
-    @property
-    def bare(self) -> str:
-        return self.text.rstrip(".")
-
-    @property
-    def is_cap(self) -> bool:
-        t = self.bare
-        return len(t) >= 2 and t[0].isupper() and (t[1:].islower() or "-" in t or "'" in t)
-
-    @property
-    def is_upper(self) -> bool:
-        letters = [c for c in self.bare if c.isalpha()]
-        return len(letters) >= 2 and all(c.isupper() for c in letters)
-
-    @property
-    def is_initial(self) -> bool:
-        return len(self.text) == 2 and self.text[1] == "." and self.text[0].isupper()
+        t = self.bare = text.rstrip(".")
+        # Letters only around inner separators: two characters are two letters.
+        self.is_upper = len(t) >= 2 and t.isupper()
+        self.is_cap = len(t) >= 2 and t[0].isupper() and (t[1:].islower() or "-" in t or "'" in t)
+        self.is_initial = len(text) == 2 and text[1] == "." and text[0].isupper()
+        self._key: str | None = None
 
     @property
     def key(self) -> str:
-        return normalize(self.bare)
+        if self._key is None:
+            self._key = normalize(self.bare)
+        return self._key
 
 
 def _ends_sentence(token: _Token) -> bool:
