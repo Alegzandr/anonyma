@@ -987,7 +987,12 @@ def models_remove(
     _spec_or_fail(model_id)
     if not yes and not typer.confirm(f"Supprimer le modèle « {model_id} » ?", default=False):
         raise typer.Exit(EXIT_OK)
-    _manager().remove(model_id)
+    from anonyma.model_manager import ModelError
+
+    try:
+        _manager().remove(model_id)
+    except ModelError as exc:
+        fail(str(exc), EXIT_PARTIAL)
     out.print(f"Modèle « {model_id} » supprimé.")
 
 

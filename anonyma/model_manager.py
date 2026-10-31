@@ -43,6 +43,10 @@ MANIFEST = ".anonyma-model.json"
 STAGING = ".staging"
 _CHUNK = 1024 * 1024
 _HASH_BLOCK = 4 * 1024 * 1024
+_IN_USE = (
+    "Impossible de remplacer ou supprimer le dossier du modèle : il est peut-être utilisé "
+    "par un traitement en cours. Réessayez après l'avoir terminé."
+)
 
 
 class ModelError(Exception):
@@ -517,14 +521,17 @@ class ModelManager:
         old = self.root / f".{spec.id}.old"
         if old.exists():
             shutil.rmtree(old, ignore_errors=True)
-        if target.exists():
-            os.replace(target, old)
         try:
-            os.replace(staging, target)
-        except OSError:
-            if old.exists() and not target.exists():
-                os.replace(old, target)
-            raise
+            if target.exists():
+                os.replace(target, old)
+            try:
+                os.replace(staging, target)
+            except OSError:
+                if old.exists() and not target.exists():
+                    os.replace(old, target)
+                raise
+        except OSError as exc:
+            raise ModelError(_IN_USE) from exc
         shutil.rmtree(old, ignore_errors=True)
         with contextlib.suppress(OSError):
             (self.root / STAGING).rmdir()  # only when empty
@@ -581,7 +588,10 @@ class ModelManager:
             if target.exists():
                 trash = self.root / f".{spec.id}.removing"
                 shutil.rmtree(trash, ignore_errors=True)
-                os.replace(target, trash)
+                try:
+                    os.replace(target, trash)
+                except OSError as exc:
+                    raise ModelError(_IN_USE) from exc
                 shutil.rmtree(trash, ignore_errors=True)
             for partial in (self.root / STAGING).glob(f"{spec.id}-*"):
                 shutil.rmtree(partial, ignore_errors=True)
