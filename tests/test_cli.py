@@ -487,3 +487,18 @@ def test_reidentifier_neutral_names(tmp_path: Path, corpus: Path, business_list:
     assert result.exit_code == 0, result.output
     assert "document_0002.md" in result.output
     assert f"note {CANARY_PERSON}.md" in result.output
+
+
+def test_unexpected_error_shows_its_type_only(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def boom() -> None:
+        raise RuntimeError("Contrat de Quintavalle.pdf")
+
+    monkeypatch.setattr(cli, "app", boom)
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+    assert exit_info.value.code == cli.EXIT_PARTIAL
+    captured = capsys.readouterr()
+    assert "RuntimeError" in captured.err
+    assert "Quintavalle" not in captured.err + captured.out

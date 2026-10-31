@@ -700,15 +700,11 @@ def run(
     numbering: NumberingOpt = None,
 ) -> None:
     """Anonymise des fichiers et dossiers vers un dossier de sortie."""
-    from anonyma.pipeline import QUARANTINE_DIR, Pipeline
+    from anonyma.pipeline import QUARANTINE_DIR, OutputDirError, Pipeline
     from anonyma.report import REPORT_EXTENSIONS, BatchReport
 
     _check_inputs(inputs)
-    if report_path is not None and report_path.suffix.lower() not in (
-        *REPORT_EXTENSIONS,
-        ".htm",
-        ".markdown",
-    ):
+    if report_path is not None and report_path.suffix.lower() not in REPORT_EXTENSIONS:
         fail("Le rapport doit avoir l'extension .json, .md ou .html.")
     config = apply_options(
         load_config(config_file),
@@ -740,7 +736,7 @@ def run(
         pipeline = Pipeline(config, store=store)
         with progress_display(not quiet) as progress:
             result = pipeline.run(inputs, output, progress=progress)
-    except ValueError as exc:  # e.g. output folder inside the inputs
+    except OutputDirError as exc:
         fail(str(exc))
     except KeyboardInterrupt:
         fail("Traitement interrompu.", EXIT_PARTIAL)
@@ -752,7 +748,10 @@ def run(
     report.settings = _settings(pipeline.config)
     _print_run_summary(report, result.output_dir, QUARANTINE_DIR)
     if report_path is not None:
-        report.save(report_path)
+        try:
+            report.save(report_path)
+        except OSError:
+            fail("Impossible d'enregistrer le rapport.", EXIT_PARTIAL)
         out.print(f"Rapport enregistré : {report_path}")
     statuses = {r.status for r in result.all_results()}
     # Quarantined outputs (residues, incomplete verification) are never a success.
@@ -970,7 +969,7 @@ def reidentify(
             mapping = {e.substitute: e.original for e in store.items()}
             items = collect_inputs(inputs)
             _check_reidentify_output(inputs, output)
-            if _reidentify_files(items, output, mapping) is not EXIT_OK:
+            if _reidentify_files(items, output, mapping) != EXIT_OK:
                 code = EXIT_PARTIAL
     finally:
         store.close()
@@ -1047,7 +1046,13 @@ def _reidentify_files(items: list[tuple[Path, str]], output: Path, mapping: dict
             out.print(f"[yellow]Fichier n°{index} ignoré : format non pris en charge.[/]")
             code = EXIT_PARTIAL
             continue
-        decoded = _decode(path.read_bytes())
+        try:
+            data = path.read_bytes()
+        except OSError:
+            out.print(f"[yellow]Fichier n°{index} ignoré : lecture impossible.[/]")
+            code = EXIT_PARTIAL
+            continue
+        decoded = _decode(data)
         if decoded is None:
             out.print(f"[yellow]Fichier n°{index} ignoré : encodage non reconnu.[/]")
             code = EXIT_PARTIAL
@@ -1060,8 +1065,13 @@ def _reidentify_files(items: list[tuple[Path, str]], output: Path, mapping: dict
             if part not in ("", ".", "..")
         ]
         destination = output.joinpath(*parts)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(restored.encode(encoding))
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(restored.encode(encoding))
+        except OSError:
+            out.print(f"[yellow]Fichier n°{index} non écrit : écriture impossible.[/]")
+            code = EXIT_PARTIAL
+            continue
         total += count
     out.print(f"{len(items)} fichier(s) traité(s), {total} substitut(s) remplacé(s).")
     out.print(f"Dossier de sortie : {output}")
@@ -1391,7 +1401,18 @@ def main() -> None:
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
             reconfigure(errors="replace")
-    app()
+    try:
+        app()
+    except Exception as exc:
+        # Type only: messages and tracebacks may quote file names or values.
+        from anonyma.logs import get_logger
+
+        get_logger("cli").error("unhandled exception: %s", type(exc).__name__)
+        err.print(
+            f"[bold red]Erreur :[/] erreur inattendue ({type(exc).__name__}). Le journal "
+            "(data/logs) indique le type d'erreur, sans aucune valeur sensible."
+        )
+        raise SystemExit(EXIT_PARTIAL) from None
 
 
 if __name__ == "__main__":

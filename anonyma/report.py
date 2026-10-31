@@ -31,7 +31,7 @@ INCOMPLETE_INTRO = (
 )
 
 #: Extensions accepted by :meth:`BatchReport.save`.
-REPORT_EXTENSIONS = (".json", ".md", ".html")
+REPORT_EXTENSIONS = (".json", ".md", ".markdown", ".html", ".htm")
 
 
 @dataclass(slots=True)
