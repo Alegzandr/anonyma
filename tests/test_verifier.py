@@ -68,6 +68,20 @@ def test_substitutes_and_allowed_values_are_ignored() -> None:
     assert result.clean, [(r.reason, r.detector) for r in result.residues]
 
 
+def test_substitute_glued_by_ocr_is_a_substitute() -> None:
+    doc = output("Votre interlocuteur : AydenDupuis")
+    doc.segments = [
+        Segment("s0", doc.segments[0].text, (0,), SegmentContext(SegmentKind.OCR, "page 1"))
+    ]
+    result = verify(
+        doc,
+        [("Claire Dubreuil", "PERSONNE")],
+        {"Ayden Dupuis"},
+        detectors=[RegexDetector(Config())],
+    )
+    assert result.clean, [(r.reason, r.detector) for r in result.residues]
+
+
 def test_short_value_policy() -> None:
     assert not worth_checking("J.")
     assert not worth_checking("12")

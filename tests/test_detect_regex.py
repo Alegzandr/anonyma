@@ -98,6 +98,39 @@ def test_email(detector: RegexDetector, text: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "address",
+    [
+        "JEAN.DUPONT@EXEMPLE.FR",
+        "Jean.Dupont@Exemple.Com",
+        "j.dupont@rh.sous-domaine.exemple.co.uk",
+        "contact@cabinet-dupont.avocat",
+        "jean@atelier.photography",
+        "jean@exemple.bzh",
+        "jean@café-exemple.fr",
+        "jean@xn--caf-dma.xn--p1ai",
+        "JeanDupont@MonCabinet.fr",
+        "jean.dupont@entreprise.example",
+    ],
+)
+def test_email_real_addresses(detector: RegexDetector, address: str) -> None:
+    assert found(detector, f"écrire à {address} avant lundi", "EMAIL") == [address]
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "directioncode@OData.Community.Display.V1.FormattedValue",
+        "_ownerid_value@Microsoft.Dynamics.CRM.lookuplogicalname",
+        "_partyid_value@Microsoft.Dynamics.CRM.associatednavigationproperty",
+        "emails@odata.nextLink",
+        "logo@2x.png",
+    ],
+)
+def test_email_dotted_identifiers_rejected(detector: RegexDetector, token: str) -> None:
+    assert not found(detector, f"champ {token} : Entrant", "EMAIL")
+
+
+@pytest.mark.parametrize(
     "phone",
     [
         "06 12 34 56 78",

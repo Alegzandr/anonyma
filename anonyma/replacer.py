@@ -59,7 +59,7 @@ from anonyma.names import (
     parse_person,
     tokens_of,
 )
-from anonyma.resolver import identity_key, phone_key
+from anonyma.resolver import generic_local, identity_key, phone_key
 from anonyma.textutils import normalize
 
 BLACKOUT_CHAR = "█"
@@ -435,7 +435,10 @@ class _Realistic:
                 return False
             if checksums.compact(substitute).casefold() in self.forbidden:
                 return False
-            if any(normalize(t.strip(".")) in self.forbidden_tokens for t in tokens_of(substitute)):
+            # Parts too: « Renaud-sur-François », ``monique.girard@…``, ``@elodie_david``
+            # must not reuse « Renaud », « Girard », « Élodie ».
+            parts = [p for t in tokens_of(substitute) for p in (t, *re.split(r"[-._@]", t))]
+            if any(normalize(p.strip(".")) in self.forbidden_tokens for p in parts):
                 return False
         return True
 
@@ -483,9 +486,12 @@ class _Realistic:
         if original not in self.domains:
             for _ in range(MAX_ATTEMPTS):
                 candidate = fk.fake_domain(rng)
+                # Never a name of the batch as domain word (``…@antoine.example``).
+                word = normalize(candidate.split(".", 1)[0])
                 if (
                     candidate not in self.domains.values()
                     and normalize(candidate) not in self.forbidden
+                    and word not in self.forbidden_tokens
                 ):
                     break
             self.domains[original] = candidate
@@ -590,6 +596,10 @@ def _email(
             template = match_login_template(local, person) if person else None
             if template is not None:
                 fake_local = fk.login_like(template, local, st.persons[owner])
+        if fake_local is None and generic_local(local):
+            # A function mailbox (offres@, contact@) names no one: it stays one, so
+            # that its display name (« Promo Cartouches ») reads as before.
+            fake_local = local
         if fake_local is None:
             fake_local = fk.fake_local_part(rng)
             if any(c.isdigit() for c in local):

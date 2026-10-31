@@ -40,6 +40,46 @@ def boundary_ok(text: str, start: int, end: int) -> bool:
     return True
 
 
+#: File extensions after a name in a file-name-like token (``lettre_riviere.docx``).
+_EXTENSIONS = frozenset(
+    {
+        "pdf", "doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "ods", "csv", "ppt", "pptx",
+        "odp", "jpg", "jpeg", "png", "gif", "tif", "tiff", "heic", "eml", "msg", "zip", "html",
+        "htm", "xml", "json", "mp3", "mp4", "wav", "mov",
+    }
+)  # fmt: skip
+
+
+def in_identifier(text: str, start: int, end: int) -> bool:
+    """``text[start:end]`` is a word of a file name or an identifier written in lower
+    case (``lettre_resiliation_riviere.docx``, ``dossier-riviere.pdf``): an ordinary
+    word there is no prose, a known name must still be found."""
+    before = text[start - 1] if start > 0 else ""
+    after = text[end] if end < len(text) else ""
+    if before == "_" or after == "_":
+        return True
+    if after == ".":
+        tail = text[end + 1 : end + 6]
+        ext = "".join(c for c in tail[:5] if c.isalnum()).lower()
+        for size in range(len(ext), 1, -1):
+            nxt = text[end + 1 + size] if end + 1 + size < len(text) else ""
+            if ext[:size] in _EXTENSIONS and not nxt.isalnum():
+                return before in ("", "-", "/", "\\") or before.isspace()
+    return False
+
+
+#: Needles with at most this many letters and digits (initials « A.B », « J-D »)...
+SHORT_NEEDLE = 3
+
+
+def short_glued(key: str, text: str, start: int, end: int) -> bool:
+    """...only match as a word of their own: « A.B » is no initials inside the
+    identifier ``01DBDC2A.B5B90004``."""
+    if sum(c.isalnum() for c in key) > SHORT_NEEDLE:
+        return False
+    return (start > 0 and text[start - 1].isalnum()) or (end < len(text) and text[end].isalnum())
+
+
 @dataclass(frozen=True, slots=True)
 class Match[T]:
     start: int
@@ -102,9 +142,11 @@ class MultiMatcher[T]:
                 end += 1
             if not boundary_ok(text, start, end):
                 continue
+            if short_glued(key, text, start, end):
+                continue
             entry = self._entries[key]
             payloads = list(entry.payloads)
-            if entry.capital_only and text[start].isupper():
+            if entry.capital_only and (text[start].isupper() or in_identifier(text, start, end)):
                 payloads.extend(entry.capital_only)
             if payloads:
                 yield Match(start, end, key, tuple(payloads))
@@ -128,4 +170,11 @@ def leftmost_longest[T](matches: Iterable[Match[T]]) -> list[Match[T]]:
     return kept
 
 
-__all__ = ["Match", "MultiMatcher", "boundary_ok", "leftmost_longest"]
+__all__ = [
+    "Match",
+    "MultiMatcher",
+    "boundary_ok",
+    "in_identifier",
+    "leftmost_longest",
+    "short_glued",
+]

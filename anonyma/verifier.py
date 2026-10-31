@@ -397,6 +397,11 @@ def _substitutes(substitutes: set[str]) -> MultiMatcher[str]:
     for sub in substitutes:
         if sub.strip():
             subs.add(sub, sub)
+            # OCR glues the words of a line (« Votre interlocuteur:AydenDupuis »): the
+            # glued substitute is still a substitute, not a name left over.
+            words = sub.split()
+            if len(words) > 1:
+                subs.add("".join(words), sub)
     return subs
 
 
