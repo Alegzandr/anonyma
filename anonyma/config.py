@@ -86,7 +86,7 @@ class Config:
     #: "incertaines" (only when uncertain entities await review) or "systematique".
     review_policy: str = "incertaines"
 
-    # -- detection settings (appended by the detection workstream) ---------------
+    # -- detection ---------------------------------------------------------------
     #: Mask every complete date as DATE (dates of birth are always masked).
     detect_dates: bool = True
     #: GLiNER span threshold (lower = more recall, more review).
@@ -97,7 +97,7 @@ class Config:
     #: indirect-identifier cues (much slower).
     llm_all_segments: bool = False
 
-    # -- global fix n°1 (shared contract, see docs/ARCHITECTURE.md) --------------
+    # -- hidden content, identifiers and names ------------------------------------
     #: PDF: render every page and OCR it (vector text, stamps, flattened fields,
     #: annotation appearances), deduplicated against the text layer.
     ocr_full_pages: bool = True

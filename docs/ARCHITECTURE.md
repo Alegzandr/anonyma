@@ -78,8 +78,12 @@ reported in `registry.unavailable` and its format becomes "non supporté".
   every outbound connection except inside `netguard.allow_network()`.
 * Temp files live in `data/tmp/<batch>/`, removed by `Pipeline.close` and
   `paths.clean_tmp()` at startup.
-* Outputs that fail verification go to `<output>/_quarantaine/` and are never
-  marked anonymized.
+* Every output is written in the batch temp folder and only moved to the output
+  folder (or to `<output>/_quarantaine/`) once verified, under a name reserved by
+  exclusive creation; any failure on the way deletes it. Outputs that fail
+  verification are never marked anonymized.
+* Errors shown to users: only `UserError` (and `StoreError`, `ModelError`) messages
+  are displayed as is; any other exception is shown and logged by type only.
 
 ## Verification and statuses
 
