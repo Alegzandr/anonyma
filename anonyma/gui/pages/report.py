@@ -397,19 +397,16 @@ class ReportPage(QWidget):
             target = dialogs.save_file(self, "Exporter le rapport", default.name, default.parent)
             if target is None:
                 return None
+        savers = {
+            "json": self.report.save_json,
+            "md": self.report.save_markdown,
+            "html": self.report.save_html,
+        }
+        if kind not in savers:
+            return None
         try:
-            if kind == "json":
-                self.report.save_json(target)
-            elif kind == "md":
-                target.write_text(self.report.to_markdown(), encoding="utf-8")
-            elif kind == "html":
-                save_html = getattr(self.report, "save_html", None)
-                if not callable(save_html):
-                    raise NotImplementedError
-                save_html(target)
-            else:
-                return None
-        except Exception as exc:
+            savers[kind](target)
+        except OSError as exc:
             log.warning("report export failed: %s", type(exc).__name__)
             self.banner.show_message(user_message(exc), "error")
             return None

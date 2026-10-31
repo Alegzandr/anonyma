@@ -54,6 +54,7 @@ from anonyma.models import (
     SegmentContext,
     SegmentKind,
     Severity,
+    UserError,
     VerificationResult,
     WriteContext,
     Writer,
@@ -1309,8 +1310,8 @@ OUTPUT_CONFLICT_MESSAGE = (
 )
 
 
-class OutputDirError(ValueError):
-    """The output folder overlaps the inputs (``str(exc)`` is a French message)."""
+class OutputDirError(UserError):
+    """The output folder overlaps the inputs."""
 
 
 def validate_output_dir(inputs: Sequence[Path], output_dir: Path) -> None:

@@ -15,6 +15,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from anonyma.logs import get_logger
 from anonyma.model_manager import ModelError
+from anonyma.models import UserError
 from anonyma.store import StoreError
 
 log = get_logger("gui.tasks")
@@ -26,12 +27,11 @@ Report = Callable[[object], None]
 def user_message(exc: BaseException) -> str:
     """French, value-free message for an exception.
 
-    ``ModelError``/``StoreError``/``ValueError`` messages are user-facing by
-    contract; anything else gets a generic message naming only the type.
+    ``ModelError``/``StoreError``/``UserError`` messages are user-facing by
+    contract; anything else (a ``ValueError`` raised by a library may quote a
+    value) gets a generic message naming only the type.
     """
-    if isinstance(exc, NotImplementedError):
-        return "Cette fonction n'est pas encore disponible dans cette version d'Anonyma."
-    if isinstance(exc, ModelError | StoreError | ValueError) and str(exc):
+    if isinstance(exc, ModelError | StoreError | UserError) and str(exc):
         return str(exc)
     if isinstance(exc, PermissionError):
         return "Accès refusé : vérifiez les droits sur les fichiers et dossiers choisis."

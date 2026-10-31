@@ -114,3 +114,15 @@ def test_mail_headers_grouped_with_french_labels(tmp_path: Path) -> None:
     labels = [s.context.label for s in ordered_segments(doc)]
     assert labels == ["From", "To", "Subject", "X-Mailer", ""]
     assert [header_label(x) for x in ("From", "to", "Subject")] == ["De", "À", "Objet"]
+
+
+def test_only_user_errors_are_shown_verbatim() -> None:
+    from anonyma.gui.tasks import user_message
+    from anonyma.models import UserError
+
+    assert user_message(UserError("Ce PDF ne contient aucune page.")) == (
+        "Ce PDF ne contient aucune page."
+    )
+    # A library ValueError may quote a value of the document.
+    leaked = user_message(ValueError("invalid literal for int(): 'Quintavalle'"))
+    assert "Quintavalle" not in leaked and "ValueError" in leaked

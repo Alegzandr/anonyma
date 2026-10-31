@@ -34,7 +34,7 @@ from anonyma import registry
 from anonyma.gui import theme
 from anonyma.gui.tasks import Report, TaskRunner
 from anonyma.gui.widgets import button
-from anonyma.models import BBox, Document, DocumentResult
+from anonyma.models import BBox, Document, DocumentResult, UserError
 
 _LOCK = threading.Lock()
 PDF_ZOOM = 2.0
@@ -97,13 +97,13 @@ def _render_pdf(path: Path, page: int) -> PageImage:
     try:
         doc = pymupdf.open(path)
     except Exception as exc:
-        raise ValueError("Ce PDF ne peut pas être affiché.") from exc
+        raise UserError("Ce PDF ne peut pas être affiché.") from exc
     try:
         if doc.needs_pass:
-            raise ValueError("PDF protégé par mot de passe : aperçu visuel impossible.")
+            raise UserError("PDF protégé par mot de passe : aperçu visuel impossible.")
         count = doc.page_count
         if count == 0:
-            raise ValueError("Ce PDF ne contient aucune page.")
+            raise UserError("Ce PDF ne contient aucune page.")
         number = max(0, min(page, count - 1))
         pdf_page = doc[number]
         rect = pdf_page.rect
@@ -120,22 +120,16 @@ def _render_pdf(path: Path, page: int) -> PageImage:
 def _render_image(path: Path, page: int) -> PageImage:
     from PIL import Image
 
-    try:
-        from anonyma.extractors.image import ocr_view, prepare_frame
-    except ImportError:  # pragma: no cover - image plugin unavailable
-        prepare_frame = None  # type: ignore[assignment]
-        ocr_view = None  # type: ignore[assignment]
+    from anonyma.extractors.image import ocr_view, prepare_frame
+
     try:
         with Image.open(path) as source:
             count = int(getattr(source, "n_frames", 1) or 1)
             number = max(0, min(page, count - 1))
             source.seek(number)
-            if prepare_frame is not None and ocr_view is not None:
-                frame = ocr_view(prepare_frame(source))
-            else:
-                frame = source.convert("RGB")
+            frame = ocr_view(prepare_frame(source))
     except Exception as exc:
-        raise ValueError("Cette image ne peut pas être affichée.") from exc
+        raise UserError("Cette image ne peut pas être affichée.") from exc
     scale = min(1.0, MAX_SIDE / max(frame.size))
     if scale < 1.0:
         frame = frame.resize(

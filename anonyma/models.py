@@ -505,6 +505,10 @@ class MappingStore(Protocol):
         ...
 
 
+class UserError(ValueError):
+    """An error whose message is French, value-free and meant to be shown as is."""
+
+
 class ArchiveBombError(Exception):
     """Raised when a container exceeds the expansion budget."""
 

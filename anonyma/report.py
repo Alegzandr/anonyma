@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from anonyma.brand import app_svg_data_uri
-from anonyma.models import DocumentResult, DocumentStatus, Severity
+from anonyma.models import DocumentResult, DocumentStatus, Severity, UserError
 from anonyma.pipeline import BatchResult
 
 STATUS_LABELS = {
@@ -275,7 +275,7 @@ class BatchReport:
         }
         writer = writers.get(path.suffix.lower())
         if writer is None:
-            raise ValueError(
+            raise UserError(
                 "Format de rapport non reconnu : utilisez l'extension .json, .md ou .html."
             )
         path.parent.mkdir(parents=True, exist_ok=True)
