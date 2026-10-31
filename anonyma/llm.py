@@ -38,9 +38,6 @@ from anonyma.textutils import find_all
 
 log = get_logger("llm")
 
-#: Bump when the prompt, schema or decoding changes (part of :attr:`LlmRunner.key`).
-PROMPT_VERSION = 2
-
 #: Types the LLM may return, with the definition given to the model.
 TYPE_HELP: dict[str, str] = {
     EntityType.PERSON: "nom, prénom ou nom complet d'une personne (sans M., Mme, Dr)",
@@ -387,7 +384,6 @@ class LlmRunner:
             verbose=False,
         )
         self.n_ctx = n_ctx
-        self.key = f"{Path(model_path).name}:v{PROMPT_VERSION}"
         self.grammar = LlamaGrammar.from_json_schema(json.dumps(SCHEMA), verbose=False)
         model = self.llm._model
         n_vocab = int(model.n_vocab())
@@ -419,7 +415,7 @@ class LlmRunner:
         self.llm.n_tokens = 0
         self.llm.eval(self._prefix)
 
-    def safe_tokens(self, text: str) -> list[int]:
+    def safe_tokens(self, text: str, *, report: bool = False) -> list[int]:
         """Document tokens with no control/user-defined token left (``<|im_end|>``,
         ``<think>``...): those are spelled with ordinary tokens instead."""
         tokens = self.llm.tokenize(fence_safe(text).encode("utf-8"), add_bos=False, special=False)
@@ -437,7 +433,8 @@ class LlmRunner:
                 for t in self.llm.tokenize(piece[i : i + 1], add_bos=False, special=False)
             ]
             out.extend(t for t in spelled if t not in self._forbidden)
-        log.info("llm: control tokens neutralized in a document chunk")
+        if report:
+            log.info("llm: control tokens neutralized in a document chunk")
         return out
 
     def count_tokens(self, text: str) -> int:
@@ -445,7 +442,7 @@ class LlmRunner:
 
     def extract(self, text: str) -> list[LlmMention]:
         """Mentions the model lists for ``text`` (ungrounded: check them)."""
-        body = self.safe_tokens(text)
+        body = self.safe_tokens(text, report=True)
         prompt = self._prefix + body + self._suffix
         max_tokens = min(OUTPUT_TOKENS, self.n_ctx - len(prompt))
         if max_tokens < 64:
@@ -495,7 +492,6 @@ class LlmRunner:
 
 __all__ = [
     "LLM_TYPES",
-    "PROMPT_VERSION",
     "SCHEMA",
     "LlmMention",
     "LlmRunner",
