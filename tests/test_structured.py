@@ -150,6 +150,35 @@ def test_dataverse_attachment_is_anonymized(config: Config, tmp_path: Path) -> N
     text = base64.b64decode(body).decode()
     assert "Quintavalle" not in text and CANARY_EMAIL not in text
     assert "Rédigé par" in text
+    # The size field follows the anonymized file.
+    attachment = record["email_activity_mime_attachment"][0]
+    assert attachment["filesize"] == len(base64.b64decode(body))
+
+
+def test_html_values_are_read_as_html(config: Config, tmp_path: Path) -> None:
+    """A Dataverse ``description`` is HTML: entities decoded for detection, markup
+    kept, data: URIs anonymized as files."""
+    png = base64.b64encode(_png()).decode()
+    description = (
+        '<html><head><style>p.MsoNormal {font-family:"Aptos";}</style></head><body>'
+        '<p class="MsoNormal">Bonjour,</p><p>Z&eacute;phyrin Quintavalle<br>'
+        f'<img src="data:image/png;base64,{png}" alt="logo"></p></body></html>'
+    )
+    source = tmp_path / "in" / "page.json"
+    source.parent.mkdir()
+    source.write_text(json.dumps({"value": [{"description": description}]}), encoding="utf-8")
+    doc = extract_file(source, "page.json", config, tmp_path / "work")
+    texts = [s.text for s in doc.segments]
+    assert any(CANARY_PERSON in t for t in texts)
+    assert [c.name for c in doc.children] == ["fichier-incorpore-1.png"]
+
+    _, result = _run(config, source, tmp_path / "out")
+    top = result.results[0]  # type: ignore[attr-defined]
+    assert top.status in (DocumentStatus.ANONYMIZED, DocumentStatus.NEEDS_REVIEW)
+    out = json.loads(top.output_path.read_text(encoding="utf-8"))["value"][0]["description"]
+    assert "Quintavalle" not in out and "Z&eacute;phyrin" not in out
+    assert out.startswith('<html><head><style>p.MsoNormal {font-family:"Aptos";}</style>')
+    assert 'src="data:image/png;base64,' in out and 'alt="logo"' in out
 
 
 def test_unreadable_attachment_is_omitted(config: Config, tmp_path: Path) -> None:

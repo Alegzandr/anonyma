@@ -23,20 +23,28 @@ from lxml import etree
 from anonyma.codec import TextEncoding, decode_bytes
 from anonyma.extractors._embedded import PROPERTY as EMBEDDED
 from anonyma.extractors._embedded import EmbeddedRef, masked, rebuild
+from anonyma.extractors._html import HtmlSource, plan_edits
 from anonyma.extractors._tabular import encode_json_string, tokenize_json
 from anonyma.extractors._xml import drop_doctype, parse_xml
 from anonyma.extractors._xmlscan import Unit, apply_unit
-from anonyma.extractors.json_xml import DOCTYPE_SEGMENT, xml_tree_units
+from anonyma.extractors.json_xml import (
+    DOCTYPE_SEGMENT,
+    HTML_VALUES,
+    SIZES,
+    xml_tree_units,
+)
 from anonyma.models import (
     Document,
     Issue,
     Replacement,
     ReplacementPlan,
+    Segment,
     WriteContext,
     Writer,
     apply_replacements,
 )
 from anonyma.registry import register_writer
+from anonyma.writers.html import data_uri_values
 
 
 @register_writer
@@ -54,10 +62,35 @@ class JsonWriter(Writer):
         text, detected = decode_bytes(document.source.read_bytes())
         encoding: TextEncoding = document.properties.get("encoding", detected)
         embedded: dict[int, list[EmbeddedRef]] = document.properties.get(EMBEDDED, {})
+        html_values: dict[int, dict[int, str]] = document.properties.get(HTML_VALUES, {})
+        sizes: dict[int, str] = document.properties.get(SIZES, {})
+        html_segments: dict[int, list[Segment]] = {}
+        for segment in document.segments:
+            head, _, rest = segment.id.partition("|h")
+            if rest and head[1:].isdigit():
+                html_segments.setdefault(int(head[1:]), []).append(segment)
         issues: list[Issue] = []
         out: list[str] = []
         cursor = 0
         for i, token in enumerate(tokenize_json(text)):
+            if i in sizes:
+                # Size of an embedded file, now the size of its anonymized version.
+                output = ctx.child_outputs.get(sizes[i])
+                size = output.path.stat().st_size if output and output.path else 0
+                out.append(text[cursor : token.start])
+                out.append(str(size))
+                cursor = token.end
+                continue
+            if i in html_values:
+                source = HtmlSource(token.value)
+                edits = plan_edits(source, html_segments.get(i, []), plan)
+                values = data_uri_values(html_values[i], ctx.child_outputs)
+                if not edits and not values:
+                    continue
+                out.append(text[cursor : token.start])
+                out.append(encode_json_string(source.rewrite(edits, values), token.ascii_escaped))
+                cursor = token.end
+                continue
             reps = plan.for_segment(f"j{i}")
             refs = embedded.get(i)
             if not reps and not refs:

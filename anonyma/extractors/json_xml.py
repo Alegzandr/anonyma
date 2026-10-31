@@ -18,6 +18,7 @@ from __future__ import annotations
 import bisect
 import re
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from lxml import etree
@@ -33,7 +34,8 @@ from anonyma.extractors._embedded import (
     name_key,
     visible,
 )
-from anonyma.extractors._tabular import tokenize_json
+from anonyma.extractors._html import HtmlSource, build_segments, extension_for
+from anonyma.extractors._tabular import JsonToken, tokenize_json
 from anonyma.extractors._xml import doctype_ids, local_name, parse_xml
 from anonyma.extractors._xmlscan import ScanSpec, Unit, scan
 from anonyma.fieldhints import field_hint, with_key_hint
@@ -90,6 +92,7 @@ class JsonExtractor(Extractor):
         key_hints: dict[str, str | None] = {}
         structural: set[str] = set()
         embedded: dict[int, list[EmbeddedRef]] = {}
+        html_values: dict[int, dict[int, str]] = {}
         for i, token in enumerate(tokens):
             line = bisect.bisect_left(lines, token.start) + 1
             where = f"{json_path(token.keys)} (ligne {line} du fichier)"
@@ -105,6 +108,11 @@ class JsonExtractor(Extractor):
             else:
                 kind = SegmentKind.BODY
                 label = with_key_hint(token.path, key_hints.get(token.path))
+            if token.kind == "string" and looks_like_html(value):
+                # An HTML body (Dataverse ``description``): read as HTML, entities
+                # decoded, markup and styles left out, data: URIs as children.
+                html_values[i] = _html_value(value, i, label, where, document, ctx)
+                continue
             if token.kind == "string":
                 hint = hint_from(_nearest_key(token.keys), siblings.get(token.parent, {}))
                 refs = extract_blobs(value, hint, document, ctx)
@@ -122,7 +130,68 @@ class JsonExtractor(Extractor):
                 )
             )
         document.properties[EMBEDDED] = embedded
+        document.properties[HTML_VALUES] = html_values
+        document.properties[SIZES] = _size_fields(tokens, embedded)
         document.properties[STRUCTURE] = vocabulary(structural)
+
+
+#: Document properties of JSON: HTML values (token index -> data: URI unit ->
+#: child id) and size fields of embedded files (token index -> child id).
+HTML_VALUES = "html_values"
+SIZES = "embedded_sizes"
+_HTML_START = re.compile(r"\s*<(?:!doctype|[a-z][\w:-]*)[\s/>]", re.I)
+_HTML_TAG = re.compile(r"</[a-z][\w:-]*\s*>|<br\s*/?>", re.I)
+#: Normalized names of the field giving the size of a sibling embedded file.
+_SIZE_NAMES = frozenset({"filesize", "file size", "size", "length", "taille"})
+
+
+def looks_like_html(value: str) -> bool:
+    """A JSON string holding an HTML document or fragment."""
+    return bool(_HTML_START.match(value)) and bool(_HTML_TAG.search(value))
+
+
+def html_segment_prefix(index: int) -> str:
+    return f"j{index}|h"
+
+
+def _html_value(
+    value: str, index: int, label: str, where: str, document: Document, ctx: ExtractionContext
+) -> dict[int, str]:
+    """Segments of an HTML value; its data: URIs extracted as children."""
+    source = HtmlSource(value)
+    prefix = f"{label} : "
+    for segment in build_segments(source, html_segment_prefix(index), prefix):
+        zone = segment.context.label[len(prefix) :]
+        context = replace(segment.context, where=f"{where}, {zone}")
+        document.segments.append(replace(segment, context=context))
+    children: dict[int, str] = {}
+    for uri in source.data_uris:
+        ctx.check_cancelled()
+        ctx.budget.consume(len(uri.data), depth=ctx.depth + 1)
+        number = document.properties.get("embedded_count", 0) + 1
+        document.properties["embedded_count"] = number
+        name = f"fichier-incorpore-{number}{extension_for(uri.mime)}"
+        children[uri.unit] = ctx.extract_child(uri.data, name, document).id
+    return children
+
+
+def _size_fields(
+    tokens: Sequence[JsonToken], embedded: dict[int, list[EmbeddedRef]]
+) -> dict[int, str]:
+    """Number fields (``filesize``) next to a whole-value embedded file, giving its
+    size: rewritten with the size of the anonymized file."""
+    by_parent: dict[int, str] = {}
+    for index, refs in embedded.items():
+        if len(refs) == 1 and refs[0].start == 0:
+            by_parent[tokens[index].parent] = refs[0].child_id
+    sizes: dict[int, str] = {}
+    for i, token in enumerate(tokens):
+        if token.kind != "number" or token.parent not in by_parent or not token.keys:
+            continue
+        key = token.keys[-1]
+        if isinstance(key, str) and name_key(key) in _SIZE_NAMES:
+            sizes[i] = by_parent[token.parent]
+    return sizes
 
 
 def _all_attributes(el: etree._Element, name: str, value: str) -> bool:

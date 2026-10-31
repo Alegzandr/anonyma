@@ -758,6 +758,7 @@ def dataverse_page(attachment: bytes, filename: str, mimetype: str) -> dict[str,
                         "activitymimeattachmentid": "e1984ad3-2a71-46e1-a115-280d5f3b094e",
                         "filename": filename,
                         "mimetype": mimetype,
+                        "filesize": len(attachment),
                         "body": body,
                     }
                 ],
