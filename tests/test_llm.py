@@ -287,11 +287,54 @@ def test_ungrounded_mentions_are_dropped(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_contentless_mentions_are_not_kept(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A model that labels the pleasantries themselves gets nothing through."""
+    """Pleasantries labelled as names are dropped (every type: see the test below)."""
     segments = [_seg(f"s{i}", t) for i, t in enumerate(["Merci", "Bonjour,", "Cordialement"])]
     answer = [("Merci", "PERSONNE"), ("Bonjour", "PERSONNE"), ("Cordialement", "ORGANISATION")]
     found, _ = _detect(monkeypatch, segments, answer)
     assert found == []
+
+
+#: Contentless segments: any detection on them is a hallucination or a false positive.
+SHORT_INPUTS = [
+    "Ok", "Merci", "Merci !", "Merci beaucoup.", "Bonjour,", "Bonsoir,", "Cordialement,",
+    "Bien à vous,", "Bonne journée", "Oui", "Non", "N/A", "—", "Total", "Montant HT",
+    "Page 1/3", "Objet :", "Pièce jointe", "Signature :", "Lu et approuvé", "Fait à", "Le",
+    "Date :", "12/03/2024", "le 3 mars 2024", "Tél. :", "Nom :", "Madame, Monsieur,",
+    "À l'attention de", "Envoyé de mon iPhone", "Ci-joint le document.", "Confidentiel",
+    "Annexe 2", "Ordre du jour", "Questions diverses", "Présents :", "   ", "",
+    "Bonne fin de semaine !", "Reçu, merci.", "Re: Réunion", "Mars 2024", "1 234,56 €",
+]  # fmt: skip
+
+
+class _LabelsEverything(FakeRunner):
+    """The worst model: every segment of the call, whole, as every entity type."""
+
+    def __init__(self) -> None:
+        super().__init__([])
+
+    def extract(self, text: str) -> list[llm.LlmMention]:
+        self.calls.append(text)
+        mentions = []
+        for piece in text.split(llm.SEGMENT_SEPARATOR):
+            for variant in sorted({piece.strip(), piece.strip(" ,.:;!?…")}):
+                if len(variant) >= 2:
+                    mentions += [llm.LlmMention(variant, t) for t in llm.LLM_TYPES]
+        return mentions
+
+
+@pytest.mark.parametrize("text", SHORT_INPUTS)
+def test_contentless_inputs_yield_nothing_whatever_the_model_says(
+    monkeypatch: pytest.MonkeyPatch, text: str
+) -> None:
+    """No hallucination on a pleasantry, a label or a lone date survives the filters,
+    alone (nothing around it: the worst case) or pooled with the others."""
+    alone = [_seg("s", text)]
+    pooled = [_seg(f"s{i}", t, SegmentKind.CELL) for i, t in enumerate([text, *SHORT_INPUTS])]
+    for segments in (alone, pooled):
+        detector = LlmDetector(Config(llm_all_segments=True))
+        runner = _LabelsEverything()
+        monkeypatch.setattr(detector, "_runner", lambda runner=runner: runner)
+        assert detector.detect(segments, "d") == [], text
 
 
 def test_type_sanity_of_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -430,18 +473,6 @@ def llm_config(monkeypatch: pytest.MonkeyPatch) -> Iterator[Config]:
     if not llm.available() or select_model(config) is None:
         pytest.skip("llama-cpp-python ou modèle Qwen3 non installé")
     yield config
-
-
-#: Contentless segments: any detection on them is a hallucination or a false positive.
-SHORT_INPUTS = [
-    "Ok", "Merci", "Merci !", "Merci beaucoup.", "Bonjour,", "Bonsoir,", "Cordialement,",
-    "Bien à vous,", "Bonne journée", "Oui", "Non", "N/A", "—", "Total", "Montant HT",
-    "Page 1/3", "Objet :", "Pièce jointe", "Signature :", "Lu et approuvé", "Fait à", "Le",
-    "Date :", "12/03/2024", "le 3 mars 2024", "Tél. :", "Nom :", "Madame, Monsieur,",
-    "À l'attention de", "Envoyé de mon iPhone", "Ci-joint le document.", "Confidentiel",
-    "Annexe 2", "Ordre du jour", "Questions diverses", "Présents :", "   ", "",
-    "Bonne fin de semaine !", "Reçu, merci.", "Re: Réunion", "Mars 2024", "1 234,56 €",
-]  # fmt: skip
 
 
 @pytest.mark.models

@@ -282,6 +282,99 @@ CALENDAR_WORDS = frozenset(
 )  # fmt: skip
 
 
+_TOKENS = re.compile(r"[^\W_]+(?:['’/\-][^\W_]+)*")
+
+
+def _key(value: str) -> str:
+    """Words of ``value`` only, normalized: « Madame, Monsieur, » -> ``madame monsieur``."""
+    return " ".join(_TOKENS.findall(normalize(value)))
+
+
+#: Pleasantries, greetings, closings, field and page labels: never personal data on
+#: their own, whatever the type a model gives them (« Merci » is no place, « Objet : »
+#: no organisation, « Lu et approuvé » no person).
+CONTENTLESS = frozenset(
+    _key(p)
+    for p in [
+        "merci", "merci beaucoup", "merci bien", "mille mercis", "bonjour", "bonsoir",
+        "salut", "coucou", "hello", "cordialement", "bien cordialement",
+        "très cordialement", "salutations", "sincères salutations", "bien à vous",
+        "bien à toi", "à bientôt", "bonne journée", "bonne soirée",
+        "bonne fin de journée", "bonne fin de semaine", "bonne semaine", "bon week-end",
+        "bises", "amitiés", "madame", "monsieur", "madame, monsieur", "mesdames",
+        "messieurs", "chère madame", "cher monsieur", "reçu", "reçu, merci", "bien reçu",
+        "envoyé de mon iPhone", "envoyé de mon iPad", "envoyé depuis mon smartphone",
+        "ok", "oui", "non", "n/a", "néant", "objet", "pièce jointe", "pièces jointes",
+        "pj", "signature", "lu et approuvé", "fait à", "fait le", "date", "tél",
+        "téléphone", "fax", "courriel", "e-mail", "email", "mail", "nom", "prénom",
+        "nom et prénom", "adresse", "à l'attention de", "ci-joint", "ci-joint le document",
+        "confidentiel", "strictement confidentiel", "annexe", "annexes", "ordre du jour",
+        "questions diverses", "présents", "absents", "excusés", "total", "sous-total",
+        "montant", "montant HT", "montant TTC", "HT", "TTC", "TVA", "page", "cc", "cci",
+        "destinataire", "expéditeur", "réf", "référence", "compte rendu",
+    ]
+)  # fmt: skip
+#: Labels followed by a number: « Page 1/3 », « Annexe 2 ».
+_NUMBERED = frozenset(
+    {"page", "p", "annexe", "piece", "pj", "feuille", "diapositive", "slide", "article",
+     "chapitre", "section", "tableau", "figure", "point", "partie"}
+)  # fmt: skip
+#: Mail subject prefixes: « Re: Réunion » describes a message, not someone.
+_REPLY = frozenset({"re", "tr", "fw", "fwd", "ref"})
+_NUMBER = re.compile(r"^\d+(?:/\d+)?$")
+_DMY = re.compile(r"^(\d{1,2})[/.\-](\d{1,2})[/.\-](?:\d{2}|\d{4})$")
+_YMD = re.compile(r"^\d{4}-(\d{2})-(\d{2})$")
+DATE_TYPES = frozenset({EntityType.DATE, EntityType.DATE_OF_BIRTH})
+#: An amount of money: « 1 234,56 € », « EUR 12.50 ».
+_SUM = r"\d[\d\s\u00a0\u202f.,']*"
+_AMOUNT = re.compile(
+    rf"^(?:(?:€|eur|\$|£|chf)\s*{_SUM}|{_SUM}\s*(?:€|eur|euros?|\$|£|chf))$", re.IGNORECASE
+)
+
+
+def _is_date(token: str) -> bool:
+    """``12/03/2024``, ``3.4.85``, ``2024-03-12``: a calendar date, nothing more."""
+    if match := _DMY.match(token):
+        day, month = int(match.group(1)), int(match.group(2))
+    elif match := _YMD.match(token):
+        month, day = int(match.group(1)), int(match.group(2))
+    else:
+        return False
+    return 1 <= day <= 31 and 1 <= month <= 12
+
+
+def contentless(entity_type: str, value: str) -> bool:
+    """A mention with nothing personal in it, whatever its type: a pleasantry, a
+    greeting or closing, a page or field label, an amount, grammatical words alone, a
+    lone weekday or month, or a lone date given as anything but a date."""
+    key = _key(value)
+    if not key or key in CONTENTLESS:
+        return True
+    if _AMOUNT.match(value.strip()):
+        return True  # « 1 234,56 € »
+    words = key.split(" ")
+    if all(w in FUNCTION_WORDS for w in words):
+        return True  # « Le », « de la »
+    if words[0] in _NUMBERED and all(_NUMBER.match(w) or w in ("sur", "de") for w in words[1:]):
+        return True
+    if words[0] in _REPLY and len(words) > 1:
+        rest = " ".join(words[1:])
+        if rest in CONTENTLESS or (
+            all(is_common_word(w) or w in FUNCTION_WORDS for w in words[1:])
+            and not any(first_name(w) for w in words[1:])
+        ):
+            return True
+    if entity_type in DATE_TYPES:
+        return False
+    dateish = [w for w in words if w not in ("le", "er")]
+    if any(w in CALENDAR_WORDS or _is_date(w) for w in dateish) and all(
+        w in CALENDAR_WORDS or _is_date(w) or (w.isdigit() and len(w) <= 4) for w in dateish
+    ):
+        # « le 3 mars 2024 » as an address; « Avril » may still be a first name.
+        return not (entity_type == EntityType.PERSON and any(first_name(w) for w in words))
+    return False
+
+
 @lru_cache(maxsize=1)
 def _sorted_lexicon() -> list[str]:
     return sorted(lexicon())
@@ -324,6 +417,8 @@ def plausible(
     """Whether a model span of ``entity_type`` is worth keeping."""
     stripped = value.strip()
     if len(stripped) < 2 or _LONE_PUNCT.match(stripped):
+        return False
+    if contentless(entity_type, stripped):
         return False
     words_ = _words(stripped)
     if (
@@ -402,7 +497,9 @@ def plausible(
 
 __all__ = [
     "CALENDAR_WORDS",
+    "CONTENTLESS",
     "TECHNICAL",
+    "contentless",
     "filename_as_text",
     "is_pdf_operators",
     "mid_sentence",
