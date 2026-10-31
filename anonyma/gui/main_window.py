@@ -45,7 +45,8 @@ class MainWindow(QMainWindow):
         self.controller = BatchController(self.context, self)
         self.setWindowTitle("Anonyma")
         self.setWindowIcon(icons.app_icon())
-        self.setMinimumSize(QSize(980, 640))
+        # 1060: the review page's two panes stay legible (fits 1366 px at 125 %).
+        self.setMinimumSize(QSize(1060, 640))
 
         central = QWidget()
         root = QHBoxLayout(central)
@@ -57,17 +58,15 @@ class MainWindow(QMainWindow):
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(0, 0, 0, 0)
         side_layout.setSpacing(0)
-        title = QLabel("Anonyma")
-        title.setObjectName("AppTitle")
-        side_layout.addWidget(title)
+        side_layout.addWidget(self._brand())
         self.nav = QListWidget()
         self.nav.setObjectName("Sidebar")
         self.nav.setIconSize(QSize(18, 18))
         self.nav.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         side_layout.addWidget(self.nav, 1)
         self.footer = QLabel("Hors ligne · traitement local")
-        self.footer.setProperty("muted", True)
-        self.footer.setContentsMargins(18, 6, 12, 12)
+        self.footer.setObjectName("SidebarFooter")
+        self.footer.setContentsMargins(20, 8, 12, 14)
         side_layout.addWidget(self.footer)
         root.addWidget(side)
 
@@ -109,6 +108,22 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage("Prêt.")
         self._restore_geometry()
+
+    def _brand(self) -> QWidget:
+        """Application mark and name at the top of the side column."""
+        box = QWidget()
+        row = QHBoxLayout(box)
+        row.setContentsMargins(18, 18, 12, 14)
+        row.setSpacing(10)
+        self.logo = QLabel()
+        self.logo.setObjectName("AppLogo")
+        self.logo.setFixedSize(28, 28)
+        self.logo.setPixmap(icons.app_pixmap(28, self.devicePixelRatioF()))
+        row.addWidget(self.logo)
+        title = QLabel("Anonyma")
+        title.setObjectName("AppTitle")
+        row.addWidget(title, 1)
+        return box
 
     # -- navigation ---------------------------------------------------------------------
 

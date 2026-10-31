@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -31,6 +31,7 @@ from anonyma.gui.widgets import (
     Banner,
     EmptyState,
     button,
+    left_header,
     muted,
     page_header,
     primary_button,
@@ -73,11 +74,25 @@ def _table(headers: list[str]) -> QTableWidget:
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     table.setAlternatingRowColors(True)
     table.setShowGrid(False)
+    left_header(table)
     table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
     return table
 
 
-def _fill(table: QTableWidget, rows: list[list[str]], badge_col: int = -1) -> None:
+_RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+
+
+def _fill(
+    table: QTableWidget,
+    rows: list[list[str]],
+    badge_col: int = -1,
+    numeric: tuple[int, ...] = (),
+) -> None:
+    """Fill ``table``; ``numeric`` columns (cells and titles) are right-aligned."""
+    for c in numeric:
+        header_item = table.horizontalHeaderItem(c)
+        if header_item is not None:
+            header_item.setTextAlignment(_RIGHT)
     table.setRowCount(len(rows))
     for r, values in enumerate(rows):
         for c, value in enumerate(values):
@@ -85,6 +100,8 @@ def _fill(table: QTableWidget, rows: list[list[str]], badge_col: int = -1) -> No
             item.setToolTip(value)
             if c == badge_col:
                 item.setData(BADGE_ROLE, _LABEL_TO_LEVEL.get(value, "neutral"))
+            if c in numeric:
+                item.setTextAlignment(_RIGHT)
             table.setItem(r, c, item)
 
 
@@ -293,6 +310,7 @@ class ReportPage(QWidget):
                 for f in report.files
             ],
             badge_col=2,
+            numeric=(3, 4, 5),
         )
         _fill(
             self.types_table,
@@ -300,6 +318,7 @@ class ReportPage(QWidget):
                 [entity_type_label(t), t, str(n)]
                 for t, n in sorted(report.entity_counts.items(), key=lambda kv: -kv[1])
             ],
+            numeric=(2,),
         )
         self.quarantined = [r for r in result.results if is_quarantined(r)]
         _fill(

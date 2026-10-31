@@ -39,6 +39,7 @@ class Tokens:
     sidebar: str
     sidebar_text: str
     sidebar_selected: str
+    sidebar_hover: str
     success: str
     warning: str
     danger: str
@@ -63,6 +64,7 @@ LIGHT = Tokens(
     sidebar="#e9ecf1",
     sidebar_text="#2a3140",
     sidebar_selected="#d6dfec",
+    sidebar_hover="#dfe4eb",
     success="#2e7d4f",
     warning="#a0670a",
     danger="#b3322c",
@@ -87,6 +89,7 @@ DARK = Tokens(
     sidebar="#181b21",
     sidebar_text="#cfd5df",
     sidebar_selected="#2c3647",
+    sidebar_hover="#232833",
     success="#5cb685",
     warning="#d9a443",
     danger="#e0706a",
@@ -171,57 +174,143 @@ def _palette(t: Tokens) -> QPalette:
     return p
 
 
-_CHECK_SVG = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" '
-    'fill="none" stroke="{c}" stroke-width="2" stroke-linecap="round" '
-    'stroke-linejoin="round"/></svg>'
-)
+_SVG_HEAD = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
+#: Images the style sheet needs: name -> (path data, stroke width).
+_THEME_IMAGES: dict[str, tuple[str, str]] = {
+    "check": ("M3.5 8.5l3 3 6-7", "2"),
+    "chevron-down": ("M4 6l4 4 4-4", "1.6"),
+    "chevron-up": ("M4 10l4-4 4 4", "1.6"),
+}
 
 
-def _check_image(t: Tokens) -> str:
-    """Path (forward slashes) of the check-mark image for this theme, written once
+def _theme_image(name: str, colour: str) -> str:
+    """Path (forward slashes) of a style-sheet image tinted ``colour``, written once
     inside the portable folder; "" when it cannot be written."""
     from anonyma import paths
 
+    path_data, width = _THEME_IMAGES[name]
     folder = paths.data_dir() / "qt" / "theme"
-    target = folder / f"check-{t.accent_text.lstrip('#')}.svg"
+    target = folder / f"{name}-{colour.lstrip('#')}.svg"
     try:
         if not target.exists():
             folder.mkdir(parents=True, exist_ok=True)
-            target.write_text(_CHECK_SVG.replace("{c}", t.accent_text), encoding="utf-8")
+            target.write_text(
+                f'{_SVG_HEAD}<path d="{path_data}" fill="none" stroke="{colour}" '
+                f'stroke-width="{width}" stroke-linecap="round" stroke-linejoin="round"/>'
+                "</svg>",
+                encoding="utf-8",
+            )
     except OSError:
         return ""
     return target.as_posix()
 
 
+def _image_rule(path: str) -> str:
+    return f"image: url({path});" if path else ""
+
+
 def _indicator_rules(t: Tokens, check: str) -> str:
-    image = f"image: url({check});" if check else ""
     return f"""
 QCheckBox::indicator {{
     width: 14px; height: 14px; border: 1px solid {t.control_border}; border-radius: 3px;
     background: {t.base};
 }}
-QCheckBox::indicator:hover {{ border-color: {t.accent}; }}
-QCheckBox::indicator:checked {{ background: {t.accent}; border-color: {t.accent}; {image} }}
+QCheckBox::indicator:hover {{ border-color: {t.muted}; }}
+QCheckBox::indicator:focus {{ border-color: {t.accent}; }}
+QCheckBox::indicator:checked {{
+    background: {t.accent}; border-color: {t.accent}; {_image_rule(check)}
+}}
 QCheckBox::indicator:disabled {{ background: {t.alt_base}; border-color: {t.border}; }}
 QCheckBox::indicator:checked:disabled {{ background: {t.border}; }}
 """
 
 
-def style_sheet(t: Tokens, check: str = "") -> str:
+def _field_rules(t: Tokens, down: str, up: str) -> str:
+    """Text fields, combo boxes and spin boxes: same height, radius and focus as buttons."""
+    return f"""
+QLineEdit, QComboBox, QAbstractSpinBox {{
+    border: 1px solid {t.control_border}; border-radius: 5px; padding: 4px 8px;
+    background: {t.base}; color: {t.text}; min-height: 20px;
+    selection-background-color: {t.selection}; selection-color: {t.text};
+}}
+QLineEdit:hover, QComboBox:hover, QAbstractSpinBox:hover {{ border-color: {t.muted}; }}
+QLineEdit:focus, QComboBox:focus, QComboBox:on, QAbstractSpinBox:focus {{
+    border-color: {t.accent};
+}}
+QLineEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled {{
+    background: {t.alt_base}; border-color: {t.border}; color: {t.muted};
+}}
+QLineEdit[readOnly="true"] {{ background: {t.alt_base}; }}
+QComboBox {{ padding: 4px 20px 4px 6px; }}
+QComboBox::drop-down {{
+    subcontrol-origin: padding; subcontrol-position: center right; width: 18px; border: none;
+}}
+QComboBox::down-arrow {{ {_image_rule(down)} width: 10px; height: 10px; }}
+QComboBox QAbstractItemView {{
+    border: 1px solid {t.border}; border-radius: 0; background: {t.base}; outline: 0;
+    padding: 2px; selection-background-color: {t.selection}; selection-color: {t.text};
+}}
+QAbstractSpinBox {{ padding: 4px 24px 4px 8px; }}
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
+    subcontrol-origin: border; width: 20px; border: none; border-left: 1px solid {t.border};
+    background: transparent;
+}}
+QAbstractSpinBox::up-button {{ subcontrol-position: top right; border-top-right-radius: 5px; }}
+QAbstractSpinBox::down-button {{
+    subcontrol-position: bottom right; border-bottom-right-radius: 5px;
+}}
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{
+    background: {t.alt_base};
+}}
+QAbstractSpinBox::up-arrow {{ {_image_rule(up)} width: 10px; height: 10px; }}
+QAbstractSpinBox::down-arrow {{ {_image_rule(down)} width: 10px; height: 10px; }}
+"""
+
+
+def _chrome_rules(t: Tokens) -> str:
+    """Tabs and scroll bars."""
+    return f"""
+QTabWidget::pane {{ border: none; border-top: 1px solid {t.border}; top: -1px; }}
+QTabBar::tab {{
+    background: transparent; color: {t.muted}; border: none;
+    border-bottom: 2px solid transparent; padding: 6px 12px 7px; margin-right: 4px;
+}}
+QTabBar::tab:selected {{ color: {t.text}; border-bottom-color: {t.accent}; }}
+QTabBar::tab:hover:!selected {{ color: {t.text}; border-bottom-color: {t.border}; }}
+QTabBar::tab:focus {{ color: {t.accent}; }}
+QScrollBar:vertical {{ background: transparent; width: 12px; margin: 0; }}
+QScrollBar:horizontal {{ background: transparent; height: 12px; margin: 0; }}
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
+    background: {t.control_border}; border-radius: 3px; margin: 3px;
+}}
+QScrollBar::handle:vertical {{ min-height: 32px; }}
+QScrollBar::handle:horizontal {{ min-width: 32px; }}
+QScrollBar::handle:hover, QScrollBar::handle:pressed {{ background: {t.muted}; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; border: none; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
+"""
+
+
+def style_sheet(t: Tokens, images: dict[str, str] | None = None) -> str:
+    images = images or {}
     return (
-        _indicator_rules(t, check)
+        _indicator_rules(t, images.get("check", ""))
+        + _field_rules(t, images.get("chevron-down", ""), images.get("chevron-up", ""))
+        + _chrome_rules(t)
         + f"""
 QWidget {{ font-size: 10pt; }}
 QToolTip {{ color: {t.text}; background: {t.surface}; border: 1px solid {t.border}; }}
+#SidebarBox {{ background: {t.sidebar}; border-right: 1px solid {t.border}; }}
+#SidebarBox QLabel {{ background: transparent; }}
 #Sidebar {{
-    background: {t.sidebar}; border: none; border-right: 1px solid {t.border};
-    color: {t.sidebar_text}; outline: 0; padding: 8px 0;
+    background: transparent; border: none; border-radius: 0;
+    color: {t.sidebar_text}; outline: 0; padding: 4px 0;
 }}
 #Sidebar::item {{ padding: 10px 14px; margin: 1px 8px; border-radius: 6px; }}
 #Sidebar::item:selected {{ background: {t.sidebar_selected}; color: {t.text}; }}
-#Sidebar::item:hover:!selected {{ background: {t.sidebar_selected}; }}
-#AppTitle {{ font-size: 13pt; font-weight: 600; color: {t.text}; padding: 14px 18px 6px; }}
+#Sidebar::item:hover:!selected {{ background: {t.sidebar_hover}; }}
+#AppTitle {{ font-size: 13pt; font-weight: 600; color: {t.text}; }}
+#SidebarFooter {{ color: {t.muted}; font-size: 9pt; }}
 #PageTitle {{ font-size: 15pt; font-weight: 600; color: {t.text}; }}
 #PageSubtitle, .muted, QLabel[muted="true"] {{ color: {t.muted}; }}
 #SectionTitle {{ font-weight: 600; color: {t.text}; }}
@@ -240,12 +329,33 @@ QPushButton {{
     padding: 5px 14px; border-radius: 5px; border: 1px solid {t.border};
     background: {t.surface}; color: {t.text}; min-height: 20px;
 }}
-QPushButton:hover {{ border-color: {t.accent}; }}
-QPushButton:disabled {{ color: {t.muted}; background: {t.alt_base}; }}
+QPushButton:hover {{ border-color: {t.muted}; background: {t.alt_base}; }}
+QPushButton:pressed {{ background: {t.sidebar_selected}; }}
+QPushButton:focus {{ border-color: {t.accent}; }}
+QPushButton:disabled {{ color: {t.muted}; background: {t.alt_base}; border-color: {t.border}; }}
+QPushButton:flat {{ border-color: transparent; background: transparent; }}
+QPushButton:flat:hover {{ background: {t.alt_base}; }}
+/* Menu buttons (« Actions groupées »): the push-button look plus a chevron. */
+QToolButton[popupMode="2"] {{
+    padding: 5px 22px 5px 12px; border-radius: 5px; border: 1px solid {t.border};
+    background: {t.surface}; color: {t.text}; min-height: 20px;
+}}
+QToolButton[popupMode="2"]:hover {{ border-color: {t.muted}; background: {t.alt_base}; }}
+QToolButton[popupMode="2"]:focus {{ border-color: {t.accent}; }}
+QToolButton[popupMode="2"]:disabled {{
+    color: {t.muted}; background: {t.alt_base}; border-color: {t.border};
+}}
+QToolButton[popupMode="2"]::menu-indicator {{
+    {_image_rule(images.get("chevron-down", ""))} subcontrol-origin: padding;
+    subcontrol-position: center right; right: 6px; width: 10px; height: 10px;
+}}
 QPushButton[primary="true"] {{
     background: {t.accent}; color: {t.accent_text}; border-color: {t.accent}; font-weight: 600;
 }}
-QPushButton[primary="true"]:hover {{ background: {t.accent_hover}; }}
+QPushButton[primary="true"]:hover {{
+    background: {t.accent_hover}; border-color: {t.accent_hover};
+}}
+QPushButton[primary="true"]:focus {{ border-color: {t.text}; }}
 QPushButton[primary="true"]:disabled {{
     background: {t.border}; border-color: {t.border}; color: {t.muted};
 }}
@@ -260,15 +370,15 @@ QGroupBox::title {{
 }}
 QHeaderView::section {{
     background: {t.alt_base}; color: {t.muted}; border: none;
-    border-bottom: 1px solid {t.border}; padding: 5px 6px; font-weight: 600;
+    border-bottom: 1px solid {t.border}; padding: 5px 8px; font-weight: 600;
 }}
 QTableView, QTreeView, QListView, QPlainTextEdit, QTextEdit {{
     border: 1px solid {t.border}; border-radius: 6px; background: {t.base};
     selection-background-color: {t.selection}; selection-color: {t.text};
 }}
 QProgressBar {{
-    border: 1px solid {t.border}; border-radius: 4px; background: {t.alt_base};
-    text-align: center; min-height: 14px; color: {t.text};
+    border: none; border-radius: 3px; background: {t.border};
+    min-height: 6px; max-height: 6px;
 }}
 QProgressBar::chunk {{ background: {t.accent}; border-radius: 3px; }}
 QScrollArea {{ border: none; background: transparent; }}
@@ -285,7 +395,12 @@ def apply_theme(mode: str) -> Tokens:
     if isinstance(app, QApplication):
         app.setStyle("Fusion")
         app.setPalette(_palette(_current))
-        app.setStyleSheet(style_sheet(_current, _check_image(_current)))
+        images = {
+            "check": _theme_image("check", _current.accent_text),
+            "chevron-down": _theme_image("chevron-down", _current.muted),
+            "chevron-up": _theme_image("chevron-up", _current.muted),
+        }
+        app.setStyleSheet(style_sheet(_current, images))
     notifier().changed.emit()
     return _current
 

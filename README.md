@@ -1,3 +1,5 @@
+<img src="packaging/icons/anonyma.svg" width="72" height="72" alt="">
+
 # Anonyma
 
 Anonyma anonymise en masse, **entièrement en local**, des documents de tous formats :
@@ -50,17 +52,15 @@ utilisée en priorité (avant un éventuel LibreOffice installé sur la machine)
 invisible, avec un profil jetable créé dans `data/tmp/` puis supprimé : aucune
 préférence n'est écrite hors du dossier, les macros sont désactivées.
 
-LibreOffice est récupéré **au moment de la construction** de l'archive (version
-épinglée, empreinte SHA-256 vérifiée), jamais par l'application. Sous Windows, la copie
-est allégée des dictionnaires orthographiques et des langues d'interface autres que le
-français et l'anglais. Tailles indicatives (Windows x86_64) :
+LibreOffice est livré dans l'archive : l'application ne télécharge jamais rien pour
+lui. Tailles indicatives (Windows x86_64) :
 
 | Archive | Dossier décompressé | Archive zip |
 |---|---|---|
 | complète (avec LibreOffice) | 1,1 Go | 484 Mo |
-| légère (`--sans-libreoffice`) | 470 Mo | 207 Mo |
+| légère (sans LibreOffice) | 470 Mo | 207 Mo |
 
-Sans LibreOffice (archive légère, installation depuis les sources), les `.doc` et `.ppt`
+Avec l'archive légère (sans LibreOffice), les `.doc` et `.ppt`
 ne sont pas pris en charge et les `.xls` sont produits au format `.xlsx`. Un LibreOffice
 installé ailleurs peut être désigné par
 `anonyma-cli config definir libreoffice_path "C:\chemin\vers\LibreOffice"`.
@@ -68,23 +68,9 @@ installé ailleurs peut être désigné par
 Sous Linux, la copie embarquée utilise les bibliothèques graphiques usuelles du système
 (X11, fontconfig, cairo, CUPS), présentes sur tout poste de bureau.
 
-### Depuis les sources
-
-Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python 3.12 si nécessaire).
-
-```sh
-git clone <dépôt> anonyma && cd anonyma
-uv sync
-uv run anonyma --help        # ligne de commande
-uv run python -m anonyma.app # interface graphique
-```
-
-En mode source, `data/` et `models/` sont créés à la racine du projet. La variable
-`ANONYMA_HOME` permet de choisir un autre dossier.
-
 ## Interface graphique
 
-Lancez l'interface avec `uv run python -m anonyma.app` (ou l'exécutable portable). Tout se
+Lancez `Anonyma.exe` (Windows), `Anonyma.app` (macOS) ou `./Anonyma` (Linux). Tout se
 passe en local : aucune donnée ne quitte le poste.
 
 - **Traitement** : déposez des fichiers ou des dossiers, choisissez un dossier de sortie
@@ -269,6 +255,8 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
 - **Journaux et rapports** : `data/logs/` et les rapports ne contiennent ni valeur
   sensible ni nom de fichier d'origine (seulement des noms anonymisés, des nombres et des
   codes).
+- **Effacement des temporaires** par suppression simple : sur SSD, un effacement
+  « sécurisé » n'est pas garanti ; chiffrez le disque pour les données les plus sensibles.
 
 ## Limites connues
 
@@ -278,8 +266,8 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
 - La ré-identification de fichiers ne traite que les formats texte ; pour les autres
   formats, utilisez `--balise`.
 - Seuls les dépôts Hugging Face publics sont pris en charge (aucun jeton n'est envoyé).
-- macOS : application non signée (voir Gatekeeper ci-dessus). Les archives sont
-  construites pour l'architecture du système de construction (Apple Silicon pour macOS).
+- macOS : application non signée (voir Gatekeeper ci-dessus), prévue pour les Mac
+  Apple Silicon uniquement.
 - Ne lancez pas deux instances d'Anonyma sur le même dossier portable en même temps :
   le nettoyage des fichiers temporaires au démarrage pourrait gêner l'autre instance.
 - Windows : gardez le chemin du dossier portable sous une centaine de caractères
@@ -289,62 +277,26 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
 - macOS : la copie de LibreOffice embarquée est l'application officielle signée de The
   Document Foundation ; ne modifiez pas son contenu, sa signature serait invalidée.
 
-## Choix techniques
+## Comportements à connaître
 
-Choix faits là où le cahier des charges ne tranchait pas, en privilégiant la simplicité et
-la sûreté :
-
-- **Rappel avant précision** : une seule détection suffit à masquer ; les entités sous le
-  seuil de confiance sont masquées *et* envoyées en revue, jamais laissées visibles.
-- **Vérification à deux niveaux** : une valeur d'origine retrouvée, ou un détecteur
-  déterministe sûr, met le fichier en quarantaine ; un signalement d'un détecteur
-  statistique seul (GLiNER, LLM) le marque « À revoir », car ces modèles réagissent au
-  nouveau contexte créé par les balises.
+- **Dans le doute, Anonyma masque** : une seule détection suffit ; les entités
+  incertaines sont masquées *et* proposées en revue, jamais laissées visibles.
+- **« À revoir » n'est pas « Résidus »** : une valeur d'origine retrouvée met le fichier
+  en quarantaine ; un simple signalement des modèles d'IA (GLiNER, modèle de langage) le
+  marque seulement « À revoir », car ils réagissent parfois aux balises elles-mêmes.
 - **Liste blanche stricte** : rien n'est masqué à l'intérieur d'une valeur de la liste
-  blanche (un e-mail conservé reste intact même si son identifiant est masqué ailleurs).
-- **Éléments non anonymisables omis** plutôt que recopiés ; ils sont toujours signalés.
-- **Commentaires bureautiques conservés et anonymisés** (auteur « Anonyme »), révisions
-  suivies acceptées (les suppressions disparaissent entièrement).
+  blanche (un courriel conservé reste intact même si son identifiant est masqué ailleurs).
+- **Rien n'est recopié tel quel** : un élément non anonymisable est omis de la sortie et
+  toujours signalé dans le rapport.
+- **Commentaires bureautiques conservés et anonymisés** (auteur « Anonyme ») ; les
+  révisions suivies sont acceptées (les suppressions disparaissent entièrement).
 - **PST restitué en dossier d'eml** : aucun outil libre ne sait réécrire un PST de façon
   fiable.
-- **PyMuPDF limité à la version 1.x** : la 2.0 embarque du code initialement publié sous
-  licence non commerciale. **OpenCV en version « headless »** : la version complète
-  embarque Qt et entre en conflit avec PySide6.
-- **Pas de boîtes de dialogue de fichiers natives de Qt** : elles mémorisent les dossiers
-  récents dans le registre Windows, hors du dossier portable.
-- **Garde réseau** : toute connexion sortante est bloquée au niveau du processus, sauf
-  pendant un téléchargement de modèle déclenché par l'utilisateur.
-- **Effacement des temporaires** par suppression simple : sur SSD, un effacement « sécurisé »
-  n'est pas garanti ; chiffrez le disque pour les données les plus sensibles.
-
-## Développement
-
-```sh
-uv sync
-uv run ruff check . && uv run ruff format . && uv run mypy && uv run pytest
-uv run python packaging/build.py          # dossier portable complet + tests de fumée + zip
-uv run python packaging/build.py --sans-libreoffice   # archive légère, sans LibreOffice
-uv run python packaging/gen_licenses.py   # régénère LICENSES.md
-uv run python -m tests.benchmark.measure  # banc d'essai : rappel et précision mesurés
-```
-
-Le banc d'essai (`tests/benchmark/`) anonymise un corpus synthétique de 24 documents
-pièges et relit les sorties par des moyens indépendants ; méthode et résultats dans
-[tests/benchmark/RESULTS.md](tests/benchmark/RESULTS.md).
-
-L'intégration continue (`.github/workflows/ci.yml`) lance l'analyse statique et les
-tests sous Windows, macOS et Linux (avec LibreOffice installé sur les machines de test,
-les fixtures `.doc`/`.ppt` étant générées si elles sont absentes), puis construit
-l'archive portable complète de chaque système, LibreOffice compris. Pousser une
-étiquette `v*` publie automatiquement une version GitHub avec les trois archives,
-une fois les tests et les constructions réussis ; l'étiquette doit correspondre à
-`__version__` (et à `pyproject.toml`), sinon la publication échoue. Une étiquette
-avec suffixe (`v1.2.0-rc1`) est publiée en préversion. La construction lance l'interface en mode
-hors écran et anonymise avec l'exécutable figé un lot de fixtures (docx, xlsx, pdf, eml,
-msg, zip, png avec OCR, doc, xls, ppt) qui doivent toutes ressortir « Anonymisé » avec
-leur extension d'origine.
 
 ## Licences
 
 Voir [LICENSES.md](LICENSES.md) : licences de chaque dépendance et des modèles du
 catalogue.
+
+Pour travailler sur le code (sources, tests, construction) : voir
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

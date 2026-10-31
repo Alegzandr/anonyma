@@ -104,6 +104,12 @@ class QueueModel(QAbstractTableModel):
     ) -> object:
         if orientation is Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return self.COLUMNS[section]
+        if (
+            orientation is Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.TextAlignmentRole
+            and section == 3
+        ):
+            return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         return None
 
     @override

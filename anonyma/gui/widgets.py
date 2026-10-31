@@ -17,6 +17,8 @@ from PySide6.QtGui import (
     QPainter,
 )
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QAbstractSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -68,19 +70,64 @@ def muted(text: str) -> QLabel:
     return label
 
 
+#: Button property holding the icon name, so the icon follows theme switches.
+_ICON_PROPERTY = "anonymaIcon"
+_retint_connected = False
+
+
+def _icon_colour(b: QPushButton) -> str:
+    t = theme.tokens()
+    return t.accent_text if b.property("primary") else t.text
+
+
+def _set_button_icon(b: QPushButton, icon_name: str) -> None:
+    global _retint_connected
+    b.setProperty(_ICON_PROPERTY, icon_name)
+    b.setIcon(icons.icon(icon_name, _icon_colour(b)))
+    if not _retint_connected:
+        theme.notifier().changed.connect(_retint_buttons)
+        _retint_connected = True
+
+
+def _retint_buttons() -> None:
+    """Re-tint every themed button icon (dark icons vanish on the dark theme otherwise)."""
+    from PySide6.QtWidgets import QApplication
+
+    for widget in QApplication.allWidgets():
+        if isinstance(widget, QPushButton):
+            name = widget.property(_ICON_PROPERTY)
+            if name:
+                widget.setIcon(icons.icon(str(name), _icon_colour(widget)))
+
+
 def primary_button(text: str, icon_name: str = "") -> QPushButton:
     button = QPushButton(text)
     button.setProperty("primary", True)
     if icon_name:
-        button.setIcon(icons.icon(icon_name, theme.tokens().accent_text))
+        _set_button_icon(button, icon_name)
     return button
 
 
 def button(text: str, icon_name: str = "") -> QPushButton:
     b = QPushButton(text)
     if icon_name:
-        b.setIcon(icons.icon(icon_name))
+        _set_button_icon(b, icon_name)
     return b
+
+
+def pad_spin(*spins: QAbstractSpinBox) -> None:
+    """Inset the value like other fields (the style sheet cannot reach the inner editor)."""
+    for spin in spins:
+        editor = spin.lineEdit()
+        if editor is not None:
+            editor.setTextMargins(6, 0, 0, 0)
+
+
+def left_header(view: QAbstractItemView) -> None:
+    """Column titles aligned like the cells below them (Qt centres them by default)."""
+    header = getattr(view, "horizontalHeader", None)
+    if header is not None:
+        header().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
 
 def repolish(widget: QWidget) -> None:

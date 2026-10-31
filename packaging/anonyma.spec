@@ -30,6 +30,9 @@ sys.path.insert(0, str(ROOT))
 
 APP_NAME = "Anonyma"
 CLI_NAME = "anonyma-cli"
+# Generated from anonyma/brand.py by packaging/gen_icons.py.
+ICONS = ROOT / "packaging" / "icons"
+EXE_ICON = str(ICONS / "anonyma.ico") if sys.platform == "win32" else None
 
 
 def have(module: str) -> bool:
@@ -178,6 +181,7 @@ gui_exe = EXE(  # noqa: F821
     [],
     exclude_binaries=True,
     name=APP_NAME,
+    icon=EXE_ICON,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -191,6 +195,7 @@ cli_exe = EXE(  # noqa: F821
     [],
     exclude_binaries=True,
     name=CLI_NAME,
+    icon=EXE_ICON,
     console=True,
     upx=False,
     codesign_identity=None,
@@ -215,7 +220,7 @@ if sys.platform == "darwin":
     app = BUNDLE(  # noqa: F821
         coll,
         name=f"{APP_NAME}.app",
-        icon=None,
+        icon=str(ICONS / "anonyma.icns"),
         bundle_identifier="fr.anonyma.desktop",
         version=__version__,
         info_plist={

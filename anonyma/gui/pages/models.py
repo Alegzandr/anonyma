@@ -34,6 +34,7 @@ from anonyma.gui.widgets import (
     Banner,
     EmptyState,
     button,
+    left_header,
     muted,
     page_header,
     primary_button,
@@ -140,6 +141,7 @@ class ModelsPage(QWidget):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(True)
+        left_header(self.table)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for col, width in ((1, 140), (2, 90), (3, 130), (4, 170)):
             self.table.setColumnWidth(col, width)
@@ -156,6 +158,7 @@ class ModelsPage(QWidget):
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
+        self.progress.setTextVisible(False)
         self.progress.hide()
         progress_row.addWidget(self.progress_label, 1)
         progress_row.addWidget(self.progress, 2)

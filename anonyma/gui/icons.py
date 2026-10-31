@@ -9,6 +9,7 @@ from PySide6.QtCore import QByteArray, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
+from anonyma.brand import APP_SVG
 from anonyma.gui import theme
 
 _STROKE = (
@@ -46,17 +47,6 @@ _PATHS: dict[str, str] = {
     "shield": '<path d="M12 3l7 3v5c0 5-3.2 8.4-7 10-3.8-1.6-7-5-7-10V6z"/>',
 }
 
-#: Application icon: a shield with redaction bars, in the accent colour.
-_APP_SVG = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-    '<path d="M32 4l22 8v15c0 15-9.5 26-22 33C19.5 53 10 42 10 27V12z" fill="#2f5f98"/>'
-    '<path d="M32 9l17 6.2V27c0 12-7.3 21-17 26.8z" fill="#274f80"/>'
-    '<rect x="19" y="22" width="26" height="5" rx="2" fill="#ffffff"/>'
-    '<rect x="19" y="31" width="18" height="5" rx="2" fill="#1d2330"/>'
-    '<rect x="19" y="40" width="22" height="5" rx="2" fill="#ffffff" opacity="0.85"/>'
-    "</svg>"
-)
-
 
 def _render(svg: str, size: int) -> QPixmap:
     renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
@@ -87,9 +77,16 @@ def icon(name: str, colour: str | QColor | None = None) -> QIcon:
 
 def app_icon() -> QIcon:
     result = QIcon()
-    for size in (16, 24, 32, 48, 64, 128, 256):
-        result.addPixmap(_render(_APP_SVG, size))
+    for size in (16, 20, 24, 32, 40, 48, 64, 128, 256):
+        result.addPixmap(_render(APP_SVG, size))
     return result
+
+
+def app_pixmap(size: int, ratio: float = 1.0) -> QPixmap:
+    """The application mark at ``size`` logical pixels (sharp on high-DPI screens)."""
+    pixmap = _render(APP_SVG, max(1, round(size * ratio)))
+    pixmap.setDevicePixelRatio(ratio)
+    return pixmap
 
 
 def names() -> list[str]:

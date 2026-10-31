@@ -29,6 +29,7 @@ from anonyma.gui.widgets import (
     DropArea,
     ProgressDelegate,
     button,
+    left_header,
     muted,
     page_header,
     primary_button,
@@ -93,6 +94,7 @@ class ProcessingPage(QWidget):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
+        left_header(self.table)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for col, width in ((1, 90), (2, 150), (3, 80), (4, 140)):
@@ -147,7 +149,8 @@ class ProcessingPage(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(True)
+        # The stage label already reads « n / total »: no percentage drawn on the bar.
+        self.progress_bar.setTextVisible(False)
         progress_row.addWidget(self.stage_label, 1)
         progress_row.addWidget(self.progress_bar, 2)
         layout.addLayout(progress_row)

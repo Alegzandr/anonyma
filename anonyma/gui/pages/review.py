@@ -166,13 +166,14 @@ class ReviewPage(QWidget):
         content_layout.addWidget(main, 1)
 
         self.tabs = QTabWidget()
+        self.tabs.setMinimumWidth(400)
         self.tabs.addTab(self._build_queue(), "Entités")
         self.tabs.addTab(self._build_documents(), "Documents")
         main.addWidget(self.tabs)
         main.addWidget(self._build_viewer())
         main.setStretchFactor(0, 0)
         main.setStretchFactor(1, 1)
-        main.setSizes([420, 1000])
+        main.setSizes([480, 940])
 
         self._shortcuts()
         c = self.controller
@@ -217,8 +218,11 @@ class ReviewPage(QWidget):
         self.sort_combo = QComboBox()
         for key, label in SORTS.items():
             self.sort_combo.addItem(label, key)
-        for combo in (self.detector_filter, self.scope_combo, self.sort_combo):
-            row2.addWidget(combo, 1)
+        # Long labels (« Tous les détecteurs », sort order) get the room; the scope
+        # combo keeps its natural width.
+        row2.addWidget(self.detector_filter, 3)
+        row2.addWidget(self.scope_combo, 2)
+        row2.addWidget(self.sort_combo, 3)
         layout.addLayout(row2)
         for combo in (
             self.state_filter,
