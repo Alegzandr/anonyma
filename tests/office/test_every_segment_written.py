@@ -14,8 +14,9 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
-from anonyma import registry
+from anonyma import libreoffice, registry
 from anonyma.config import Config
+from anonyma.extractors._legacy import MODE_LIBREOFFICE, TO_LEGACY
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
     WRITER_PLACEHOLDERS,
@@ -99,6 +100,46 @@ def all_texts(doc: Document) -> list[str]:
     return [s.text for d in doc.walk() for s in d.segments if s.id != FILENAME_SEGMENT_ID]
 
 
+#: Empty flat OpenDocument files (no text at all), per legacy format.
+_BLANK = {
+    "doc": ("fodt", "text", "<office:text/>"),
+    "xls": (
+        "fods",
+        "spreadsheet",
+        "<office:spreadsheet><table:table table:name='A'/></office:spreadsheet>",
+    ),
+    "ppt": (
+        "fodp",
+        "presentation",
+        "<office:presentation><draw:page draw:name='A'/></office:presentation>",
+    ),
+}
+
+
+def libreoffice_baseline(fmt: str, config: Config, tmp: Path) -> set[str]:
+    """Texts LibreOffice writes into ANY document of this format by itself (built-in
+    style and font names, master placeholders, generator, application version): it
+    writes them again after the writer replaced them, so they are not leaks."""
+    soffice = libreoffice.find_soffice(config)
+    assert soffice is not None
+    ext, kind, body = _BLANK[fmt]
+    blank = tmp / f"vide.{ext}"
+    blank.parent.mkdir(parents=True)
+    blank.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+        'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+        'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" office:version="1.3" '
+        f'office:mimetype="application/vnd.oasis.opendocument.{kind}">'
+        f"<office:body>{body}</office:body></office:document>",
+        encoding="utf-8",
+    )
+    legacy = libreoffice.convert(blank, TO_LEGACY[fmt], tmp / "lo", soffice)
+    doc = extract_file(legacy, legacy.name, config, tmp / "x")
+    assert doc.status is DocumentStatus.EXTRACTED, [i.message for i in doc.issues]
+    return {t.strip() for t in all_texts(doc)}
+
+
 @pytest.mark.parametrize("fixture", own_fixtures(), ids=lambda p: p.name)
 def test_every_segment_is_rewritten(fixture: Path, tmp_path: Path) -> None:
     config = Config(profile=Profile.LIGHT, workers=1)
@@ -115,12 +156,18 @@ def test_every_segment_is_rewritten(fixture: Path, tmp_path: Path) -> None:
         assert d.status is DocumentStatus.EXTRACTED, [i.message for i in d.issues]
     texts = all_texts(reread)
     joined = "\n".join(texts)
+    regenerated = (
+        libreoffice_baseline(fmt, config, tmp_path / "vide")
+        if source.properties.get("legacy_mode") == MODE_LIBREOFFICE
+        else set()
+    )
     survivors = sorted(
         {
             original.strip()
             for original in marker.originals.values()
             if len(original.strip()) >= MIN_CHECKED
             and original.strip() not in WRITER_PLACEHOLDERS
+            and original.strip() not in regenerated
             and original.strip() in joined
         }
     )
