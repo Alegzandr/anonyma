@@ -12,8 +12,18 @@ from PIL.PngImagePlugin import PngInfo
 from anonyma import ocr
 from anonyma.config import Config
 from anonyma.extractors.image import metadata_items, sniff_image
-from anonyma.models import BBox, DocumentStatus, OcrLine, SegmentKind
+from anonyma.models import (
+    BBox,
+    DocumentStatus,
+    OcrLine,
+    Replacement,
+    ReplacementPlan,
+    Segment,
+    SegmentContext,
+    SegmentKind,
+)
 from anonyma.pipeline import Pipeline, extract_file
+from anonyma.writers.image import page_redaction_boxes
 from tests.canary import CANARY_EMAIL, CANARY_PERSON
 
 LINE = f"Bonjour {CANARY_PERSON}"
@@ -207,3 +217,29 @@ def test_transparent_png_is_flattened_for_ocr(
     with Image.open(top.output_path) as out:
         assert out.mode == "RGBA"
         assert out.getpixel((10 + 10 * 12, 40)) != (INK, INK, INK, 255)
+
+
+def _ocr_segment(sid: str, text: str, x0: float, y0: float) -> tuple[Segment, list[BBox]]:
+    cells = [BBox(x0 + 10 * i, y0, x0 + 10 * (i + 1), y0 + 40) for i in range(len(text))]
+    line = BBox(x0, y0, cells[-1].x1, y0 + 40)
+    context = SegmentContext(SegmentKind.OCR, bbox=line)
+    return Segment(id=sid, text=text, locator=(), context=context, char_boxes=tuple(cells)), cells
+
+
+def test_ocr_boxes_cover_whole_words_and_split_lines() -> None:
+    # The OCR engine split « jean.dupont@societe-exemple.fr » over two line boxes,
+    # and only the first part was detected.
+    first, cells = _ocr_segment("a", "Contact : jean.dupont(", 0, 100)
+    second, cont = _ocr_segment("b", "@societe-exemple.fr et suite", cells[-1].x1 - 4, 102)
+    other_row, _ = _ocr_segment("c", "ligne suivante", 0, 200)
+    start = first.text.index("jean")
+    rep = Replacement(start, start + len("jean.dupont"), "jean.dupont", "[X]", "EMAIL", "k")
+    plan = ReplacementPlan("d", {"a": [rep]})
+    boxes = [box for box, _ in page_redaction_boxes([first, second, other_row], plan)]
+    # The whole OCR word is masked (« ( » included), with a margin.
+    assert any(b.x0 < cells[start].x0 and b.x1 > cells[-1].x1 for b in boxes)
+    # The continuation word on the same row is masked, the rest of that line is not.
+    word = len("@societe-exemple.fr")
+    assert any(b.x0 <= cont[0].x0 and b.x1 >= cont[word - 1].x1 for b in boxes)
+    assert all(b.x1 < cont[word + 4].x0 for b in boxes)
+    assert all(b.y0 < 160 for b in boxes)  # nothing on the next row

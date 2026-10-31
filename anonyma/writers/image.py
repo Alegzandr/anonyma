@@ -8,6 +8,7 @@ profile survives. In tag mode the tag is drawn inside the box when it fits.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -73,30 +74,109 @@ def _colors(mode: str) -> tuple[Any, Any]:
     return (0, 0, 0), (255, 255, 255)
 
 
+def _word_span(text: str, start: int, end: int) -> tuple[int, int]:
+    """``[start, end)`` widened to the whitespace-delimited words it touches."""
+    while start > 0 and not text[start - 1].isspace():
+        start -= 1
+    while end < len(text) and not text[end].isspace():
+        end += 1
+    return start, end
+
+
+def _padded(box: BBox, height: float, char_width: float) -> BBox:
+    """``box`` with a safety margin: OCR character cells are approximate (the last
+    characters of a long run are often placed short)."""
+    dx = PAD_X * height + 0.5 * char_width
+    dy = PAD_Y * height
+    return BBox(box.x0 - dx, box.y0 - dy, box.x1 + dx, box.y1 + dy)
+
+
+def _char_width(segment: Segment) -> float:
+    line = segment.context.bbox
+    if line is None or not segment.text:
+        return 0.0
+    return (line.x1 - line.x0) / len(segment.text)
+
+
 def redaction_boxes(segment: Segment, plan: ReplacementPlan) -> list[tuple[BBox, str]]:
+    """Boxes over the replaced spans of one OCR line, each widened to the whole OCR
+    words it touches (a value is never partly masked) plus a safety margin."""
     boxes: list[tuple[BBox, str]] = []
     line = segment.context.bbox
     if segment.context.kind is SegmentKind.BARCODE:
         # The whole code (its bbox already includes a quiet-zone margin).
         return [(line, "")] if line is not None and plan.for_segment(segment.id) else []
     for rep in plan.for_segment(segment.id):
-        box = segment.span_bbox(rep.start, rep.end) or line
+        start, end = _word_span(segment.text, rep.start, rep.end)
+        box = segment.span_bbox(start, end) or line
         if box is None:
             continue
         if line is not None:
             box = BBox(box.x0, min(box.y0, line.y0), box.x1, max(box.y1, line.y1))
         height = max(box.y1 - box.y0, 1.0)
-        boxes.append(
-            (
-                BBox(
-                    box.x0 - PAD_X * height,
-                    box.y0 - PAD_Y * height,
-                    box.x1 + PAD_X * height,
-                    box.y1 + PAD_Y * height,
-                ),
-                rep.substitute,
-            )
-        )
+        boxes.append((_padded(box, height, _char_width(segment)), rep.substitute))
+    return boxes
+
+
+def _same_row(a: BBox, b: BBox) -> bool:
+    overlap = min(a.y1, b.y1) - max(a.y0, b.y0)
+    return overlap >= 0.5 * min(a.y1 - a.y0, b.y1 - b.y0)
+
+
+def _continuations(segment: Segment, others: Sequence[Segment], *, after: bool) -> list[Segment]:
+    """OCR lines that continue ``segment`` on the same row with no visible gap
+    (the engine split one token into two boxes: ``...moreau(`` + ``@societe-exe``)."""
+    line = segment.context.bbox
+    if line is None:
+        return []
+    height = max(line.y1 - line.y0, 1.0)
+    found = []
+    for other in others:
+        box = other.context.bbox
+        if other is segment or box is None or not _same_row(line, box):
+            continue
+        gap = box.x0 - line.x1 if after else line.x0 - box.x1
+        if -0.5 * height <= gap <= 0.6 * height:
+            found.append(other)
+    return found
+
+
+def page_redaction_boxes(
+    segments: Sequence[Segment], plan: ReplacementPlan
+) -> list[tuple[BBox, str]]:
+    """Redaction boxes of every OCR line and barcode of one image. A replaced word
+    that touches the end (start) of its line also masks the first (last) word of an
+    OCR line that continues it on the same row."""
+    boxes: list[tuple[BBox, str]] = []
+    ocr_lines = [s for s in segments if s.context.kind is SegmentKind.OCR]
+    for segment in segments:
+        boxes.extend(redaction_boxes(segment, plan))
+        if segment.context.kind is not SegmentKind.OCR:
+            continue
+        text = segment.text
+        for rep in plan.for_segment(segment.id):
+            start, end = _word_span(text, rep.start, rep.end)
+            sides = []
+            if not text[end:].strip():
+                sides.append(True)
+            if not text[:start].strip():
+                sides.append(False)
+            for after in sides:
+                for other in _continuations(segment, ocr_lines, after=after):
+                    words = other.text.strip()
+                    if not words:
+                        continue
+                    if after:
+                        lead = len(other.text) - len(other.text.lstrip())
+                        span = _word_span(other.text, lead, lead + 1)
+                    else:
+                        tail = len(other.text.rstrip())
+                        span = _word_span(other.text, tail - 1, tail)
+                    box = other.span_bbox(*span) or other.context.bbox
+                    if box is None:
+                        continue
+                    height = max(box.y1 - box.y0, 1.0)
+                    boxes.append((_padded(box, height, _char_width(other)), ""))
     return boxes
 
 
@@ -204,7 +284,7 @@ class ImageWriter(Writer):
             for page in range(getattr(image, "n_frames", 1) or 1):
                 image.seek(page)
                 frame = drawable(prepare_frame(image), document.format)
-                boxes = [b for s in by_page.get(page, []) for b in redaction_boxes(s, plan)]
+                boxes = page_redaction_boxes(by_page.get(page, []), plan)
                 if boxes:
                     redact(frame, boxes, ctx.mode)
                 frame.info = {}
