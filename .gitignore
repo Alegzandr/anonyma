@@ -13,3 +13,6 @@ dist/
 /data/
 /models/
 .claude/
+
+# Default output of tests.benchmark.measure (named runs are kept)
+tests/benchmark/results/mesure.*
