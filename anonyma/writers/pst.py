@@ -42,9 +42,9 @@ class PstWriter(Writer):
             output = ctx.child_outputs.get(child.id)
             if output is None or output.path is None:
                 continue  # omitted: reported by the pipeline
-            parts = [
-                safe_filename(p) for p in output.name.replace("\\", "/").split("/") if p
-            ] or ["message.eml"]
+            parts = [safe_filename(p) for p in output.name.replace("\\", "/").split("/") if p] or [
+                "message.eml"
+            ]
             relative = unique("/".join(parts))
             target = destination.joinpath(*relative.split("/"))
             target.parent.mkdir(parents=True, exist_ok=True)

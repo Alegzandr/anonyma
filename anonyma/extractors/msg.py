@@ -1,43 +1,61 @@
-"""Outlook .msg files (extract-msg), converted to an equivalent RFC 5322 message.
+"""Outlook .msg files, read natively from the compound file ([MS-OXMSG]).
 
-The .msg is turned into an eml (headers block, sender, recipients with display
-names and SMTP addresses, subject, dates, ids, plain/HTML bodies, attachments,
-embedded messages as ``.msg`` attachments) stored in the batch temporary folder;
-that eml is then extracted and written by the shared MIME code, so the output is
-an ``.eml`` file. Outlook-only properties of mail items are purged; for other item
-classes (contacts, appointments, tasks...) every string property is appended to
-the plain body so that nothing they hold is lost silently.
+Every string property of every property object (message, recipients,
+attachments, embedded messages at any depth, named properties included) is a
+segment; the plain body is chunked, the HTML body goes through the HTML tokenizer,
+the transport headers give one segment per header. By-value attachments are
+children (named after their file name). The writer (``writers/msg.py``) rewrites
+the same compound file; see :mod:`anonyma.extractors._msgfile` for the policy on
+binary and identity-bearing properties.
 """
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import re
-from pathlib import Path
-from typing import Any
+from pathlib import Path, PurePosixPath
 
-import extract_msg
-
-from anonyma.extractors._html import extension_for
-from anonyma.extractors._mime import (
-    DROPPED_HEADERS,
-    BuiltAttachment,
-    build_eml,
-    decode_header_value,
-    extract_mime,
+from anonyma.codec import chunk_text
+from anonyma.extractors._cfb import read_cfb
+from anonyma.extractors._html import HtmlSource, build_segments, extension_for
+from anonyma.extractors._mime import DROPPED_HEADERS, decode_header_value
+from anonyma.extractors._msgfile import (
+    ATTACH_BY_VALUE,
+    ATTACH_EMBEDDED_MSG,
+    ATTACH_OLE,
+    PR_ATTACH_DATA,
+    PR_ATTACH_FILENAME,
+    PR_ATTACH_LONG_FILENAME,
+    PR_ATTACH_MIME_TAG,
+    PR_DISPLAY_NAME,
+    PT_BINARY,
+    STRING_TYPES,
+    MsgTree,
+    PropObject,
+    TextItem,
+    decode_string,
+    split_headers,
+    text_items,
 )
-from anonyma.extractors.html import decode_html
-from anonyma.models import Document, ExtractionContext, Extractor, Severity
+from anonyma.models import (
+    Document,
+    ExtractionContext,
+    Extractor,
+    Segment,
+    SegmentContext,
+    Severity,
+)
 from anonyma.registry import register_extractor
 
 logging.getLogger("extract_msg").setLevel(logging.CRITICAL)
+
+_RTF_TOKEN = re.compile(r"\\([a-zA-Z]+)(-?\d+)? ?|\\'([0-9a-fA-F]{2})|\\(.)")
 
 
 def _patch_embedded_messages() -> None:
     """extract-msg 0.58 opens embedded messages through a ``prefixList`` attribute
     that its ``MSGFile`` no longer has: every .msg with an attached message failed
-    to open. Provide it (path components of the current prefix)."""
+    to open there. Provide it (path components of the current prefix)."""
     from extract_msg.msg_classes import MSGFile
 
     if not hasattr(MSGFile, "prefixList"):
@@ -47,16 +65,6 @@ def _patch_embedded_messages() -> None:
 
 
 _patch_embedded_messages()
-
-#: Property tags already mapped to the eml (not repeated in the annex).
-_MAPPED_TAGS = frozenset(
-    {
-        "0037", "0E1D", "1000", "1013", "1009", "007D", "0C1A", "5D01", "0E04", "0E03",
-        "0E02", "1035", "1042", "1039", "0070", "001A", "0042", "0065", "0064", "0C1F",
-        "0C1E", "5D02", "0075", "0076", "0077", "0078", "3FFA", "3FF8", "0E1F",
-    }
-)  # fmt: skip
-_STRING_STREAM = re.compile(r"^__substg1\.0_([0-9A-F]{4})(001F|001E)$", re.I)
 
 
 def rtf_to_text(rtf: bytes) -> str:
@@ -80,11 +88,11 @@ def rtf_to_text(rtf: bytes) -> str:
             depth -= 1
             i += 1
         elif ch == "\\":
-            match = re.match(r"\\([a-zA-Z]+)(-?\d+)? ?|\\'([0-9a-fA-F]{2})|\\(.)", text[i:])
+            match = _RTF_TOKEN.match(text, i)
             if not match:
                 i += 1
                 continue
-            i += match.end()
+            i = match.end()
             if skip_depth:
                 continue
             word, arg, hexa, sym = match.groups()
@@ -109,137 +117,61 @@ def rtf_to_text(rtf: bytes) -> str:
     return "".join(out)
 
 
-def _string_props(msg: Any) -> list[tuple[str, str]]:
-    found: list[tuple[str, str]] = []
-    try:
-        entries = msg.listDir(streams=True, storages=False)
-    except Exception:
-        return found
-    for entry in entries:
-        parts = list(entry)
-        if len(parts) != 1:
-            continue
-        match = _STRING_STREAM.match(str(parts[0]))
-        if not match or match.group(1).upper() in _MAPPED_TAGS:
-            continue
-        value = msg.getStringStream(f"__substg1.0_{match.group(1)}")
-        if isinstance(value, str) and value.strip():
-            found.append((match.group(1).upper(), value))
-    return sorted(found)
-
-
-def msg_to_eml(path: Path, document: Document) -> bytes:
-    """Convert a .msg file into eml bytes (see module docstring)."""
-    msg = extract_msg.openMsg(str(path), strict=False, delayAttachments=False)
-    try:
-        return _convert(msg, document)
-    finally:
-        msg.close()
-
-
-def _convert(msg: Any, document: Document) -> bytes:
-    headers: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    header_text = getattr(msg, "headerText", None)
-    if header_text:
-        from email.parser import HeaderParser
-        from email.policy import compat32
-
-        if header_text.startswith("Microsoft Mail Internet Headers Version 2.0"):
-            header_text = header_text[43:].lstrip()
-        parsed = HeaderParser(policy=compat32).parsestr(header_text)
-        for name, value in parsed.items():
-            lname = name.lower()
-            if lname in DROPPED_HEADERS or lname.startswith("content-") or lname == "mime-version":
-                continue
-            headers.append((name, decode_header_value(str(value))))
-            seen.add(lname)
-
-    def add(name: str, value: object) -> None:
-        if value is None or name.lower() in seen:
-            return
-        text = str(value).strip()
-        if text:
-            headers.append((name, text))
-            seen.add(name.lower())
-
-    add("From", getattr(msg, "sender", None))
-    add("To", getattr(msg, "to", None))
-    add("Cc", getattr(msg, "cc", None))
-    add("Bcc", getattr(msg, "bcc", None))
-    add("Subject", getattr(msg, "subject", None))
-    date = getattr(msg, "date", None)
-    if date is not None:
-        from email.utils import format_datetime
-
-        with contextlib.suppress(TypeError, ValueError):
-            add("Date", format_datetime(date))
-    add("Message-ID", getattr(msg, "messageId", None))
-    add("In-Reply-To", getattr(msg, "inReplyTo", None))
-    add("References", msg.getStringStream("__substg1.0_1039"))
-    add("Thread-Topic", msg.getStringStream("__substg1.0_0070"))
-    add("X-Sent-Representing", msg.getStringStream("__substg1.0_0042"))
-    add("X-Message-Class", getattr(msg, "classType", None))
-
-    plain = getattr(msg, "body", None)
-    html_body: str | None = None
-    try:
-        raw_html = msg.getStream("__substg1.0_10130102")
-        if raw_html is None and getattr(msg, "rtfBody", None):
-            raw_html = msg.htmlBody  # de-encapsulated from RTF when possible
-    except Exception:
-        raw_html = None
-    if isinstance(raw_html, bytes) and raw_html.strip():
-        html_body = decode_html(raw_html)[0]
-    if not plain and html_body is None:
-        rtf = getattr(msg, "rtfBody", None)
-        if rtf:
-            plain = rtf_to_text(rtf)
-    class_type = str(getattr(msg, "classType", "") or "").lower()
-    if not class_type.startswith(("ipm.note", "report")):
-        annex = "\n".join(f"Propriété {tag} : {value}" for tag, value in _string_props(msg))
-        if annex:
-            plain = f"{plain or ''}\n\n--- Propriétés Outlook ---\n{annex}\n"
-
-    attachments: list[BuiltAttachment] = []
-    for i, att in enumerate(getattr(msg, "attachments", []) or [], start=1):
-        built = _attachment(att, i, document)
-        if built is not None:
-            attachments.append(built)
-    return build_eml(headers, plain if plain else None, html_body, attachments)
-
-
-def _attachment(att: Any, index: int, document: Document) -> BuiltAttachment | None:
-    from extract_msg.enums import AttachmentType
-
-    kind = getattr(att, "type", None)
-    name = getattr(att, "longFilename", None) or getattr(att, "shortFilename", None)
-    cid = getattr(att, "contentId", None)
-    hidden = bool(getattr(att, "hidden", False))
-    if kind in (AttachmentType.MSG, AttachmentType.SIGNED_EMBEDDED):
-        try:
-            data = att.data.exportBytes(allowBadEmbed=True)
-        except Exception:
-            document.add_issue(
-                Severity.WARNING,
-                "msg.attachment_unreadable",
-                "Message joint illisible : il est omis.",
+def item_segments(item: TextItem) -> list[Segment]:
+    """Segments of one text item (ids derived from the stream path)."""
+    sid = item.segment_id
+    if item.kind == "html":
+        return build_segments(HtmlSource(item.text), f"{sid}|h", item.label)
+    if item.kind in ("body", "rtf"):
+        return [
+            Segment(
+                id=f"{sid}|c{i}",
+                text=chunk,
+                locator=("chunk", offset),
+                context=SegmentContext(item.segment_kind, label=item.label),
             )
-            return None
-        base = (name or f"message-joint-{index}").rsplit(".", 1)[0]
-        return BuiltAttachment(f"{base}.msg", data, "application/vnd.ms-outlook")
-    data = getattr(att, "data", None)
-    if kind not in (AttachmentType.DATA, AttachmentType.SIGNED) or not isinstance(data, bytes):
-        document.add_issue(
-            Severity.WARNING,
-            "msg.attachment_unsupported",
-            "Pièce jointe d'un type non pris en charge (lien, objet OLE...) : elle est omise.",
+            for i, (offset, chunk) in enumerate(chunk_text(item.text))
+            if chunk.strip()
+        ]
+    if item.kind == "headers":
+        segments = []
+        for i, (name, value) in enumerate(split_headers(item.text)[1]):
+            text = decode_header_value(value)
+            if name.lower() in DROPPED_HEADERS or not text.strip():
+                continue
+            segments.append(
+                Segment(
+                    id=f"{sid}|t{i}",
+                    text=text,
+                    locator=("header", i),
+                    context=SegmentContext(item.segment_kind, label=f"en-tête {name[:60]}"),
+                )
+            )
+        return segments
+    if not item.text.strip():
+        return []
+    return [
+        Segment(
+            id=sid,
+            text=item.text,
+            locator=("string",),
+            context=SegmentContext(item.segment_kind, label=item.label),
         )
-        return None
-    mimetype = getattr(att, "mimetype", None) or "application/octet-stream"
-    if not name:
-        name = f"piece-jointe-{index}{extension_for(mimetype)}"
-    return BuiltAttachment(name, data, mimetype, content_id=cid, inline=hidden and bool(cid))
+    ]
+
+
+def attachment_name(tree: MsgTree, obj: PropObject, index: int) -> str:
+    for pid in (PR_ATTACH_LONG_FILENAME, PR_ATTACH_FILENAME, PR_DISPLAY_NAME):
+        for ptype in STRING_TYPES:
+            data = obj.stream(pid, ptype)
+            if data:
+                name = decode_string(data, ptype, tree.codec).replace("\\", "/")
+                base = PurePosixPath(name.rstrip("/")).name.strip()
+                if base:
+                    return base
+    mime_data = obj.stream(PR_ATTACH_MIME_TAG, 0x001F) or obj.stream(PR_ATTACH_MIME_TAG, 0x001E)
+    mime = decode_string(mime_data, 0x001F, tree.codec) if mime_data else ""
+    return f"piece-jointe-{index}{extension_for(mime)}"
 
 
 @register_extractor
@@ -248,8 +180,29 @@ class MsgExtractor(Extractor):
     extensions = {".msg": "msg"}
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
-        data = msg_to_eml(source, document)
-        converted = ctx.temp_path(".eml")
-        converted.write_bytes(data)
-        document.properties["eml_path"] = converted
-        extract_mime(data, document, ctx)
+        _, entries = read_cfb(source)
+        tree = MsgTree(entries)
+        if tree.root is None:
+            raise ValueError("pas un message Outlook")
+        for item in text_items(tree):
+            document.segments.extend(item_segments(item))
+        children: dict[str, str] = {}
+        for index, obj in enumerate(tree.attachments(), start=1):
+            ctx.check_cancelled()
+            method = obj.attach_method
+            if method == ATTACH_EMBEDDED_MSG:
+                continue  # its storage is a property object of its own
+            if method == ATTACH_OLE:
+                document.add_issue(
+                    Severity.WARNING,
+                    "msg.ole_attachment",
+                    "Objet OLE incorporé : il ne peut pas être anonymisé et est supprimé.",
+                )
+                continue
+            data = obj.stream(PR_ATTACH_DATA, PT_BINARY)
+            if method != ATTACH_BY_VALUE or data is None:
+                continue  # references only (file paths, URLs): exposed as strings
+            ctx.budget.consume(len(data), depth=ctx.depth + 1)
+            child = ctx.extract_child(data, attachment_name(tree, obj, index), document)
+            children["/".join(obj.path)] = child.id
+        document.properties["msg_children"] = children

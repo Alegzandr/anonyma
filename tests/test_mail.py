@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import email
 import io
+import struct
 import zipfile
 from email.message import EmailMessage, Message
 from email.policy import SMTP, compat32
 from pathlib import Path
 
+import extract_msg
+import olefile
 import pytest
+from extract_msg.enums import AttachmentType
 from PIL import Image
 
 from anonyma import ocr
@@ -304,19 +308,120 @@ def test_unsupported_attachment_is_omitted(tmp_path: Path, canary_config: Config
 FIXTURES = Path(__file__).parent / "fixtures" / "contract"
 
 
-def test_msg_is_converted_to_eml(tmp_path: Path, canary_config: Config) -> None:
-    output, name = _run(
-        tmp_path, "message.msg", (FIXTURES / "message.msg").read_bytes(), canary_config
+def _msg_output(tmp_path: Path, config: Config) -> Path:
+    output, name = _run(tmp_path, "message.msg", (FIXTURES / "message.msg").read_bytes(), config)
+    assert name == "message.msg"
+    return output
+
+
+def test_msg_native_output_has_no_canary_bytes(tmp_path: Path, canary_config: Config) -> None:
+    data = _msg_output(tmp_path, canary_config).read_bytes().lower()
+    for needle in ("quintavalle", "zephyrin", "zéphyrin"):
+        for encoding in ("utf-8", "utf-16-le", "cp1252"):
+            assert needle.encode(encoding) not in data, (needle, encoding)
+
+
+def test_msg_native_output_structure(tmp_path: Path, canary_config: Config) -> None:
+    output = _msg_output(tmp_path, canary_config)
+    with olefile.OleFileIO(str(output)) as ole:
+        streams = {"/".join(p) for p in ole.listdir()}
+    # Binary identity carriers, RTF body, X500 DN, local path and icon are gone.
+    for gone in ("0C190102", "0C1D0102", "00710102", "10090102", "0065001F"):
+        assert f"__substg1.0_{gone}" not in streams
+    assert "__recip_version1.0_#00000000/__substg1.0_0FFF0102" not in streams
+    assert "__attach_version1.0_#00000000/__substg1.0_370D001F" not in streams
+    assert "__attach_version1.0_#00000000/__substg1.0_37090102" not in streams
+    assert "__substg1.0_10130102" in streams  # HTML body kept (anonymized)
+    assert "__nameid_version1.0/__substg1.0_00020102" in streams
+
+    msg = extract_msg.openMsg(str(output), strict=False)
+    try:
+        assert msg.subject == "Dossier [PERSONNE_001]"
+        assert msg.sender == "[PERSONNE_001] <[EMAIL_001]>"
+        assert "[PERSONNE_001]" in (msg.body or "")
+        assert b"[PERSONNE_001]" in (msg.htmlBody or b"")
+        assert "X-Originating-Email: [EMAIL_001]" in (msg.headerText or "")
+        assert [(r.name, r.email) for r in msg.recipients] == [
+            ("Bérénice Fauxnom", "berenice.fauxnom@exemple.test")
+        ]
+        data_att, embedded = msg.attachments
+        assert data_att.longFilename == "CV [PERSONNE_001].txt"
+        assert data_att.data == b"CV de [PERSONNE_001]\r\n[EMAIL_001]\r\n"
+        assert embedded.type is AttachmentType.MSG
+        assert embedded.data.subject == "Transfert [PERSONNE_001]"
+        assert "[PERSONNE_001]" in embedded.data.body
+    finally:
+        msg.close()
+
+
+def _rtf_only_msg() -> bytes:
+    import compressed_rtf
+    from extract_msg.ole_writer import OleWriter
+
+    from tests.fixtures.generators.mail_archive_image import PT_LONG, _add_props
+
+    writer = OleWriter()
+    rtf = b"{\\rtf1\\ansi Dossier de Z\\'e9phyrin Quintavalle\\par}"
+    _add_props(
+        writer,
+        "",
+        b"\0" * 8 + struct.pack("<IIII", 0, 3, 0, 3) + b"\0" * 8,
+        {0x0E1F: (0x000B, 1), 0x1016: (PT_LONG, 2)},
+        {0x001A: "IPM.Note", 0x0037: "Objet"},
+        {0x1009: compressed_rtf.compress(rtf, compressed=True)},
     )
-    assert name.endswith(".eml")
-    parsed = email.message_from_bytes(output.read_bytes(), policy=compat32)
-    assert parsed["From"] == "[PERSONNE_001] <[EMAIL_001]>"
-    assert parsed["Received"] is not None
-    assert any(p.get_filename() == "CV [PERSONNE_001].txt" for p in parsed.walk())
-    embedded = [p for p in parsed.walk() if p.get_content_type() == "message/rfc822"]
-    assert len(embedded) == 1  # the attached .msg became an attached eml
-    assert embedded[0].get_filename() == "Transfert [PERSONNE_001].eml"
-    assert b"uintavalle" not in output.read_bytes().lower()
+    _add_props(  # unsupported attachment: its child cannot be anonymized
+        writer,
+        "__attach_version1.0_#00000000/",
+        b"\0" * 8,
+        {0x3705: (PT_LONG, 1)},
+        {0x3707: "outil.exe"},
+        {0x3701: b"MZ\x00\x01"},
+    )
+    _add_props(  # OLE object: removed
+        writer,
+        "__attach_version1.0_#00000001/",
+        b"\0" * 8,
+        {0x3705: (PT_LONG, 6)},
+        {0x3707: "objet"},
+        {},
+    )
+    writer.addEntry("__attach_version1.0_#00000001/__substg1.0_3701000D", storage=True)
+    writer.addEntry("__attach_version1.0_#00000001/__substg1.0_3701000D/CONTENTS", b"ole")
+    _add_props(
+        writer,
+        "__attach_version1.0_#00000002/",
+        b"\0" * 8,
+        {0x3705: (PT_LONG, 1)},
+        {0x3707: f"Note {CANARY_PERSON}.txt"},
+        {0x3701: CANARY_PERSON.encode()},
+    )
+    for name in ("00020102", "00030102", "00040102"):
+        writer.addEntry(f"__nameid_version1.0/__substg1.0_{name}", b"")
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+def test_msg_rtf_only_body_and_removed_attachments(tmp_path: Path, canary_config: Config) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "r.msg").write_bytes(_rtf_only_msg())
+    top = Pipeline(canary_config).run([src / "r.msg"], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]
+    assert any(i.code == "msg.ole_attachment" for i in top.issues)
+    assert any(i.code == "child.omitted" for i in top.issues)
+    assert top.output_path is not None
+    msg = extract_msg.openMsg(str(top.output_path), strict=False)
+    try:
+        assert msg.body == "Dossier de [PERSONNE_001]\n"
+        assert msg.rtfBody is None
+        assert [a.longFilename for a in msg.attachments] == ["Note [PERSONNE_001].txt"]
+    finally:
+        msg.close()
+    with olefile.OleFileIO(str(top.output_path)) as ole:
+        header = ole.openstream("__properties_version1.0").read(32)
+    assert struct.unpack_from("<I", header, 20)[0] == 1  # attachment count updated
 
 
 # -- mbox ----------------------------------------------------------------------

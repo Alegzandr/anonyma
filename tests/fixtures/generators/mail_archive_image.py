@@ -320,21 +320,44 @@ def _add_props(
     fixed: dict[int, tuple[int, int]],
     strings: dict[int, str],
     binaries: dict[int, bytes],
+    mv_strings: dict[int, list[str]] | None = None,
 ) -> None:
     variable: dict[str, bytes] = {}
     for tag, text in strings.items():
         variable[f"{tag:04X}{PT_UNICODE:04X}"] = text.encode("utf-16-le")
     for tag, data in binaries.items():
         variable[f"{tag:04X}{PT_BINARY:04X}"] = data
+    for tag, values in (mv_strings or {}).items():
+        encoded = [v.encode("utf-16-le") for v in values]
+        variable[f"{tag:04X}101F"] = b"".join(struct.pack("<I", len(e) + 2) for e in encoded)
+        for i, data in enumerate(encoded):
+            writer.addEntry(f"{prefix}__substg1.0_{tag:04X}101F-{i:08X}", data)
     for name, data in variable.items():
         writer.addEntry(f"{prefix}__substg1.0_{name}", data)
     writer.addEntry(f"{prefix}__properties_version1.0", _props_stream(header, fixed, variable))
 
 
+def one_off(name: str, address: str) -> bytes:
+    """One-off entry id (MS-OXCDATA 2.2.5.1): display name and SMTP address inside."""
+    return (
+        b"\0" * 4
+        + bytes.fromhex("812B1FA4BEA310199D6E00DD010F5402")
+        + struct.pack("<HH", 0, 0x9001)
+        + "\0".join((name, "SMTP", address)).encode("utf-16-le")
+        + b"\0\0"
+    )
+
+
 def msg_bytes() -> bytes:
+    import compressed_rtf
     from extract_msg.ole_writer import OleWriter
 
     writer = OleWriter()
+    x500 = "/O=EXEMPLE/OU=GROUPE/CN=RECIPIENTS/CN=" + CANARY_EMAIL.split("@")[0].upper()
+    rtf = (
+        "{\\rtf1\\ansi\\ansicpg1252 Bonjour, dossier de Z\\'e9phyrin Quintavalle "
+        f"({CANARY_EMAIL}).\\par}}"
+    ).encode("ascii")
     headers = (
         "Received: from poste-12.exemple.test ([192.0.2.10]) by mx.exemple.test; "
         "Mon, 5 Jan 2026 10:00:00 +0100\r\n"
@@ -363,8 +386,17 @@ def msg_bytes() -> bytes:
             0x1000: f"Bonjour,\r\nDossier de {CANARY_PERSON} ({CANARY_EMAIL}).\r\n",
             0x007D: headers,
             0x0070: f"Dossier {CANARY_PERSON}",
+            0x0065: x500,  # Exchange DN of the sender (dropped on output)
+            0x8001: f"Responsable {CANARY_PERSON}",  # named property
         },
-        {0x1013: html.encode("utf-8")},
+        {
+            0x1013: html.encode("utf-8"),
+            0x1009: compressed_rtf.compress(rtf, compressed=True),
+            0x0C19: one_off(CANARY_PERSON, CANARY_EMAIL),  # PR_SENDER_ENTRYID
+            0x0C1D: f"SMTP:{CANARY_EMAIL.upper()}\0".encode(),  # PR_SENDER_SEARCH_KEY
+            0x0071: b"\x01" + bytes(range(21)),  # PR_CONVERSATION_INDEX
+        },
+        {0x8002: ["Projet", f"Client {CANARY_PERSON}"]},  # named keywords
     )
     _add_props(
         writer,
@@ -372,15 +404,23 @@ def msg_bytes() -> bytes:
         b"\0" * 8,
         {0x0C15: (PT_LONG, 1), 0x3000: (PT_LONG, 0)},
         {0x3001: COLLEAGUE, 0x39FE: COLLEAGUE_EMAIL, 0x3003: COLLEAGUE_EMAIL, 0x3002: "SMTP"},
-        {},
+        {0x0FFF: one_off(CANARY_PERSON, CANARY_EMAIL), 0x300B: CANARY_EMAIL.encode()},
     )
     _add_props(
         writer,
         "__attach_version1.0_#00000000/",
         b"\0" * 8,
         {0x3705: (PT_LONG, 1), 0x0E21: (PT_LONG, 0)},
-        {0x3707: f"CV {CANARY_PERSON}.txt", 0x3704: "CV.txt", 0x370E: "text/plain"},
-        {0x3701: f"CV de {CANARY_PERSON}\r\n{CANARY_EMAIL}\r\n".encode()},
+        {
+            0x3707: f"CV {CANARY_PERSON}.txt",
+            0x3704: "CV.txt",
+            0x370E: "text/plain",
+            0x370D: f"C:\\Users\\{CANARY_PERSON}\\CV {CANARY_PERSON}.txt",  # local path
+        },
+        {
+            0x3701: f"CV de {CANARY_PERSON}\r\n{CANARY_EMAIL}\r\n".encode(),
+            0x3709: f"icone {CANARY_PERSON}".encode("utf-16-le"),  # rendering metafile
+        },
     )
     # Embedded message (attach method 5): its properties live in a sub-storage.
     _add_props(
