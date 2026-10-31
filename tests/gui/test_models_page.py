@@ -19,7 +19,15 @@ TIMEOUT = 10_000
 
 def _page(qtbot: Any, manager: ModelManager) -> ModelsPage:
     page = ModelsPage(AppContext(model_manager=manager))
-    qtbot.addWidget(page)
+
+    def settle(_widget: object) -> None:
+        # Closes over ``page`` on purpose: pytest-qt keeps widgets by weak reference, so
+        # the page was freed as the test returned, with the refresh started by its last
+        # action still running: a QThread destroyed while running aborts the process.
+        page.runner.wait_all(TIMEOUT)
+        qtbot.waitUntil(lambda: not page.busy(), timeout=TIMEOUT)
+
+    qtbot.addWidget(page, before_close_func=settle)
     page.show()
     qtbot.waitUntil(lambda: not page.busy(), timeout=TIMEOUT)
     return page

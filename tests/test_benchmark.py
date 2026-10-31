@@ -7,6 +7,7 @@ needs the GLiNER model in ``models/`` (or ``ANONYMA_TEST_MODELS``).
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ from anonyma.detectors.gliner import model_dir, model_spec
 from anonyma.models import Profile
 from tests.benchmark import generate, measure
 from tests.benchmark.common import TRUTH
+from tests.fixtures.generators.mail_archive_image import FONT_CANDIDATES
 
 REPO_MODELS = Path(os.environ.get("ANONYMA_TEST_MODELS", Path(__file__).parents[1] / "models"))
 
@@ -71,14 +73,32 @@ def _check(result: dict[str, Any], profile: str) -> None:
     assert _ratio(agg["keep"]) >= limits["keep"]
 
 
+#: Font the committed ground truth was generated with: text boxes drawn in images
+#: (``regions`` bboxes) depend on the system font, everything else must match anywhere.
+REFERENCE_FONT = "C:/Windows/Fonts/arial.ttf"
+
+
+def _without_bboxes(text: str) -> Any:
+    data = json.loads(text)
+    for entry in data.get("entries", []):
+        for region in entry.get("regions", []):
+            region.pop("bbox", None)
+    return data
+
+
 @pytest.mark.slow
 def test_generator_is_deterministic(tmp_path: Path) -> None:
     generate.main(tmp_path)
     produced = sorted(p.name for p in (tmp_path / "ground_truth").glob("*.json"))
     assert produced == sorted(p.name for p in TRUTH.glob("*.json"))
+    same_font = next(f for f in FONT_CANDIDATES if Path(f).exists()) == REFERENCE_FONT
     for name in produced:
         fresh = (tmp_path / "ground_truth" / name).read_text(encoding="utf-8")
-        assert fresh == (TRUTH / name).read_text(encoding="utf-8"), name
+        truth = (TRUTH / name).read_text(encoding="utf-8")
+        if same_font:
+            assert fresh == truth, name
+        else:
+            assert _without_bboxes(fresh) == _without_bboxes(truth), name
 
 
 @pytest.mark.slow
