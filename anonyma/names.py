@@ -250,11 +250,33 @@ def _login_forms(person: PersonName) -> dict[str, str]:
         form = template(*parts)
         if len(form) >= 5 and form not in forms.values():
             forms[name] = form
+    # Hyphens kept (``jean-baptiste.kerguelen``, ``berenice.lagarde-moreau``): the
+    # template names carry an ``h`` (``gh.s``, ``g.sh``); without it they are the
+    # plain templates.
+    given, initials, surname = parts
     hyphen_given = "-".join(_ascii(g) for g in person.given_key.split("-") if g)
+    hyphen_surname = "-".join(
+        w for w in (_ascii(p) for p in re.split(r"[-\s]+", person.surname_key)) if w
+    )
     if "-" in hyphen_given:
-        forms.setdefault("gh.s", f"{hyphen_given}.{parts[2]}")
-        forms.setdefault("gh-s", f"{hyphen_given}-{parts[2]}")
+        forms.setdefault("gh.s", f"{hyphen_given}.{surname}")
+        forms.setdefault("gh-s", f"{hyphen_given}-{surname}")
+    if "-" in hyphen_surname:
+        forms.setdefault("g.sh", f"{given}.{hyphen_surname}")
+        forms.setdefault("g_sh", f"{given}_{hyphen_surname}")
+        forms.setdefault("i.sh", f"{initials}.{hyphen_surname}")
+        forms.setdefault("ish", f"{initials}{hyphen_surname}")
+        forms.setdefault("sh.g", f"{hyphen_surname}.{given}")
+        if "-" in hyphen_given:
+            forms.setdefault("gh.sh", f"{hyphen_given}.{hyphen_surname}")
     return forms
+
+
+def login_of(template: str, person: PersonName) -> str | None:
+    """Form of ``person`` for a template of :func:`login_forms`; a hyphen template
+    (``g.sh``) falls back to the plain one when ``person`` has no hyphen."""
+    forms = login_forms(person)
+    return forms.get(template) or forms.get(template.replace("h", ""))
 
 
 def match_login_template(local: str, person: PersonName) -> str | None:
@@ -329,6 +351,7 @@ __all__ = [
     "initials_of",
     "is_initial",
     "login_forms",
+    "login_of",
     "login_parts",
     "match_login_template",
     "needs_capital",

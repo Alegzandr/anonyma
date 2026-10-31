@@ -20,8 +20,7 @@ from faker import Faker
 
 from anonyma import checksums
 from anonyma.data import first_names
-from anonyma.names import LOGIN_TEMPLATES as _LOGIN_TEMPLATES
-from anonyma.names import PersonName, initials_of, is_initial, login_parts
+from anonyma.names import PersonName, initials_of, is_initial, login_of, login_parts
 
 PUBLIC_MAIL_DOMAINS = frozenset(
     [
@@ -222,12 +221,12 @@ def render_person(person: PersonName, fake: FakePerson) -> str:
 
 
 def login_like(template: str, original: str, fake: FakePerson) -> str:
-    parts = login_parts(
-        PersonName("", fake.given, (fake.surname,), False, fake.gender)  # given + surname
-    )
-    if parts is None:
-        return original
-    return match_case(original, _LOGIN_TEMPLATES[template](*parts))
+    """``fake`` written like ``original`` (template of :func:`names.login_forms`)."""
+    person = PersonName("", fake.given, (fake.surname,), False, fake.gender)
+    form = login_of(template, person) or login_of("g.s", person)
+    if form is None:  # never the original: it is the value being hidden
+        return "utilisateur"
+    return match_case(original, form)
 
 
 def fake_initials(fake: FakePerson) -> str:
@@ -316,11 +315,16 @@ def fake_vat_fr(siren: str) -> str:
     return "FR" + checksums.vat_fr_key(siren) + siren
 
 
-def fake_nir(original: str, rng: random.Random) -> str:
+def fake_nir(original: str, rng: random.Random, *, birth: tuple[int, int] | None = None) -> str:
+    """Fake NIR of the same sex; ``birth`` (year, month) of the substitute birth date
+    keeps the number consistent with it."""
     compact = checksums.compact(original)
     sex = compact[:1] if compact[:1] in "12378" else "1"
-    year = f"{rng.randint(40, 99):02d}"
-    month = f"{rng.randint(1, 12):02d}"
+    if birth is not None:
+        year, month = f"{birth[0] % 100:02d}", f"{birth[1]:02d}"
+    else:
+        year = f"{rng.randint(40, 99):02d}"
+        month = f"{rng.randint(1, 12):02d}"
     dept = f"{rng.choice([d for d in range(1, 96) if d != 20]):02d}"
     rest = "".join(rng.choice(string.digits) for _ in range(6))
     body = sex + year + month + dept + rest
@@ -417,6 +421,34 @@ def _safe_date(year: int, month: int, day: int) -> date | None:
         return date(year, month, day)
     except ValueError:
         return None
+
+
+def parse_date(original: str) -> date | None:
+    """The date written in ``original`` (formats of :func:`shift_date`), or None."""
+    shifted = shift_date(original, 0)
+    if shifted is None:
+        return None
+    text = shifted.strip()
+    m = _NUMERIC_DATE.match(text)
+    if m:
+        d_s, _sep, m_s, y_s = m.groups()
+        year = int(y_s) + (
+            1900 if len(y_s) == 2 and int(y_s) > 30 else 2000 if len(y_s) == 2 else 0
+        )
+        return _safe_date(year, int(m_s), int(d_s))
+    m = _ISO_DATE.match(text)
+    if m:
+        return _safe_date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    m = _TEXT_DATE.match(text)
+    if m:
+        found = _month_index(m.group(3))
+        day = 1 if m.group(1) in ("1er", "1re") else int(m.group(1))
+        return _safe_date(int(m.group(6)), found[0] + 1, day) if found else None
+    m = _EN_DATE.match(text)
+    if m:
+        found = _month_index(m.group(1))
+        return _safe_date(int(m.group(8)), found[0] + 1, int(m.group(4))) if found else None
+    return None
 
 
 def shift_date(original: str, days: int) -> str | None:

@@ -319,3 +319,43 @@ def test_reshape_never_keeps_original_characters() -> None:
     from anonyma.substitutes import reshape
 
     assert reshape("FR76 3000 1007", "AB12") == "AB12 0000 0000"
+
+
+def test_realistic_nir_follows_the_substitute_birth_date() -> None:
+    body = "2850478006084"
+    nir = f"{body}{checksums.nir_key(body)}"
+    table, kept, _ = assign(
+        [("Camille Durand", "PERSONNE"), ("03/04/1985", "DATE_NAISSANCE"), (nir, "NIR")],
+        ReplacementMode.REALISTIC,
+    )
+    birth = sub(table, kept, "03/04/1985")
+    fake = sub(table, kept, nir)
+    day, month, year = birth.split("/")
+    assert fake[1:5] == f"{year[2:]}{month}", (birth, fake)
+    assert fake[0] == "2" and checksums.nir_valid(fake)
+
+
+@pytest.mark.parametrize(
+    ("person", "address"),
+    [
+        ("Jean-Baptiste Kerguelen", "jean-baptiste.kerguelen@exemple.test"),
+        ("Bérénice Lagarde-Moreau", "berenice.lagarde-moreau@exemple.test"),
+    ],
+)
+def test_realistic_address_follows_the_display_name(person: str, address: str) -> None:
+    """Hyphens in the local part: the fake address still matches the fake name."""
+    table, kept, _ = assign([(person, "PERSONNE"), (address, "EMAIL")], ReplacementMode.REALISTIC)
+    name, mail = sub(table, kept, person), sub(table, kept, address)
+    given, surname = name.split(" ", 1)
+    local = mail.split("@")[0]
+    assert ascii_of(surname) in ascii_of(local) and ascii_of(given)[:1] == local[:1], (name, mail)
+
+
+def test_realistic_case_is_per_word_for_names_only() -> None:
+    from anonyma.replacer import _case_of
+
+    assert _case_of("ADRESSE", "12 rue des Lilas", "46 rue Emmanuelle Colas") == (
+        "46 rue Emmanuelle Colas"
+    )
+    assert _case_of("ADRESSE", "12 RUE DES LILAS", "46 rue Colas") == "46 RUE COLAS"
+    assert _case_of("PERSONNE", "Claire FONTAINE", "Paul Martin") == "Paul MARTIN"

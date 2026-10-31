@@ -29,6 +29,7 @@ import re
 import secrets
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from anonyma import checksums
 from anonyma import substitutes as fk
@@ -90,7 +91,7 @@ class SubstitutionTable:
         substitute = variant if variant is not None else self.by_cluster[entity.cluster_id]
         if self.mode is ReplacementMode.REALISTIC:
             # Case variants share one normalized key: adapt to this mention.
-            substitute = fk.match_case(entity.value, substitute)
+            substitute = _case_of(entity.entity_type, entity.value, substitute)
         return substitute
 
     def all_substitutes(self) -> set[str]:
@@ -448,6 +449,23 @@ class _Realistic:
             self.domains[original] = candidate
         return self.domains[original]
 
+    def nir_birth(self, nir: str) -> tuple[int, int] | None:
+        """(year, month) of the substitute birth date of the person a NIR belongs
+        to: a date of birth of the batch in the NIR's year and month, shifted like
+        every date. None when no such date is known."""
+        compact = checksums.compact(nir)
+        if len(compact) < 5 or not compact[1:5].isdigit():
+            return None
+        year, month = int(compact[1:3]), int(compact[3:5])
+        for cluster in self.clusters.values():
+            if cluster.entity_type != EntityType.DATE_OF_BIRTH:
+                continue
+            born = fk.parse_date(cluster.canonical)
+            if born is not None and born.year % 100 == year and born.month == month:
+                shifted = born + timedelta(days=self.shift)
+                return shifted.year, shifted.month
+        return None
+
     def siren(self, original: str, rng: random.Random) -> str:
         if original not in self.sirens:
             self.sirens[original] = fk.fake_siren(rng)
@@ -462,8 +480,18 @@ class _Realistic:
 Generator = Callable[[_Realistic, EntityCluster, random.Random, str | None], dict[str, str] | None]
 
 
+def _case_of(entity_type: str, original: str, substitute: str) -> str:
+    """Case of ``original`` on ``substitute``: word by word for a name (« Claire
+    FONTAINE » -> « Paul MARTIN »), as a whole otherwise: the words of a fake
+    address do not line up with the original ones (« rue des Lilas » must not give
+    « rue emmanuelle Colas »)."""
+    if entity_type == EntityType.PERSON:
+        return fk.match_case(original, substitute)
+    return fk.mirror_case(original, substitute)
+
+
 def _same_for_all(cluster: EntityCluster, base: str) -> dict[str, str]:
-    out = {v: fk.match_case(v, base) for v in cluster.variants}
+    out = {v: _case_of(cluster.entity_type, v, base) for v in cluster.variants}
     out[""] = base
     return out
 
@@ -665,7 +693,7 @@ GENERATORS: dict[str, Generator] = {
     EntityType.IBAN: _reshaped(lambda st, v, rng: fk.fake_iban(v, rng)),
     EntityType.BIC: _reshaped(lambda st, v, rng: fk.fake_bic(v, rng)),
     EntityType.CREDIT_CARD: _reshaped(lambda st, v, rng: fk.fake_luhn(v, rng)),
-    EntityType.NIR: _reshaped(lambda st, v, rng: fk.fake_nir(v, rng)),
+    EntityType.NIR: _reshaped(lambda st, v, rng: fk.fake_nir(v, rng, birth=st.nir_birth(v))),
     EntityType.SIREN: _reshaped(_siren),
     EntityType.SIRET: _reshaped(_siret),
     EntityType.VAT_NUMBER: _reshaped(_vat),
