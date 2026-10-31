@@ -580,11 +580,12 @@ RULES: tuple[Rule, ...] = (
         needs_context=True,
         before=24,
     ),
-    # Network.
+    # Network. IPv4 not after "Name/": a software version (LibreOffice/24.2.7.2, written
+    # again by LibreOffice in every legacy file it saves); "//" (URL host) still matches.
     Rule(
         "ipv4",
         EntityType.IP_ADDRESS,
-        r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![\w]|\.\d)",
+        r"(?<![\w.])(?<![A-Za-z]/)(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![\w]|\.\d)",
         0.85,
         context=("ip", "adresse ip", "serveur", "server", "host", "hote", "connexion"),
         context_score=1.0,

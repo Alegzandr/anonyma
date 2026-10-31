@@ -248,6 +248,10 @@ def test_ip_addresses(detector: RegexDetector) -> None:
     ]
     assert not found(detector, "version 999.1.1.1 et 127.0.0.1", "IP")
     assert not found(detector, "à 12:30:45", "IP")
+    # Software version written by LibreOffice in its "Generator" metadata.
+    assert not found(detector, "LibreOffice/24.2.7.2$Linux_X86_64 LibreOffice_project", "IP")
+    assert found(detector, "voir http://10.20.30.40/admin", "IP") == ["10.20.30.40"]
+    assert found(detector, "IP : 10.20.30.40/24", "IP") == ["10.20.30.40/24"]
 
 
 def test_url_and_domains(detector: RegexDetector) -> None:

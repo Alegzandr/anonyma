@@ -247,48 +247,50 @@ def _gpu() -> tuple[str, int]:
 
 def _gpu_windows() -> tuple[str, int]:
     """Largest display adapter from the registry (name, dedicated memory)."""
-    if sys.platform != "win32":
-        return "", 0
-    import winreg
+    # A platform block (not an early return): mypy then skips it on other systems,
+    # where winreg has no attributes.
+    if sys.platform == "win32":
+        import winreg
 
-    def value(key: winreg.HKEYType, name: str) -> object:
-        try:
-            return winreg.QueryValueEx(key, name)[0]
-        except OSError:
-            return None
-
-    def as_int(raw: object) -> int:
-        if isinstance(raw, int):
-            return raw
-        if isinstance(raw, bytes) and raw:
-            return int.from_bytes(raw[:8], "little")
-        return 0
-
-    base = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
-    best: tuple[str, int] = ("", 0)
-    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base) as root:
-        index = 0
-        while True:
+        def value(key: winreg.HKEYType, name: str) -> object:
             try:
-                sub = winreg.EnumKey(root, index)
+                return winreg.QueryValueEx(key, name)[0]
             except OSError:
-                break
-            index += 1
-            if not sub.isdigit():
-                continue
-            try:
-                with winreg.OpenKey(root, sub) as key:
-                    name = str(value(key, "DriverDesc") or "")
-                    vram = as_int(value(key, "HardwareInformation.qwMemorySize")) or as_int(
-                        value(key, "HardwareInformation.MemorySize")
-                    )
-            except OSError:
-                continue
-            if not name or any(word in name.lower() for word in _IGNORED_ADAPTERS):
-                continue
-            if vram > best[1] or not best[0]:
-                best = (name, vram)
-    return best
+                return None
+
+        def as_int(raw: object) -> int:
+            if isinstance(raw, int):
+                return raw
+            if isinstance(raw, bytes) and raw:
+                return int.from_bytes(raw[:8], "little")
+            return 0
+
+        base = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+        best: tuple[str, int] = ("", 0)
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base) as root:
+            index = 0
+            while True:
+                try:
+                    sub = winreg.EnumKey(root, index)
+                except OSError:
+                    break
+                index += 1
+                if not sub.isdigit():
+                    continue
+                try:
+                    with winreg.OpenKey(root, sub) as key:
+                        name = str(value(key, "DriverDesc") or "")
+                        vram = as_int(value(key, "HardwareInformation.qwMemorySize")) or as_int(
+                            value(key, "HardwareInformation.MemorySize")
+                        )
+                except OSError:
+                    continue
+                if not name or any(word in name.lower() for word in _IGNORED_ADAPTERS):
+                    continue
+                if vram > best[1] or not best[0]:
+                    best = (name, vram)
+        return best
+    return "", 0
 
 
 def _gpu_linux() -> tuple[str, int]:

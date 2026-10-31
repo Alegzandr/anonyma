@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 
 from anonyma import checksums
@@ -111,6 +112,21 @@ def is_ocr_issue(code: str) -> bool:
     return any(part.startswith("ocr") for part in code.split("."))
 
 
+#: Metadata labels of the save time, which a writer stamps on the output itself.
+_SAVE_STAMPS = frozenset({"modified"})
+
+
+def stamped_today(segment: Segment) -> bool:
+    """A save time of today: stamped by the tool that produced the output (LibreOffice
+    dates the legacy files it saves), not left over from the original, even when the
+    original was also saved today."""
+    context = segment.context
+    if context.kind is not SegmentKind.METADATA or context.label not in _SAVE_STAMPS:
+        return False
+    today = {datetime.now().date().isoformat(), datetime.now(UTC).date().isoformat()}
+    return segment.text.strip()[:10] in today
+
+
 def worth_checking(value: str) -> bool:
     """Short-value policy (see module docstring)."""
     key = normalize(value)
@@ -181,6 +197,9 @@ class Verifier:
                 continue
             covered: dict[str, list[tuple[int, int]]] = {}
             for segment in doc.segments:
+                if stamped_today(segment):
+                    covered[segment.id] = [(0, len(segment.text))]
+                    continue
                 prepared = normalize_with_map(segment.text)
                 spans = [(m.start, m.end) for m in subs.find(segment.text, prepared=prepared)]
                 spans += [(m.start(), m.end()) for m in _BLACKOUT.finditer(segment.text)]
@@ -235,7 +254,9 @@ class Verifier:
                     value = segment.text[entity.start : entity.end]
                     if normalize(value) in allowed_keys:
                         continue
-                    if _neutral_outside(segment, entity.start, entity.end, covered[segment.id]):
+                    if stamped_today(segment) or _neutral_outside(
+                        segment, entity.start, entity.end, covered[segment.id]
+                    ):
                         continue
                     if keeps(entity.entity_type, value, self.config):
                         continue

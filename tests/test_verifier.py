@@ -193,3 +193,21 @@ def test_ocr_issues_make_verification_incomplete() -> None:
 def test_is_ocr_issue() -> None:
     assert is_ocr_issue("ocr.failed") and is_ocr_issue("pdf.ocr_unavailable")
     assert not is_ocr_issue("office.media_blanked") and not is_ocr_issue("extract.error")
+
+
+def test_save_time_of_today_is_not_a_residue() -> None:
+    """LibreOffice dates the legacy files it saves: a "modified" of today in the output
+    is its own stamp, even when the original was saved today as well."""
+    from datetime import date
+
+    def metadata(text: str, label: str) -> Document:
+        doc = output()
+        doc.segments = [Segment("m", text, (0,), SegmentContext(SegmentKind.METADATA, label))]
+        return doc
+
+    today = date.today().isoformat()
+    stamped = metadata(f"{today}T10:15:00Z", "modified")
+    assert verify(stamped, [(today, "DATE")], set(), detectors=[RegexDetector(Config())]).clean
+    assert not verify(metadata(f"{today}T10:15:00Z", "created"), [(today, "DATE")], set()).clean
+    old = metadata("2019-03-04T10:15:00Z", "modified")
+    assert not verify(old, [("2019-03-04", "DATE")], set()).clean
