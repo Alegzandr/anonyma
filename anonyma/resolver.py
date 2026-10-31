@@ -42,6 +42,7 @@ from anonyma.models import (
     EntityCluster,
     EntityType,
     ReviewStatus,
+    Segment,
 )
 from anonyma.names import (
     PersonName,
@@ -700,64 +701,91 @@ def propagate(
         return []
     scores[None] = 0.7
 
-    taken: dict[tuple[str, str], list[tuple[int, int]]] = {}
-    for e in existing:
-        taken.setdefault((e.document_id, e.segment_id), []).append((e.start, e.end))
     root_of = {doc.id: root.id for root in documents for doc in root.walk()}
     local_roots: dict[str, set[str]] = {}
     for e in existing:
         if e.entity_type in DOCUMENT_LOCAL_TYPES and e.cluster_id:
             local_roots.setdefault(e.cluster_id, set()).add(root_of.get(e.document_id, ""))
-    found: list[Entity] = []
-    for root in documents:
-        for doc in root.walk():
-            # Unreadable items: only their name (shown in reports) can be searched.
-            segments = (
-                doc.segments
-                if doc.status is DocumentStatus.EXTRACTED
-                else [s for s in doc.segments if s.id == FILENAME_SEGMENT_ID]
+
+    def scan(needles: MultiMatcher[_Target], known: Sequence[Entity]) -> list[Entity]:
+        taken: dict[tuple[str, str], list[tuple[int, int]]] = {}
+        for e in known:
+            taken.setdefault((e.document_id, e.segment_id), []).append((e.start, e.end))
+        out: list[Entity] = []
+        for root in documents:
+            for doc in root.walk():
+                # Unreadable items: only their name (shown in reports) can be searched.
+                segments = (
+                    doc.segments
+                    if doc.status is DocumentStatus.EXTRACTED
+                    else [s for s in doc.segments if s.id == FILENAME_SEGMENT_ID]
+                )
+                for segment in segments:
+                    out.extend(_scan_segment(needles, root.id, doc.id, segment, taken))
+        return out
+
+    def _scan_segment(
+        needles: MultiMatcher[_Target],
+        root_id: str,
+        doc_id: str,
+        segment: Segment,
+        taken: dict[tuple[str, str], list[tuple[int, int]]],
+    ) -> Iterator[Entity]:
+        spans = taken.get((doc_id, segment.id), [])
+        exact = set(spans)
+        for match in leftmost_longest(needles.find(segment.text)):
+            # A form inside an existing mention adds nothing; a longer one
+            # (``Kowalczyk Jean-Baptiste`` around a detected ``Jean-Baptiste``)
+            # is kept: the replacer merges overlapping spans into their union.
+            if (match.start, match.end) in exact or any(
+                s <= match.start and match.end <= e for s, e in spans
+            ):
+                continue
+            targets = [
+                t
+                for t in match.payloads
+                if t.entity_type not in DOCUMENT_LOCAL_TYPES
+                or root_id in local_roots.get(t.cluster_id or "", set())
+            ]
+            if not targets:
+                continue
+            target = _pick(targets)
+            start, end = match.start, match.end
+            if target.entity_type == EntityType.PERSON:
+                start, end = _with_given_names(segment.text, start, end)
+            yield Entity(
+                entity_type=target.entity_type,
+                value=segment.text[start:end],
+                document_id=doc_id,
+                segment_id=segment.id,
+                start=start,
+                end=end,
+                score=scores.get(target.cluster_id, 0.7),
+                detector=PROPAGATION_DETECTOR,
+                cluster_id=target.cluster_id,
+                review=(ReviewStatus.MANUAL if target.cluster_id in manual else ReviewStatus.AUTO),
             )
-            for segment in segments:
-                spans = taken.get((doc.id, segment.id), [])
-                exact = set(spans)
-                for match in leftmost_longest(matcher.find(segment.text)):
-                    # A form inside an existing mention adds nothing; a longer one
-                    # (``Kowalczyk Jean-Baptiste`` around a detected ``Jean-Baptiste``)
-                    # is kept: the replacer merges overlapping spans into their union.
-                    if (match.start, match.end) in exact or any(
-                        s <= match.start and match.end <= e for s, e in spans
-                    ):
-                        continue
-                    targets = [
-                        t
-                        for t in match.payloads
-                        if t.entity_type not in DOCUMENT_LOCAL_TYPES
-                        or root.id in local_roots.get(t.cluster_id or "", set())
-                    ]
-                    if not targets:
-                        continue
-                    target = _pick(targets)
-                    start, end = match.start, match.end
-                    if target.entity_type == EntityType.PERSON:
-                        start, end = _with_given_names(segment.text, start, end)
-                    found.append(
-                        Entity(
-                            entity_type=target.entity_type,
-                            value=segment.text[start:end],
-                            document_id=doc.id,
-                            segment_id=segment.id,
-                            start=start,
-                            end=end,
-                            score=scores.get(target.cluster_id, 0.7),
-                            detector=PROPAGATION_DETECTOR,
-                            cluster_id=target.cluster_id,
-                            review=(
-                                ReviewStatus.MANUAL
-                                if target.cluster_id in manual
-                                else ReviewStatus.AUTO
-                            ),
-                        )
-                    )
+
+    found = scan(matcher, existing)
+    # Names completed by this pass (« Siobhan O'Callaghan » around a known surname,
+    # a person read from an address) bring forms of their own (« socallaghan »):
+    # one more pass searches them.
+    again: MultiMatcher[_Target] = MultiMatcher()
+    for e in found:
+        if e.entity_type != EntityType.PERSON:
+            continue
+        person = parse_person(e.value)
+        if person is None or not person.is_full:
+            continue
+        stub = EntityCluster(
+            id=e.cluster_id or "", entity_type=EntityType.PERSON, canonical=e.value
+        )
+        stub.variants.add(e.value)
+        for form, cap in cluster_forms(stub):
+            if form not in matcher:
+                again.add(form, _Target(e.cluster_id, EntityType.PERSON), require_capital=cap)
+    if len(again):
+        found += scan(again, [*existing, *found])
     return found
 
 

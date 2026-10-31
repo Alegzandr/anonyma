@@ -65,6 +65,9 @@ class MultiMatcher[T]:
     def __len__(self) -> int:
         return len(self._entries)
 
+    def __contains__(self, needle: object) -> bool:
+        return isinstance(needle, str) and normalize(needle) in self._entries
+
     def add(self, needle: str, payload: T, *, require_capital: bool = False) -> None:
         key = normalize(needle)
         if not key:

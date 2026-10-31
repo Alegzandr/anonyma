@@ -159,3 +159,15 @@ def test_display_name_matching_the_address_is_a_person(tmp_path: Path) -> None:
     for out in outputs.values():
         assert "quintavalle" not in out.casefold() and "zéphyrin" not in out.casefold(), out
     assert "[PERSONNE_" in outputs["b_note.txt"] and "EMAIL" not in outputs["b_note.txt"]
+
+
+def test_forms_of_a_name_completed_by_propagation_are_searched(tmp_path: Path) -> None:
+    """« Siobhan O'Callaghan » is only completed by propagation (around a known
+    surname): its login « socallaghan » must still be masked, not just found by the
+    verifier (quarantine)."""
+    text = (
+        "On 12 March 2026, Siobhan O'Callaghan (HR lead) noticed repeated failed logins\n"
+        "for the account socallaghan. Ms O'Callaghan escalated.\n"
+    )
+    (out,) = _anonymize(tmp_path, {"incident.txt": text}).values()
+    assert "callaghan" not in out.casefold() and "Siobhan" not in out, out
