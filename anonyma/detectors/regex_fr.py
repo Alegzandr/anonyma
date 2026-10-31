@@ -27,8 +27,16 @@ from anonyma.detectors._custom import (
     PersonRecognizer,
     PlaceRecognizer,
 )
-from anonyma.detectors._filters import skip_segment
-from anonyma.detectors._rules import DATE_RULES, DOB_CONTEXT, LABEL_TYPES, RULES, Rule
+from anonyma.detectors._filters import TECHNICAL, skip_segment
+from anonyma.detectors._rules import (
+    DATE_RULES,
+    DOB_CONTEXT,
+    IBAN_STRICT,
+    LABEL_TYPES,
+    RULES,
+    Rule,
+)
+from anonyma.fieldhints import hint_of
 from anonyma.logs import get_logger
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
 from anonyma.registry import register_detector
@@ -59,6 +67,16 @@ _DISPLAY_NAME = regex.compile(
     r"(?:\"(?P<quoted>[^\"<>]+)\"|(?P<name>[^<>,;\"]*?))[ \t]*<[ \t]*[^<>@\s]+@[^<>\s]+[ \t]*>"
 )
 _ANGLE = regex.compile(r"<[^<>\s]+>")
+#: Score of values typed by their column / key (:mod:`anonyma.fieldhints`).
+HINT_SCORE = 0.75
+#: Field hints (:mod:`anonyma.fieldhints`) whose values are entities as a whole.
+HINT_TYPES: dict[str, str] = {
+    "nom": EntityType.PERSON,
+    "identifiant": EntityType.USERNAME,
+    "adresse": EntityType.ADDRESS,
+    "ville": EntityType.LOCATION,
+    "fonction": EntityType.JOB_TITLE,
+}
 
 
 def _context_regex(words: Sequence[str]) -> regex.Pattern[str] | None:
@@ -123,16 +141,23 @@ def _trim(text: str, start: int, end: int) -> int:
 
 
 def _shrink_iban(text: str, start: int, end: int) -> int | None:
-    """Longest valid IBAN prefix of ``text[start:end]`` ending on a group boundary."""
-    candidate = end
-    while candidate - start >= 15:
+    """Longest valid IBAN prefix of ``text[start:end]`` ending on a group boundary.
+
+    The IBAN pattern accepts any grouping, so it may run into the words that follow
+    (``FR76 3000 ... 189 et sa``): every end just before a separator is tried.
+    """
+    for candidate in range(end, start + 14, -1):
+        if candidate < end and (text[candidate].isalnum() or not text[candidate - 1].isalnum()):
+            continue
         if checksums.iban_valid(text[start:candidate]):
             return candidate
-        space = max(text.rfind(" ", start, candidate - 1), text.rfind(" ", start, candidate - 1))
-        if space <= start:
-            break
-        candidate = space
     return None
+
+
+def _strict_iban_end(text: str, start: int) -> int | None:
+    """End of the classic 4-by-4 IBAN layout at ``start`` (bounds an invalid candidate)."""
+    m = IBAN_STRICT.match(text, start)
+    return m.end() if m else None
 
 
 @register_detector
@@ -195,6 +220,10 @@ class RegexDetector(Detector):
             # A whole cell/value 6xxxxxxxx: a mobile number stored as a number.
             start = text.index(value)
             raw.append((EntityType.PHONE, start, start + 9, 0.65, {"rule": "mobile_sans_zero"}))
+        elif len(value) == 11 and value.isdigit() and value.startswith(("336", "337")):
+            # The same with the country code (33612345678): CRM and spreadsheet exports.
+            start = text.index(value)
+            raw.append((EntityType.PHONE, start, start + 11, 0.65, {"rule": "mobile_indicatif"}))
         raw = self._dates(raw, text, label)
         return [
             Entity(
@@ -242,6 +271,11 @@ class RegexDetector(Detector):
                 shrunk = _shrink_iban(text, start, end)
                 if shrunk is not None:
                     end, valid = shrunk, True
+                else:
+                    strict = _strict_iban_end(text, start)
+                    if strict is None:
+                        return None
+                    end = strict
         if valid is False:
             if rule.invalid_score is None or not context:
                 return None
@@ -268,7 +302,18 @@ class RegexDetector(Detector):
                     s = len(text) - len(text.lstrip())
                     spans = [(s, len(text.rstrip()))]
                 out += [(entity_type, s, e, 0.95, {"rule": "label"}) for s, e in spans]
-        if _field_name(label) in ADDRESS_LIST_LABELS:
+        hint = hint_of(label)
+        if hint in HINT_TYPES:
+            entity_type = HINT_TYPES[hint]
+            # Below the verifier's certainty level: a header can mislead, a residue
+            # found this way sends the file to review, never to quarantine.
+            if entity_type == EntityType.USERNAME:
+                out += self._identifier(text, HINT_SCORE)
+            else:
+                out += self._whole_value(text, entity_type, HINT_SCORE)
+        elif hint is not None:
+            pass  # the hint only gives context to the rules (telephone, naissance...)
+        elif _field_name(label) in ADDRESS_LIST_LABELS:
             out += self._address_list(text)
         elif _label_has(label, PERSON_LABEL_PARTS) and not _label_has(label, _NOT_PERSON_LABEL):
             out += self._whole_value(text, EntityType.PERSON)
@@ -278,7 +323,7 @@ class RegexDetector(Detector):
 
     @staticmethod
     def _whole_value(
-        text: str, entity_type: str
+        text: str, entity_type: str, score: float = 0.85
     ) -> list[tuple[str, int, int, float, dict[str, str]]]:
         out: list[tuple[str, int, int, float, dict[str, str]]] = []
         pos = 0
@@ -290,9 +335,20 @@ class RegexDetector(Detector):
                 continue
             if len(stripped) > 80 or len(stripped.split()) > 6:
                 continue
+            if normalize(stripped) in TECHNICAL:
+                continue
             s = start + part.find(stripped)
-            out.append((entity_type, s, s + len(stripped), 0.85, {"rule": "label"}))
+            out.append((entity_type, s, s + len(stripped), score, {"rule": "label"}))
         return out
+
+    @staticmethod
+    def _identifier(text: str, score: float) -> list[tuple[str, int, int, float, dict[str, str]]]:
+        """A login / matricule column value: one token, letters or digits inside."""
+        value = text.strip()
+        if not value or len(value) > 64 or any(c.isspace() for c in value) or "@" in value:
+            return []
+        start = text.index(value)
+        return [(EntityType.USERNAME, start, start + len(value), score, {"rule": "label"})]
 
     def _address_list(self, text: str) -> list[tuple[str, int, int, float, dict[str, str]]]:
         out: list[tuple[str, int, int, float, dict[str, str]]] = []

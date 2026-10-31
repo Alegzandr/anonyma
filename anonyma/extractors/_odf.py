@@ -42,6 +42,7 @@ from anonyma.extractors._xml import (
 )
 from anonyma.extractors._xmlscan import ScanSpec, Unit, apply_unit, scan
 from anonyma.extractors._zip import ZipPackage, read_package, write_package
+from anonyma.fieldhints import header_hints, with_column_hint
 from anonyma.models import (
     Document,
     ExtractionContext,
@@ -222,6 +223,15 @@ def _column_letters(index: int) -> str:
     return letters
 
 
+def _cell_text(cell: Element) -> str:
+    """Visible text of a spreadsheet cell (its paragraphs, annotations left out)."""
+    parts: list[str] = []
+    for p in cell:
+        if local_name(p.tag) == "p":
+            parts.append("".join(str(t) for t in p.itertext()))
+    return " ".join(parts)
+
+
 def _int_attr(el: Element, name: str) -> int:
     try:
         return max(1, int(el.get(name, "1")))
@@ -237,14 +247,27 @@ def prepare(root: Element, fmt: str) -> OdfInfo:
             table_index += 1
             info.tables[table] = table_index
             row = 0
+            placed: list[tuple[Element, int, int]] = []
+            texts: dict[int, dict[int, str]] = {}
             for row_el in table.iter(_q(TABLE, "table-row")):
                 col = 0
                 for cell in row_el:
                     if local_name(cell.tag) not in ("table-cell", "covered-table-cell"):
                         continue
-                    info.cells[cell] = f"feuille {table_index}!{_column_letters(col)}{row + 1}"
+                    placed.append((cell, row, col))
+                    if not texts or row == min(texts):
+                        text = _cell_text(cell)
+                        if text.strip():
+                            texts.setdefault(row, {})[col] = text
                     col += _int_attr(cell, _q(TABLE, "number-columns-repeated"))
                 row += _int_attr(row_el, _q(TABLE, "number-rows-repeated"))
+            header = min(texts) if texts else -1
+            hints = header_hints(texts)
+            for cell, row, col in placed:
+                label = f"feuille {table_index}!{_column_letters(col)}{row + 1}"
+                if row > header:
+                    label = with_column_hint(label, hints.get(col))
+                info.cells[cell] = label
     if fmt == "odp":
         for n, page in enumerate(root.iter(_q(DRAW, "page")), start=1):
             info.pages[page] = n

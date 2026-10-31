@@ -1,7 +1,9 @@
 """JSON (and JSON Lines) and generic XML extractors.
 
 JSON: every string value, every key and every number (phone numbers are often
-stored as numbers) is a segment; labels are JSON paths with keys masked.
+stored as numbers) is a segment; labels are JSON paths with keys masked. A value
+whose key is a known field name (``login``, ``telephone``...) carries its field
+hint (:mod:`anonyma.fieldhints`), never the key itself.
 
 XML: element text and tails, attribute values, comments, CDATA and processing
 instructions. Parsing never resolves entities nor touches the network.
@@ -17,6 +19,7 @@ from anonyma.codec import decode_bytes
 from anonyma.extractors._tabular import tokenize_json
 from anonyma.extractors._xml import local_name, parse_xml
 from anonyma.extractors._xmlscan import ScanSpec, Unit, scan
+from anonyma.fieldhints import field_hint, with_key_hint
 from anonyma.models import (
     Document,
     ExtractionContext,
@@ -36,9 +39,14 @@ class JsonExtractor(Extractor):
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
         text, encoding = decode_bytes(source.read_bytes())
         document.properties["encoding"] = encoding
+        key_hints: dict[str, str | None] = {}
         for i, token in enumerate(tokenize_json(text)):
             kind = SegmentKind.ATTRIBUTE if token.kind == "key" else SegmentKind.BODY
-            label = f"{token.path} (clé)" if token.kind == "key" else token.path
+            if token.kind == "key":
+                key_hints[token.path] = field_hint(token.value)
+                label = f"{token.path} (clé)"
+            else:
+                label = with_key_hint(token.path, key_hints.get(token.path))
             document.segments.append(
                 Segment(
                     id=f"j{i}",
