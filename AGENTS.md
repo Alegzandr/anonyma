@@ -87,8 +87,15 @@ before you consider a change done. On Windows, keep pytest's base temp short
 
 - `tests/conftest.py` gives every test its own `ANONYMA_HOME`; use the `canary_config`
   fixture (light profile, inline workers) for pipeline tests.
-- Markers: `slow` (OCR, models, benchmark) and `models` (needs downloaded models; skipped
-  when absent). Tests must use synthetic data only, never real personal data.
+- Markers: `slow` (OCR, models, benchmark) and `models` (real GLiNER/Qwen3 models). The
+  `models` tests are opt-in, since they take minutes: they run only when
+  `ANONYMA_TEST_MODELS` points at a folder of installed models (one sub-folder per model,
+  as in `models/`), never from the repository's own `models/`:
+  `ANONYMA_TEST_MODELS=<models-dir> uv run --extra llm pytest -m models`.
+- Tests must use synthetic data only, never real personal data.
+- Test behaviour the code guarantees with fakes (fake llama.cpp/GLiNER sessions, the
+  `blank_ocr` fixture when OCR is not the subject); keep real-model tests to what only the
+  runtime can show, and bound them by their number of calls, not by wall time.
 - GUI tests run headless (`QT_QPA_PLATFORM=offscreen`).
 
 ## Style
