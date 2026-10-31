@@ -75,6 +75,10 @@ def test_from_result_counts(tmp_path: Path) -> None:
     ]
     assert "[NIR_001]" in report.to_markdown() and "[NIR_001]" in report.to_html()
     assert report.to_dict()["a_revoir"] == report.review
+    assert report.quarantined  # the fixture's residue is certain
+    report.residues[0]["certitude"] = "possible"
+    assert not report.quarantined
+    assert "| possible |" in report.to_markdown()
 
 
 @pytest.mark.parametrize("suffix", [".json", ".md", ".html", ".htm", ".markdown"])
@@ -216,3 +220,13 @@ def test_wording_occurrences_labels_dates(tmp_path: Path) -> None:
         verification=VerificationResult(verified=True, unread=1),
     )
     assert "1 image ou page non relue" in _batch(tmp_path, incomplete).to_markdown()
+
+
+def test_possible_residue_is_to_review_not_quarantine(tmp_path: Path) -> None:
+    report = BatchReport.from_result(_result(tmp_path))
+    report.residues[0]["certitude"] = "possible"
+    assert report.quarantined == 0
+    assert report.verdict() == ("1 anonymisé · 1 à revoir", "warn")
+    assert report.verdict_code() == "a_revoir"
+    assert report.to_dict()["quarantaine"] == 0
+    assert "Résidu possible" in report.to_markdown()

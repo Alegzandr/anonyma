@@ -32,12 +32,28 @@ INCOMPLETE_INTRO = (
     "(dossier « …_quarantaine » à côté du dossier de sortie) : contrôlez-les visuellement "
     "avant toute diffusion."
 )
+RESIDUE_INTRO = (
+    "Résidu certain : le fichier est placé en quarantaine (dossier « …_quarantaine » à "
+    "côté du dossier de sortie) et ne doit pas être diffusé. Résidu possible : signal "
+    "statistique (souvent une balise mal relue par l'OCR), le fichier est « À revoir » : "
+    "vérifiez la zone indiquée avant diffusion."
+)
 REVIEW_INTRO = (
     "Entités détectées avec une faible confiance : elles sont masquées, mais peuvent être "
     "de fausses détections. Retrouvez-les dans le fichier produit grâce à leur remplacement."
 )
 
 _QUARANTINED = "en quarantaine (ne pas diffuser)"
+
+#: Outcome of a top-level file outside quarantine, by status. A RESIDUE file that is
+#: not in quarantine only holds possible residues: it is to be reviewed.
+_OUTCOME_BY_STATUS = {
+    DocumentStatus.ANONYMIZED: "anonymise",
+    DocumentStatus.NEEDS_REVIEW: "a_revoir",
+    DocumentStatus.RESIDUE: "a_revoir",
+    DocumentStatus.UNSUPPORTED: "non_supporte",
+    DocumentStatus.CANCELLED: "annule",
+}
 
 #: Extensions accepted by :meth:`BatchReport.save`.
 REPORT_EXTENSIONS = (".json", ".md", ".markdown", ".html", ".htm")
@@ -60,8 +76,10 @@ class BatchReport:
     incomplete: list[dict[str, Any]] = field(default_factory=list)
     #: Non-sensitive batch settings (profile, mode, regime...), French labels.
     settings: dict[str, str] = field(default_factory=dict)
-    #: Top-level files placed in the quarantine folder (never to be shared).
-    quarantined: int = 0
+    #: For each entry of ``files`` (same order): its status, and whether its output was
+    #: placed in the quarantine folder.
+    file_statuses: list[DocumentStatus] = field(default_factory=list)
+    file_placed: list[bool] = field(default_factory=list)
 
     @classmethod
     def from_result(cls, result: BatchResult) -> BatchReport:
@@ -72,8 +90,9 @@ class BatchReport:
         )
         for top in result.results:
             report.status_counts[top.status] = report.status_counts.get(top.status, 0) + 1
-            report.quarantined += is_quarantined(top, result.output_dir)
             report.files.append(_file_entry(top))
+            report.file_statuses.append(top.status)
+            report.file_placed.append(is_quarantined(top, result.output_dir))
             report.review += [
                 {"fichier": top.output_name, "type": t, "remplacement": substitute}
                 for t, substitute in top.review_items
@@ -111,25 +130,28 @@ class BatchReport:
 
     # -- verdict ----------------------------------------------------------------
 
+    def _in_quarantine(self) -> list[bool]:
+        """Per entry of ``files``: placed in quarantine, or holding a *certain* residue.
+        A possible (statistical) residue only sends its file to review."""
+        certain = {r["fichier"] for r in self.residues if r.get("certitude") == "certain"}
+        placed = self.file_placed or [False] * len(self.files)
+        return [p or f["fichier"] in certain for f, p in zip(self.files, placed, strict=True)]
+
+    @property
+    def quarantined(self) -> int:
+        """Number of top-level files in quarantine (never to be shared)."""
+        return sum(self._in_quarantine())
+
     def _outcomes(self) -> dict[str, int]:
         """Top-level files by outcome; a quarantined file counts only as such."""
-        counts = self.status_counts
-        quarantined = self.quarantined
-        review = counts.get(DocumentStatus.NEEDS_REVIEW, 0)
-        residue = counts.get(DocumentStatus.RESIDUE, 0)
-        # Quarantined files have the RESIDUE status or (unverified images or pages)
-        # NEEDS_REVIEW: whatever is not a residue comes out of the review count.
-        review = max(0, review - max(0, quarantined - residue))
-        return {
-            "anonymise": counts.get(DocumentStatus.ANONYMIZED, 0),
-            "a_revoir": review,
-            "quarantaine": max(quarantined, residue),
-            "echec": counts.get(DocumentStatus.FAILED, 0)
-            + counts.get(DocumentStatus.PENDING, 0)
-            + counts.get(DocumentStatus.EXTRACTED, 0),
-            "non_supporte": counts.get(DocumentStatus.UNSUPPORTED, 0),
-            "annule": counts.get(DocumentStatus.CANCELLED, 0),
-        }
+        outcomes = dict.fromkeys(
+            ("anonymise", "a_revoir", "quarantaine", "echec", "non_supporte", "annule"), 0
+        )
+        statuses = self.file_statuses or [DocumentStatus.FAILED] * len(self.files)
+        for status, quarantined in zip(statuses, self._in_quarantine(), strict=True):
+            key = "quarantaine" if quarantined else _OUTCOME_BY_STATUS.get(status, "echec")
+            outcomes[key] += 1
+        return outcomes
 
     def verdict_code(self) -> str:
         """``anonymise``, ``a_revoir``, ``echec``, ``quarantaine`` or ``vide``."""
@@ -232,11 +254,14 @@ class BatchReport:
                 "",
                 "## Résidus",
                 "",
-                "| Emplacement | Zone | Type | Origine |",
-                "|---|---|---|---|",
+                typo(RESIDUE_INTRO),
+                "",
+                "| Emplacement | Zone | Type | Origine | Certitude |",
+                "|---|---|---|---|---|",
             ]
             lines += [
-                f"| {c(r['emplacement'])} | {c(r['zone'])} | {c(r['type'])} | {c(r['origine'])} |"
+                f"| {c(r['emplacement'])} | {c(r['zone'])} | {c(r['type'])} | {c(r['origine'])} "
+                f"| {c(r['certitude'])} |"
                 for r in self.residues
             ]
         if self.review:
@@ -321,17 +346,15 @@ class BatchReport:
             rows = "".join(
                 f"<tr><td>{e(r['emplacement'])}</td><td>{e(r['zone'])}</td>"
                 f"<td>{e(r['type'])}</td><td>{e(r['origine'])}</td>"
-                f"<td>{e(r['detecteur'])}</td></tr>"
+                f"<td>{e(r['detecteur'])}</td><td>{e(r['certitude'])}</td></tr>"
                 for r in self.residues
             )
             parts.append(
                 _section(
                     "Résidus",
-                    ["Emplacement", "Zone", "Type", "Origine", "Détecteur"],
+                    ["Emplacement", "Zone", "Type", "Origine", "Détecteur", "Certitude"],
                     rows,
-                    intro="Ces fichiers ont été placés en quarantaine (dossier "
-                    f"<code>…_quarantaine</code> à côté du dossier de sortie){NBSP}: ils ne "
-                    "doivent pas être diffusés.",
+                    intro=e(typo(RESIDUE_INTRO)),
                 )
             )
         if self.review:

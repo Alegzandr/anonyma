@@ -161,7 +161,10 @@ originaux ou un fichier existant arrête la commande aussitôt (code 2). Le rés
 par un verdict sur une ligne (« 8 fichiers anonymisés et vérifiés. », ou
 « 6 anonymisés · 1 à revoir · 1 en quarantaine (ne pas diffuser) »), puis le tableau des
 données masquées (type, code, occurrences) et les chemins du dossier de sortie, de la
-quarantaine si elle a servi, et du rapport, chacun sur une ligne. Dans ce résumé comme dans
+quarantaine si elle existe, et du rapport, chacun sur une ligne. Seul un résidu
+**certain** envoie un fichier en quarantaine ; un résidu **possible** (signal statistique,
+souvent une balise mal relue par l'OCR) le laisse « à revoir » et le résumé invite à
+vérifier la zone signalée dans le rapport. Dans ce résumé comme dans
 `analyser` et les rapports, une **entité** est une valeur distincte (une même personne) et
 une **occurrence** chacune de ses mentions.
 

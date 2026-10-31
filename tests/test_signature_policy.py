@@ -247,6 +247,8 @@ def test_default_whitelist_is_bundled() -> None:
         (EntityType.URL, "https://eu.docusign.net/Signing/", True),
         (EntityType.URL, "lex-persona.com", True),
         (EntityType.ORGANIZATION, "Oodrive Sign", True),
+        (EntityType.ORGANIZATION, "CALINDA SOFTWARE", True),
+        (EntityType.ORGANIZATION, "CertEurope eID Corp", True),
         (EntityType.URL, "www.oodrive-sign.com", True),
         (EntityType.URL, "https://oodrive-valmont.example/", False),
         (EntityType.URL, "https://www.legifrance.gouv.fr/loda/", True),

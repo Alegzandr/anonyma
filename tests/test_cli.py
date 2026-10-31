@@ -753,3 +753,43 @@ def test_passphrase_never_reaches_child_processes(
     result = invoke("analyser", corpus, "-p", "leger", "-q", env={cli.PASSPHRASE_ENV: SECRET})
     assert result.exit_code == 0, result.output
     assert seen == [None, None]
+
+
+def test_possible_residue_is_to_review_not_quarantine(
+    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime
+
+    from anonyma.models import DocumentResult, Residue, VerificationResult
+    from anonyma.pipeline import BatchResult, Pipeline
+
+    def fake_run(self: Pipeline, inputs: Any, output_dir: Path, **kwargs: Any) -> BatchResult:
+        output_dir = Path(output_dir).resolve()
+        residue = Residue(
+            "entree/scan.pdf", "page 1", "PERSONNE", "detector", "gliner", "x", certain=False
+        )
+        return BatchResult(
+            "lot-test",
+            output_dir,
+            [
+                DocumentResult(
+                    "d1",
+                    "entree/scan.pdf",
+                    "pdf",
+                    "pdf",
+                    cli.DocumentStatus.NEEDS_REVIEW,
+                    output_path=output_dir / "entree" / "scan.pdf",
+                    verification=VerificationResult(verified=True, residues=[residue]),
+                )
+            ],
+            started_at=datetime(2026, 1, 1, 10, 0, 0),
+        )
+
+    monkeypatch.setattr(Pipeline, "run", fake_run)
+    result = invoke(*_run_args(corpus, tmp_path / "sortie", business_list, "--json"))
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["verdict"] == "a_revoir" and data["quarantaine"] == 0
+    assert data["dossier_quarantaine"] is None
+    assert "1 résidu possible à vérifier avant diffusion" in result.output
+    assert "Quarantaine" not in result.output

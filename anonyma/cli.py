@@ -1093,7 +1093,9 @@ def run_summary(
     from anonyma.pipeline import is_quarantined, quarantine_dir
 
     statuses = {r.status for r in result.all_results()}
+    # Certain residues and actual placement only: a possible residue is « À revoir ».
     quarantined = report.quarantined
+    quarantine = quarantine_dir(result.output_dir)
     # Quarantined outputs (residues, incomplete verification) are never a success.
     code = EXIT_PARTIAL if statuses & BAD_STATUSES or quarantined else EXIT_OK
     documents = [
@@ -1120,7 +1122,8 @@ def run_summary(
         "echecs": len(report.failures),
         "occurrences_par_type": dict(sorted(report.entity_counts.items())),
         "dossier_sortie": str(result.output_dir),
-        "dossier_quarantaine": str(quarantine_dir(result.output_dir)) if quarantined else None,
+        # Also given when the folder exists (left by an earlier batch, for instance).
+        "dossier_quarantaine": str(quarantine) if quarantined or quarantine.exists() else None,
         "rapport": str(report_path.resolve()) if report_path is not None else None,
         "parametres": {
             "profil": config.effective_profile().value,
@@ -1145,6 +1148,10 @@ def _print_run_summary(console: Console, report: BatchReport, summary: dict[str,
             f"[red]•[/] {_markup_escape(failure['fichier'])} : {_markup_escape(problems)}",
             soft_wrap=True,
         )
+    possible = sum(1 for r in report.residues if r.get("certitude") != "certain")
+    if possible:
+        found = plural(possible, "résidu possible", "résidus possibles")
+        console.print(f"{found} à vérifier avant diffusion (voir le rapport).", style="yellow")
     _print_path(console, "Dossier de sortie", summary["dossier_sortie"])
     if summary["dossier_quarantaine"]:
         _print_path(
