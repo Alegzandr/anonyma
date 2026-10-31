@@ -40,7 +40,8 @@ WARNING = """\
 > l'organisation qui l'exploite. Ne le redistribuez pas, ne le vendez pas et ne le
 > proposez pas en service à des tiers sans avoir remplacé ces composants ou obtenu
 > les licences commerciales correspondantes (Artifex propose une licence
-> commerciale de PyMuPDF).
+> commerciale de PyMuPDF). D'autres composants embarqués relèvent aussi de la
+> GPL (x265 via pillow-heif, pcodedmp via extract-msg) : voir plus bas.
 """
 
 COPYLEFT = re.compile(r"\bA?GPL|Affero|GNU General Public", re.IGNORECASE)
@@ -63,7 +64,33 @@ OTHER_COMPONENTS = [
         "MIT",
         "https://github.com/microsoft/DirectML",
     ),
+    (
+        "LibreOffice (embarqué dans `libreoffice/`)",
+        "MPL-2.0 ; composants tiers : voir `libreoffice/LICENSE.html`, `NOTICE`, "
+        "`CREDITS.fodt` et `readmes/` (macOS : `LibreOffice.app/Contents/Resources/`)",
+        "https://www.libreoffice.org/about-us/licenses/",
+    ),
+    (
+        "Modèles OCR PP-OCR (inclus dans rapidocr-onnxruntime)",
+        "Apache-2.0",
+        "https://github.com/PaddlePaddle/PaddleOCR",
+    ),
 ]
+
+#: Copyleft code reached through dependencies whose own license looks permissive.
+BUNDLED_NOTES = """- **pillow-heif** (BSD-3-Clause) embarque dans ses roues binaires **libheif**
+  (LGPL-3.0), **libde265** (LGPL-3.0) et l'encodeur **x265 (GPL-2.0)**.
+- **extract-msg** (GPL-3.0) dépend de **RTFDE** (LGPL-3.0), qui dépend d'**oletools**
+  (BSD), qui dépend de **pcodedmp (GPL-3.0)** : du code GPL-3.0 est donc embarqué même
+  si l'on ne regarde que les licences permissives de la chaîne.
+- **PyMuPDF** (AGPL-3.0) embarque **MuPDF** (AGPL-3.0, Artifex).
+- **libpff-python** (LGPL-3.0) et **PySide6 / Qt** (LGPL-3.0) sont livrés sous forme de
+  bibliothèques distinctes, remplaçables dans le dossier portable.
+- **LibreOffice** (MPL-2.0) est livré tel que publié par The Document Foundation
+  (version épinglée, empreinte SHA-256 vérifiée à la construction), allégé des
+  dictionnaires et des langues d'interface autres que le français et l'anglais
+  (Windows) ; ses avis de licence tiers sont conservés dans le dossier `libreoffice/`.
+"""
 
 
 def _license_of(dist: metadata.Distribution) -> str:
@@ -180,6 +207,9 @@ def render() -> str:
         "Dans tous les cas, PyMuPDF (AGPL-3.0) et extract-msg (GPL-3.0) font partie des "
         "composants prévus par Anonyma : l'avertissement ci-dessus s'applique.",
         "",
+        "## Code copyleft embarqué indirectement",
+        "",
+        BUNDLED_NOTES,
         "## Licences copyleft faibles (bibliothèques)",
         "",
         *(weak or ["- Aucune."]),

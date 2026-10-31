@@ -16,6 +16,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from anonyma import paths
@@ -51,14 +52,30 @@ def _executable_names() -> tuple[str, ...]:
     return ("soffice.exe", "soffice.com") if sys.platform == "win32" else ("soffice", "libreoffice")
 
 
-def standard_locations() -> list[Path]:
-    """Usual install locations, portable copies next to the application first."""
+#: Folder of the LibreOffice copy bundled in the portable build (packaging/build.py).
+BUNDLED_DIR = "libreoffice"
+
+
+def bundled_locations() -> list[Path]:
+    """The copy shipped in the portable folder, then other portable copies placed
+    next to the application by the user."""
     root = paths.app_root()
-    found: list[Path] = [
+    bundled = root / BUNDLED_DIR
+    if sys.platform == "darwin":
+        own = [bundled / "LibreOffice.app" / "Contents" / "MacOS" / "soffice"]
+    else:
+        own = [bundled / "program" / name for name in _executable_names()[:1]]
+    return [
+        *own,
         root / "LibreOffice" / "program" / "soffice.exe",
         root / "LibreOffice" / "program" / "soffice",
         root / "LibreOfficePortable" / "App" / "libreoffice" / "program" / "soffice.exe",
     ]
+
+
+def standard_locations() -> list[Path]:
+    """Usual install locations, portable copies next to the application first."""
+    found: list[Path] = bundled_locations()
     if sys.platform == "win32":
         for var in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)", "LOCALAPPDATA"):
             base = os.environ.get(var)
@@ -103,8 +120,9 @@ def _from_setting(value: str) -> Path | None:
 def find_soffice(config: Config) -> Path | None:
     """LibreOffice executable, or None when disabled or not installed.
 
-    Order: ``config.libreoffice_path`` (file or install folder), ``PATH``, then
-    the standard locations of Windows, macOS and Linux.
+    Order: ``config.libreoffice_path`` (file or install folder), the copy bundled
+    in the portable folder (and other portable copies next to the application),
+    ``PATH``, then the standard locations of Windows, macOS and Linux.
     """
     if not config.use_libreoffice:
         return None
@@ -112,6 +130,9 @@ def find_soffice(config: Config) -> Path | None:
         configured = _from_setting(config.libreoffice_path)
         if configured is not None:
             return configured
+    for candidate in bundled_locations():
+        if candidate.is_file():
+            return candidate
     for name in _executable_names():
         which = shutil.which(name)
         if which:
@@ -120,6 +141,23 @@ def find_soffice(config: Config) -> Path | None:
         if candidate.is_file():
             return candidate
     return None
+
+
+def _profile_dir(work_dir: Path) -> Path:
+    """Throw-away profile folder, as short as possible.
+
+    LibreOffice silently fails (exit code 0, no output) on Windows when its profile
+    path exceeds about 150 characters, and verification work folders are deeply
+    nested. Inside the portable temp folder the profile therefore lives right
+    under the batch folder (``data/tmp/<batch>/lo-<pid>-<thread>``, removed with
+    the batch); elsewhere next to ``work_dir``.
+    """
+    work = work_dir.resolve()
+    tmp = paths.tmp_dir().resolve()
+    if tmp in work.parents:
+        batch = tmp / work.relative_to(tmp).parts[0]
+        return batch / f"lo-{os.getpid()}-{threading.get_ident() % 100_000}"
+    return work_dir.parent / "libreoffice-profile"
 
 
 def _seed_profile(profile: Path) -> None:
@@ -165,7 +203,7 @@ def convert(
     work_dir.mkdir(parents=True, exist_ok=True)
     in_dir = work_dir / "in"
     out_dir = work_dir / "out"
-    profile = work_dir.parent / "libreoffice-profile"
+    profile = _profile_dir(work_dir)
     in_dir.mkdir(exist_ok=True)
     out_dir.mkdir(exist_ok=True)
     _seed_profile(profile)

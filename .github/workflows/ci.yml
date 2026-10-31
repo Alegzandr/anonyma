@@ -51,11 +51,31 @@ jobs:
             libfontconfig1 libfreetype6 libglib2.0-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0 libxcb-xfixes0 libxcb-xkb1 libxrender1 libxi6
+      # LibreOffice: the legacy doc/xls/ppt contract tests need it.
+      - name: LibreOffice (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y --no-install-recommends             libreoffice-writer libreoffice-calc libreoffice-impress
+      - name: LibreOffice (macOS)
+        if: runner.os == 'macOS'
+        run: brew install --cask libreoffice
+      - name: LibreOffice (Windows)
+        if: runner.os == 'Windows'
+        run: choco install libreoffice-fresh -y --no-progress
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
       - run: uv sync --locked
-      - run: uv run pytest
+      - name: Generate the doc/ppt fixtures (if absent)
+        shell: bash
+        run: |
+          if [ ! -f tests/fixtures/contract/rapport.doc ] ||              [ ! -f tests/fixtures/contract/presentation.ppt ]; then
+            uv run python -c "from tests.fixtures.generators.office import make_legacy_with_libreoffice as m; m()"
+          fi
+          ls tests/fixtures/contract/rapport.doc tests/fixtures/contract/presentation.ppt
+      # Short base temp: LibreOffice fails silently on Windows when its throw-away
+      # profile path exceeds ~150 characters.
+      - run: uv run pytest --basetemp="${{ runner.temp }}/pt"
 
   build:
     name: Portable build (${{ matrix.os }})
@@ -74,6 +94,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libegl1 libgl1 libopengl0 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
             libfontconfig1 libfreetype6 libglib2.0-0 libxcb-cursor0
+          # Runtime libraries of the bundled LibreOffice (deb tree, not installed).
+          sudo apt-get install -y --no-install-recommends             libxinerama1 libxrandr2 libcups2 libsm6 libice6 libx11-xcb1 libxext6             libcairo2 libnss3
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -81,7 +103,13 @@ jobs:
       - name: Export GLiNER to ONNX (when the script exists)
         if: hashFiles('packaging/export_gliner_onnx.py') != ''
         run: uv run python packaging/export_gliner_onnx.py
-      - name: Build, smoke-test and zip the portable folder
+      # Full build: LibreOffice (pinned, SHA-256 checked) is downloaded here, at build
+      # time, and bundled in the portable folder; the cache avoids re-downloading it.
+      - uses: actions/cache@v4
+        with:
+          path: build/libreoffice-cache
+          key: libreoffice-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packaging/libreoffice_bundle.py') }}
+      - name: Build, smoke-test (CLI batch, GUI start) and zip the portable folder
         run: uv run python packaging/build.py
       - uses: actions/upload-artifact@v4
         with:
