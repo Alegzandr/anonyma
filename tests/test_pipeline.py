@@ -148,6 +148,11 @@ def test_review_flow(tmp_path: Path, canary_config: Config, low_score_detector: 
 
     first = pipeline.apply(analysis, tmp_path / "o1")
     assert {r.status for r in first.results} == {DocumentStatus.NEEDS_REVIEW}
+    # Every « À revoir » says why, without the value (D365: problemes: [] before).
+    for r in first.results:
+        [issue] = [i for i in r.issues if i.code == "review.uncertain"]
+        assert issue.message.startswith("1 entité incertaine (Projet) masquée par précaution")
+        assert "zones : « " in issue.message and "lios" not in issue.message
 
     decisions = ReviewDecisions(
         confirmed_clusters={clusters[0].id}, manual=[ManualEntity("Bérénice", "PERSONNE")]

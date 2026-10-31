@@ -104,6 +104,10 @@ INCOMPLETE_CONTAINER_CODE = "container.incomplete"
 EMPTY_CONTAINER_CODE = "container.empty"
 #: Issue of a verified output in which residues were found (quarantined).
 RESIDUE_ISSUE = "verify.residue"
+#: Issue of a verified output holding uncertain entities, masked and to confirm.
+REVIEW_ISSUE = "review.uncertain"
+#: Zones (segment labels) named at most in a review issue, and their length.
+REVIEW_ZONES, REVIEW_ZONE_LENGTH = 3, 60
 EMPTY_CONTAINER = (
     "Aucun élément de ce fichier n'a pu être anonymisé (illisible, chiffré ou non pris en "
     "charge) : fichier non produit."
@@ -1209,6 +1213,42 @@ def _write_crashed(job: _WriteJob) -> DocumentResult:
     )
 
 
+def review_issue(job: _WriteJob, review_ids: set[str | None], tree_ids: set[str]) -> Issue:
+    """Why a file is « À revoir »: how many uncertain entities, of which types, in which
+    zones (segment labels, as in the residue reports): never a value."""
+    from anonyma.gui.labels import entity_type_label
+
+    segments = {(d.id, s.id): s for d in job.document.walk() for s in d.segments}
+    types: dict[str, set[str | None]] = {}
+    zones: list[str] = []
+    for e in job.entities:
+        if e.document_id not in tree_ids or e.cluster_id not in review_ids:
+            continue
+        types.setdefault(e.entity_type, set()).add(e.cluster_id)
+        segment = segments.get((e.document_id, e.segment_id))
+        label = " ".join((segment.context.label if segment else "").split())[:REVIEW_ZONE_LENGTH]
+        if label and label not in zones:
+            zones.append(label)
+    count = len(review_ids)
+    kinds = ", ".join(
+        f"{entity_type_label(t)} ×{len(c)}" if len(c) > 1 else entity_type_label(t)
+        for t, c in sorted(types.items(), key=lambda item: (-len(item[1]), item[0]))
+    )
+    what = plural(count, "entité incertaine", "entités incertaines")
+    masked = "masquée" if count < 2 else "masquées"
+    where = ""
+    if zones:
+        shown = ", ".join(f"« {z} »" for z in zones[:REVIEW_ZONES])
+        more = f" et {len(zones) - REVIEW_ZONES} autre(s)" if len(zones) > REVIEW_ZONES else ""
+        where = f" ; zones : {shown}{more}"
+    return Issue(
+        Severity.WARNING,
+        REVIEW_ISSUE,
+        f"{what} ({kinds}) {masked} par précaution : à confirmer ou rejeter dans la revue "
+        f"avant diffusion{where}.",
+    )
+
+
 def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[DocumentStatus, Path]:
     """Verify ``written`` and fill ``result`` (counters, issues). Returns the status of
     the tree and the folder the output belongs in: the output folder, or the
@@ -1230,6 +1270,8 @@ def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[Docu
         for c in review_ids
         if c is not None
     )
+    if review_ids:
+        result.issues.append(review_issue(job, review_ids, tree_ids))
     quarantine = quarantine_dir(job.output_dir)
     if not verification.clean:
         if verification.verified:
