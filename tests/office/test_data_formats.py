@@ -96,7 +96,8 @@ def test_invalid_json_fails(tmp_path: Path, canary_config: Config) -> None:
 def test_xml_output_keeps_structure(tmp_path: Path, canary_config: Config) -> None:
     _, output = run_pipeline(FIXTURES / "dossier.xml", tmp_path, canary_config)
     data = output.read_bytes()
-    assert data.startswith(b"<?xml version='1.0' encoding='ISO-8859-1'?>")
+    # The declaration is written back as in the source (quotes, encoding name).
+    assert data.startswith(b'<?xml version="1.0" encoding="ISO-8859-1"?>\n')
     text = data.decode("iso-8859-1")
     # Internal entities expanded, internal subset dropped.
     assert "<!DOCTYPE" not in text and "&org;" not in text
