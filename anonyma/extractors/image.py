@@ -17,6 +17,7 @@ from typing import Any
 
 from PIL import ExifTags, Image, ImageOps, IptcImagePlugin
 
+from anonyma.extractors._empty import empty_file
 from anonyma.extractors._raster import BARCODE_LABEL, code_boxes, decode_codes, recognize
 from anonyma.models import (
     Document,
@@ -300,6 +301,8 @@ class ImageExtractor(Extractor):
         return sniff_image(head)
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         with Image.open(source) as image:
             for i, (label, text) in enumerate(metadata_items(image)):
                 document.segments.append(

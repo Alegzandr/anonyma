@@ -23,6 +23,7 @@ from anonyma.extractors._archive import (
     empty_directories,
     failed_child,
 )
+from anonyma.extractors._empty import empty_file
 from anonyma.models import (
     ArchiveBombError,
     Document,
@@ -96,6 +97,8 @@ class SevenZipExtractor(Extractor):
         return "7z" if head.startswith(SEVEN_ZIP_MAGIC) else None
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         try:
             archive = py7zr.SevenZipFile(source, "r")
         except PasswordRequired:

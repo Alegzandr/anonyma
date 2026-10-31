@@ -48,12 +48,23 @@ from pathlib import PurePosixPath
 
 from anonyma.codec import chunk_text, decode_bytes
 from anonyma.extractors._html import (
+    ATTR,
     HtmlSource,
     build_segments,
     data_uri_value,
     extension_for,
     mime_for,
     plan_edits,
+)
+from anonyma.extractors._mailheaders import (
+    CONTENT_ID_HEADER,
+    content_id_key,
+    exposed_text,
+    map_cid_url,
+    new_content_id,
+    safe_header,
+    thread_depth,
+    with_hidden_tail,
 )
 from anonyma.models import (
     ChildOutput,
@@ -392,7 +403,7 @@ def _extract_part(part: Message, path: str, state: _Extraction) -> None:
         lname = name.lower()
         if lname in DROPPED_HEADERS or lname in STRUCTURAL_HEADERS:
             continue
-        text = decode_header_value(str(value))
+        text = exposed_text(name, decode_header_value(str(value)))
         if not text.strip():
             continue
         document.segments.append(
@@ -487,6 +498,8 @@ class _Writing:
     newline: str
     headers: dict[str, list[Segment]]
     bodies: dict[str, list[Segment]]
+    #: Original Content-ID (comparable form) -> regenerated one.
+    content_ids: dict[str, str] = field(default_factory=dict)
     issues: list[Issue] = field(default_factory=list)
 
 
@@ -508,6 +521,7 @@ def write_mime(
             target = headers if rest.startswith(HEADER) else bodies
             target.setdefault(path, []).append(segment)
     state = _Writing(document, plan, child_outputs, newline, headers, bodies)
+    state.content_ids = collect_content_ids(message)
     out = bytearray()
     unixfrom = message.get_unixfrom()
     if unixfrom:
@@ -524,23 +538,70 @@ def write_mime(
     return bytes(out), state.issues
 
 
+def collect_content_ids(message: Message) -> dict[str, str]:
+    """Regenerated Content-IDs of the parts of ``message`` (attached messages
+    excluded: they are written as documents of their own), in document order."""
+    found: dict[str, str] = {}
+
+    def walk(part: Message) -> None:
+        value = part.get(CONTENT_ID_HEADER)
+        if value is not None:
+            key = content_id_key(decode_header_value(str(value)))
+            if key and key not in found:
+                found[key] = new_content_id(len(found) + 1)
+        if part.get_content_maintype() == "multipart" and part.is_multipart():
+            payload = part.get_payload()
+            for sub in payload if isinstance(payload, list) else []:
+                if isinstance(sub, Message):
+                    walk(sub)
+
+    walk(message)
+    return found
+
+
 def _header_lines(part: Message, path: str, state: _Writing) -> list[str]:
     by_index = {int(s.locator[2]): s for s in state.headers.get(path, [])}
     lines: list[str] = []
     nl = state.newline
-    for index, (name, value) in enumerate(part.items()):
+    items = part.items()
+    depth = thread_depth((name, decode_header_value(str(value))) for name, value in items)
+    for index, (name, value) in enumerate(items):
         lname = name.lower()
         if lname in DROPPED_HEADERS or lname in STRUCTURAL_HEADERS:
             continue
+        if lname == CONTENT_ID_HEADER:
+            # Regenerated whatever the plan says: the cid: URLs of the HTML bodies
+            # follow the same mapping (inline images keep working).
+            key = content_id_key(decode_header_value(str(value)))
+            new_id = state.content_ids.get(key) or new_content_id(0)
+            lines.append(f"{name}: <{new_id}>{nl}")
+            continue
         segment = by_index.get(index)
-        if segment is not None and state.plan.for_segment(segment.id):
-            new = state.plan.apply(segment)
+        replacements = state.plan.for_segment(segment.id) if segment is not None else []
+        if segment is not None and replacements:
+            decoded = decode_header_value(str(value))
+            if segment.text != decoded:  # a neutral date was left out on extraction
+                new = with_hidden_tail(decoded, segment.text, state.plan.apply(segment))
+            else:
+                new = safe_header(name, segment.text, replacements, depth)
             lines.append(fold_header(name, encode_header_text(new), nl))
         else:
             raw = str(value)
             raw = re.sub(r"\r?\n", nl, raw)
             lines.append(f"{name}: {raw.lstrip(' ')}{nl}" if raw else f"{name}:{nl}")
     return lines
+
+
+def cid_values(source: HtmlSource, content_ids: Mapping[str, str]) -> dict[int, str]:
+    """Whole-value rewrites of the ``cid:`` URLs of ``source`` (unit -> new URL)."""
+    values: dict[int, str] = {}
+    for unit in source.units:
+        if unit.kind != ATTR:
+            continue
+        url = map_cid_url(source.decoded(unit.index).text, content_ids)
+        if url is not None:
+            values[unit.index] = url
+    return values
 
 
 def _quote_param(value: str) -> str:
@@ -625,6 +686,9 @@ def _render_text(
                 if output is None or output.path is None
                 else data_uri_value(mime_for(output.name), output.path.read_bytes())
             )
+        for unit, url in cid_values(source, state.content_ids).items():
+            edits.pop(unit, None)
+            values[unit] = url
         new_text = source.rewrite(edits, values)
     else:
         new_text = _apply_chunks(text, segments, state.plan)

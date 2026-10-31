@@ -73,3 +73,26 @@ def test_office_part_with_doctype_fails_closed(tmp_path: Path, canary_config: Co
     status, output = _run(tmp_path, "rapport.docx", buffer.getvalue(), canary_config)
     assert status is DocumentStatus.FAILED
     assert output == b""
+
+
+def test_declaration_and_top_level_layout_are_kept(tmp_path: Path, canary_config: Config) -> None:
+    xml = (
+        '<?xml version="1.0" encoding="iso-8859-1" standalone="yes"?>\r\n'
+        f"<?auteur {CANARY_PERSON}?>\r\n"
+        "<!-- export -->\r\n\r\n"
+        '<export>\r\n  <salarie nom="Quintavalle">texte</salarie>\r\n</export>\r\n'
+        "<!-- fin -->\r\n"
+    ).encode("iso-8859-1")
+    status, output = _run(tmp_path, "export.xml", xml, canary_config)
+    assert status is DocumentStatus.ANONYMIZED
+    assert output == (
+        '<?xml version="1.0" encoding="iso-8859-1" standalone="yes"?>\r\n'
+        "<?auteur [PERSONNE_001]?>\r\n"
+        "<!-- export -->\r\n\r\n"
+        '<export>\r\n  <salarie nom="[PERSONNE_001]">texte</salarie>\r\n</export>\r\n'
+        "<!-- fin -->\r\n"
+    ).encode("iso-8859-1")
+    # Without declaration nor trailing newline: nothing added.
+    (tmp_path / "b").mkdir()
+    status, output = _run(tmp_path / "b", "b.xml", b"<a>Quintavalle</a>", canary_config)
+    assert output == b"<a>[PERSONNE_001]</a>"

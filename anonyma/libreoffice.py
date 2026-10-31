@@ -156,6 +156,12 @@ def _from_setting(value: str) -> Path | None:
     return None
 
 
+def configured_soffice(value: str) -> Path | None:
+    """The executable a ``libreoffice_path`` setting points to (file or install
+    folder), or None."""
+    return _from_setting(value) if value.strip() else None
+
+
 def find_soffice(config: Config) -> Path | None:
     """LibreOffice executable, or None when disabled or not installed.
 

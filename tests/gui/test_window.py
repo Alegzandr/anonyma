@@ -176,3 +176,27 @@ def test_qt_texts_in_french(qapp: Any) -> None:
     assert install_french(qapp)
     assert QLocale().language() is QLocale.Language.French
     assert QCoreApplication.translate("QPlatformTheme", "Cancel") == "Annuler"
+
+
+def test_pending_review_question_agrees() -> None:
+    from anonyma.gui.pages.processing import pending_review_question
+
+    assert pending_review_question(1).startswith("1\u00a0entité incertaine n'a pas été revue.")
+    assert pending_review_question(3).startswith("3\u00a0entités incertaines n'ont pas été revues.")
+
+
+def test_status_badges_are_not_clipped(window: MainWindow) -> None:
+    from PySide6.QtGui import QFontMetrics
+
+    from anonyma.gui.widgets import badge_column_width
+
+    longest = "Non pris en charge"
+    for view, column in (
+        (window.report.files_table, 2),
+        (window.report.failures_table, 1),
+        (window.review.tree, 2),
+    ):
+        view.ensurePolished()
+        needed = QFontMetrics(view.font()).horizontalAdvance(longest) + 24  # pill padding
+        assert view.columnWidth(column) >= needed
+        assert view.columnWidth(column) == badge_column_width(view, [longest])

@@ -59,6 +59,7 @@ from anonyma.gui.itemmodels import (
 )
 from anonyma.gui.labels import STATUS_LEVELS, detector_label, entity_type_label, status_label
 from anonyma.gui.preview import (
+    STATE_LABELS,
     EntityRow,
     MentionKey,
     RowState,
@@ -87,6 +88,7 @@ from anonyma.gui.widgets import (
     EmptyState,
     KeyButton,
     button,
+    fit_badge_column,
     legend_html,
     muted,
     page_header,
@@ -96,6 +98,7 @@ from anonyma.gui.widgets import (
 from anonyma.models import (
     BBox,
     Document,
+    DocumentStatus,
     Entity,
     ReplacementMode,
     ReviewStatus,
@@ -272,8 +275,7 @@ class ReviewPage(QWidget):
         header = self.queue.header()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        self.queue.setColumnWidth(1, 108)
+        fit_badge_column(self.queue, 1, STATE_LABELS.values())
         self.queue.selectionModel().currentChanged.connect(self._queue_current_changed)
         layout.addWidget(self.queue, 1)
         self.rows_label = muted("")
@@ -341,9 +343,8 @@ class ReviewPage(QWidget):
         tree_header.setStretchLastSection(False)
         tree_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         tree_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        tree_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.tree.setColumnWidth(2, 110)
         self.tree.setItemDelegateForColumn(2, BadgeDelegate(self.tree))
+        fit_badge_column(self.tree, 2, [status_label(status) for status in DocumentStatus])
         self.tree.currentItemChanged.connect(self._tree_changed)
         return self.tree
 

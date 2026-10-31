@@ -35,6 +35,7 @@ from anonyma.gui.widgets import (
     Banner,
     EmptyState,
     button,
+    fit_badge_column,
     left_header,
     muted,
     page_header,
@@ -246,6 +247,7 @@ class ReportPage(QWidget):
             ["Fichier", "Format", "Statut", "Occurrences", "Résidus", "À revoir"]
         )
         self.files_table.setItemDelegateForColumn(2, BadgeDelegate(self.files_table))
+        fit_badge_column(self.files_table, 2, STATUS_LABELS.values())
         self.files_table.doubleClicked.connect(lambda _i: self.open_selected_output())
         self.types_table = _table(["Type", "Code", "Occurrences"])
 
@@ -256,6 +258,7 @@ class ReportPage(QWidget):
         q_layout.addWidget(self.quarantine_hint)
         self.quarantine_table = _table(["Fichier", "Statut", "Raison"])
         self.quarantine_table.setItemDelegateForColumn(1, BadgeDelegate(self.quarantine_table))
+        fit_badge_column(self.quarantine_table, 1, STATUS_LABELS.values())
         self.quarantine_table.setWordWrap(True)
         q_layout.addWidget(self.quarantine_table, 1)
         q_actions = QHBoxLayout()
@@ -293,6 +296,7 @@ class ReportPage(QWidget):
 
         self.failures_table = _table(["Fichier", "Statut", "Problèmes"])
         self.failures_table.setItemDelegateForColumn(1, BadgeDelegate(self.failures_table))
+        fit_badge_column(self.failures_table, 1, STATUS_LABELS.values())
         self.failures_table.setWordWrap(True)
         self.failures_tab = _Tab(
             self.failures_table, "Aucun échec", "Tous les fichiers ont pu être traités."

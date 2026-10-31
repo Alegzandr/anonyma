@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QPushButton,
     QStyle,
@@ -30,6 +31,8 @@ from PySide6.QtWidgets import (
     QStyleOptionButton,
     QStyleOptionViewItem,
     QStylePainter,
+    QTableView,
+    QTreeView,
     QVBoxLayout,
     QWidget,
 )
@@ -397,6 +400,26 @@ class BadgeDelegate(QStyledItemDelegate):
     def sizeHint(self, option: QStyleOptionViewItem, index: IndexLike) -> QSize:
         size = super().sizeHint(option, index)
         return QSize(size.width() + 20, max(size.height(), 26))
+
+
+#: Horizontal room a pill needs around its text: inner padding (16), left offset
+#: (4) and a margin on the right so that it never touches the next column.
+_PILL_ROOM = 32
+
+
+def badge_column_width(view: QAbstractItemView, labels: Iterable[str]) -> int:
+    """Width of a badge column whose pills must show the longest of ``labels`` in
+    full (« Non pris en charge »), in the font the view will paint with."""
+    view.ensurePolished()  # the application style sheet sets the font size
+    metrics = QFontMetrics(view.font())
+    return max((metrics.horizontalAdvance(t) for t in labels), default=0) + _PILL_ROOM
+
+
+def fit_badge_column(view: QTableView | QTreeView, column: int, labels: Iterable[str]) -> None:
+    """Give ``column`` of ``view`` a fixed width that fits every badge of ``labels``."""
+    header = view.horizontalHeader() if isinstance(view, QTableView) else view.header()
+    header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
+    header.resizeSection(column, badge_column_width(view, labels))
 
 
 def legend_html(types: Iterable[str]) -> str:

@@ -17,7 +17,9 @@ from pathlib import Path, PurePosixPath
 
 from anonyma.codec import chunk_text
 from anonyma.extractors._cfb import read_cfb
+from anonyma.extractors._empty import empty_file
 from anonyma.extractors._html import HtmlSource, build_segments, extension_for
+from anonyma.extractors._mailheaders import exposed_text
 from anonyma.extractors._mime import DROPPED_HEADERS, decode_header_value
 from anonyma.extractors._msgfile import (
     ATTACH_BY_VALUE,
@@ -137,7 +139,7 @@ def item_segments(item: TextItem) -> list[Segment]:
     if item.kind == "headers":
         segments = []
         for i, (name, value) in enumerate(split_headers(item.text)[1]):
-            text = decode_header_value(value)
+            text = exposed_text(name, decode_header_value(value))
             if name.lower() in DROPPED_HEADERS or not text.strip():
                 continue
             segments.append(
@@ -181,6 +183,8 @@ class MsgExtractor(Extractor):
     extensions = {".msg": "msg"}
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         _, entries = read_cfb(
             source, lambda size: ctx.budget.consume(size, depth=ctx.depth, files=0)
         )

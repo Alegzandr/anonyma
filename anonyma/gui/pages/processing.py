@@ -66,6 +66,16 @@ def duration(seconds: float) -> str:
     return f"{s // 3600}{NBSP}h{NBSP}{s % 3600 // 60:02d}{NBSP}min"
 
 
+def pending_review_question(count: int) -> str:
+    """Confirmation asked before applying with uncertain entities left unreviewed."""
+    entities = plural(count, "entité incertaine n'a", "entités incertaines n'ont")
+    reviewed = "revue" if abs(count) < 2 else "revues"
+    return (
+        f"{entities} pas été {reviewed}. Les fichiers concernés seront marqués « À revoir ». "
+        "Appliquer quand même ?"
+    )
+
+
 class ProcessingPage(QWidget):
     review_requested = Signal()
     report_requested = Signal()
@@ -485,8 +495,7 @@ class ProcessingPage(QWidget):
         pending = c.pending_review_count()
         if pending and not dialogs.confirm(
             self,
-            f"{plural(pending, "entité incertaine n'a", "entités incertaines n'ont")} pas été "
-            "revues. Les fichiers concernés seront marqués « À revoir ». Appliquer quand même ?",
+            pending_review_question(pending),
             title=APPLY_LABEL,
             ok_label="Appliquer",
         ):

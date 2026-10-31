@@ -295,6 +295,8 @@ def keeps(entity_type: str, value: str, config: Config) -> bool:
     addresses (generic mailbox of a kept domain) and name-like values (person,
     place, login...) that are a whitelisted organization name can be kept.
     """
+    if is_mail_placeholder(value):
+        return True
     policy = config.organization_policy
     if policy == POLICY_ALL or not value.strip():
         return False
@@ -316,6 +318,24 @@ def keeps(entity_type: str, value: str, config: Config) -> bool:
         known = bool(white) and white.matches_name(value)
         return known and _name_kept(value, white, black, policy)
     return False
+
+
+#: Placeholders of the mail writers (``anonyma.extractors._mailheaders``): a tag-like
+#: local part in the reserved ``.invalid`` domain (``EMAIL_001@anonyme.invalid``,
+#: ``<ID_MESSAGE_001@anonyme.invalid>``, ``cid:CONTENU_001@anonyme.invalid``): they
+#: hold no original value.
+_PLACEHOLDER_ADDRESS = re.compile(
+    r"(?:mailto:|cid:)?<?[A-Z][A-Z_]{1,40}_(?:[0-9]{3,}|(?=[A-Z0-9]{0,4}[0-9])[A-Z0-9]{4,5})"
+    r"@anonyme\.invalid>?"
+)
+
+
+def is_mail_placeholder(value: str) -> bool:
+    """``value`` is a placeholder written by the mail writers (never a residue)."""
+    text = value.strip()
+    if text.strip("<>\"'").lower() == "anonyme.invalid":  # the domain alone (URL)
+        return True
+    return bool(_PLACEHOLDER_ADDRESS.fullmatch(text))
 
 
 _GENERIC_MAILBOXES = GENERIC_LOCAL_PARTS | {

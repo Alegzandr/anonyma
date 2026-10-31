@@ -71,7 +71,7 @@ from anonyma.models import (
     apply_replacements,
 )
 from anonyma.registry import register_writer
-from anonyma.writers.image import redaction_boxes
+from anonyma.writers.image import page_redaction_boxes
 
 KEPT_ANNOTS = frozenset({pymupdf.PDF_ANNOT_LINK, pymupdf.PDF_ANNOT_WIDGET})
 REMOVED_LINKS = frozenset(
@@ -667,11 +667,12 @@ class PdfWriter(Writer):
         boxes: dict[str, tuple[int, BBox, tuple[BBox, ...]]] = document.properties.get(
             "pdf_image_boxes", {}
         )
-        per_image: dict[int, list[tuple[Segment, ReplacementPlan]]] = {}
+        per_image: dict[int, list[Segment]] = {}
+        replaced: set[int] = set()
         for seg in document.segments:
             entry = boxes.get(seg.id)
             reps = plan.for_segment(seg.id)
-            if entry is None or not reps:
+            if entry is None:
                 continue
             xref, line_box, char_boxes = entry
             kind = seg.context.kind
@@ -684,19 +685,18 @@ class PdfWriter(Writer):
                 context=SegmentContext(kind, bbox=line_box),
                 char_boxes=char_boxes,
             )
-            per_image.setdefault(xref, []).append(
-                (pixel_seg, ReplacementPlan(plan.document_id, {seg.id: reps}))
-            )
-        for xref, entries in per_image.items():
+            per_image.setdefault(xref, []).append(pixel_seg)
+            if reps:
+                replaced.add(xref)
+        for xref, pixel_segs in per_image.items():
+            if xref not in replaced:
+                continue
             storage = image_kind(doc, xref)
             image = image_pixels(doc, xref)
             canvas = image
-            regions: list[tuple[BBox, str]] = []
-            for pixel_seg, sub_plan in entries:
-                if pixel_seg.context.kind is SegmentKind.BARCODE and pixel_seg.context.bbox:
-                    regions.append((pixel_seg.context.bbox, ""))
-                else:
-                    regions.extend(redaction_boxes(pixel_seg, sub_plan))
+            # Lines without replacement are passed too: a replaced word split by
+            # the OCR engine over two boxes is masked in both.
+            regions = page_redaction_boxes(pixel_segs, plan)
             paint_boxes(canvas, regions, ctx.mode)
             store_image_pixels(doc, xref, canvas, storage)
         blanked = 0

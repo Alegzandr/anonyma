@@ -6,6 +6,7 @@ from pathlib import Path
 
 from anonyma import libreoffice
 from anonyma.extractors import _ooxml
+from anonyma.extractors._empty import empty_file
 from anonyma.extractors._legacy import (
     FLAVORS,
     LIBREOFFICE_REQUIRED,
@@ -52,6 +53,8 @@ class LegacyOfficeExtractor(Extractor):
     }
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         data = source.read_bytes()
         for field, value in ole_metadata(data):
             document.segments.append(

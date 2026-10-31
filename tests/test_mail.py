@@ -338,14 +338,15 @@ def test_msg_native_output_structure(tmp_path: Path, canary_config: Config) -> N
     msg = extract_msg.openMsg(str(output), strict=False)
     try:
         assert msg.subject == "Dossier [PERSONNE_001]"
-        assert msg.sender == "[PERSONNE_001] <[EMAIL_001]>"
+        assert msg.sender == '"[PERSONNE_001]" <EMAIL_001@anonyme.invalid>'
         assert "[PERSONNE_001]" in (msg.body or "")
         assert b"[PERSONNE_001]" in (msg.htmlBody or b"")
         assert "X-Originating-Email: [EMAIL_001]" in (msg.headerText or "")
         # The recipient is not a canary but is found by the regular detectors.
         [(name, address)] = [(r.name, r.email) for r in msg.recipients]
         assert "Fauxnom" not in name and "fauxnom" not in address
-        assert name.startswith("[PERSONNE_") and address.startswith("[EMAIL_")
+        assert name.startswith("[PERSONNE_") and address.startswith("EMAIL_")
+        assert address.endswith("@anonyme.invalid")  # a valid address carrying the tag
         data_att, embedded = msg.attachments
         assert data_att.longFilename == "CV [PERSONNE_001].txt"
         assert data_att.data == b"CV de [PERSONNE_001]\r\n[EMAIL_001]\r\n"
@@ -467,6 +468,6 @@ def test_mbox_round_trip(tmp_path: Path, canary_config: Config) -> None:
     ).encode()
     output, _ = _run(tmp_path, "boite.mbox", data, canary_config)
     out = output.read_bytes()
-    assert len(re.findall(rb"From \[EMAIL_\d{3}\] Mon Jan  5 1", out)) == 2
+    assert len(re.findall(rb"From EMAIL_\d{3}@anonyme\.invalid Mon Jan  5 1", out)) == 2
     assert b"uintavalle" not in out.lower()
     assert len(split_mbox(out)) == 2

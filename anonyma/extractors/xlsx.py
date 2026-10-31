@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from anonyma.extractors import _ooxml
+from anonyma.extractors._empty import empty_file
 from anonyma.extractors._ooxml_flavors import XlsxFlavor
 from anonyma.extractors._zip import is_zip
 from anonyma.models import Document, ExtractionContext, Extractor
@@ -23,4 +24,6 @@ class XlsxExtractor(Extractor):
         return None
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         _ooxml.extract(source, document, ctx, XlsxFlavor())

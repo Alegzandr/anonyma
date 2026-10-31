@@ -759,3 +759,20 @@ def test_inline_extraction_sees_the_cancel_token(tmp_path: Path, canary_config: 
     analysis = pipeline.analyze([inputs / "a.zip"], cancel=_CancelInsideItem())
     pipeline.close(analysis)
     assert [d.status for d in analysis.documents] == [DocumentStatus.CANCELLED]
+
+
+@pytest.mark.parametrize(
+    "name", ["vide.docx", "vide.xlsx", "vide.pptx", "vide.odt", "vide.zip", "vide.pdf", "vide.msg"]
+)
+def test_empty_binary_file_is_reported_as_empty(
+    tmp_path: Path, canary_config: Config, name: str
+) -> None:
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / name).write_bytes(b"")
+    top = Pipeline(canary_config).run([src / name], tmp_path / "out").results[0]
+    assert top.status is DocumentStatus.FAILED
+    assert [i.code for i in top.issues if i.severity is Severity.ERROR] == ["extract.empty"]
+    [message] = [i.message for i in top.issues if i.code == "extract.empty"]
+    assert message.startswith("Fichier vide") and "Error" not in message
+    assert not (tmp_path / "out" / name).exists()

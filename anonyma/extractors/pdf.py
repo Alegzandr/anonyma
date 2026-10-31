@@ -39,6 +39,7 @@ import pymupdf
 from PIL import Image
 
 from anonyma.codec import chunk_text
+from anonyma.extractors._empty import empty_file
 from anonyma.extractors._pdf import (
     MIN_IMAGE_SIDE,
     MIN_TEXT_CHARS,
@@ -427,6 +428,8 @@ class PdfExtractor(Extractor):
         return "pdf" if b"%PDF-" in head[:1024] else None
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         try:
             doc, layers = open_document(source)
         except PermissionError:
