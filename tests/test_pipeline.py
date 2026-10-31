@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
@@ -22,11 +24,13 @@ from anonyma.pipeline import (
     CancelToken,
     OutputDirError,
     Pipeline,
+    ProgressEvent,
     collect_inputs,
     is_quarantined,
     quarantine_dir,
     resolve_decisions,
     validate_output_dir,
+    walk_inputs,
 )
 from anonyma.store import InMemoryMappingStore
 from anonyma.writers.text import TextWriter
@@ -361,26 +365,65 @@ def test_possible_residue_means_review_not_quarantine(
 
 
 def _crash_in_worker(path: Path, *rest: object) -> object:
-    """Simulates a native crash: kills the worker process abruptly."""
+    """Simulates native crashes: the first item run kills its worker (and the pool);
+    the "poison" item kills every worker it runs in."""
     import os
 
-    if os.environ.get("ANONYMA_TEST_PARENT_PID") != str(os.getpid()):
+    marker = path.parent / "premier_plantage"
+    if path.stem == "poison" or not marker.exists():
+        marker.write_text("x", encoding="utf-8")
         os._exit(3)
-    return path
+    return path.name, os.getpid()
 
 
-def test_broken_pool_finishes_inline(
-    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+def test_broken_pool_retries_in_fresh_workers_never_inline(
+    tmp_path: Path, canary_config: Config
 ) -> None:
     import os
 
-    monkeypatch.setenv("ANONYMA_TEST_PARENT_PID", str(os.getpid()))
     canary_config.workers = 2
     pipeline = Pipeline(canary_config)
-    jobs = [(tmp_path / f"{i}.txt",) for i in range(3)]
-    events: list[object] = []
-    results = pipeline._map(_crash_in_worker, jobs, "analyse", events.append, None)
-    assert results == [j[0] for j in jobs]
+    jobs = [(tmp_path / f"{n}.txt",) for n in ("a", "poison", "b", "c")]
+    events: list[ProgressEvent] = []
+    results = pipeline._map(
+        _crash_in_worker, jobs, "analyse", events.append, None, lambda path: ("echec", 0)
+    )
+    names = [r[0] for r in results if r is not None]
+    assert names == ["a.txt", "echec", "b.txt", "c.txt"]
+    assert all(r[1] != os.getpid() for r in results if r is not None and r[0] != "echec")
+    assert events[-1].done == 4
+
+
+def test_crashing_document_fails_with_anonymized_name(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma import pipeline as pipeline_module
+
+    canary_config.workers = 2
+    inputs = tmp_path / "in"
+    inputs.mkdir()
+    (inputs / f"{CANARY_PERSON}.txt").write_text(f"Courrier de {CANARY_PERSON}.", "utf-8")
+    (inputs / "b.txt").write_text("Bonjour.", "utf-8")
+    pipeline = Pipeline(canary_config)
+    analysis = pipeline.analyze([inputs])
+    # Writing crashes every worker: the documents fail, nothing runs in this process.
+    monkeypatch.setattr(pipeline, "_pool", _always_broken)
+    monkeypatch.setattr(pipeline, "_serial", lambda fn, jobs, indices, cancel, done: indices[0])
+    try:
+        result = pipeline.apply(analysis, tmp_path / "out")
+    finally:
+        pipeline.close(analysis)
+    assert {r.status for r in result.results} == {DocumentStatus.FAILED}
+    assert all("uintavalle" not in r.output_name.casefold() for r in result.results)
+    assert all(i.code == "worker.crash" for r in result.results for i in r.issues)
+    assert not (tmp_path / "out").exists() or not any((tmp_path / "out").iterdir())
+    assert pipeline_module.CRASH_MESSAGE
+
+
+def _always_broken(*args: object, **kwargs: object) -> None:
+    from concurrent.futures.process import BrokenProcessPool
+
+    raise BrokenProcessPool("test")
 
 
 def test_job_title_is_verified_in_its_own_file_only(tmp_path: Path) -> None:
@@ -658,3 +701,61 @@ def test_quarantine_folder_must_not_overlap_the_inputs(tmp_path: Path) -> None:
     inputs.mkdir()
     with pytest.raises(OutputDirError):
         validate_output_dir([inputs], tmp_path / "sortie")
+
+
+def _dir_link(link: Path, target: Path) -> None:
+    """A junction on Windows (no privilege needed), a symbolic link elsewhere."""
+    if sys.platform == "win32":
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+def test_links_in_input_folders_are_never_followed(tmp_path: Path, canary_config: Config) -> None:
+    outside = tmp_path / f"Dossier {CANARY_PERSON}"
+    outside.mkdir()
+    (outside / "secret.txt").write_text(f"Courrier de {CANARY_PERSON}.", encoding="utf-8")
+    folder = tmp_path / "entree"
+    (folder / "sous").mkdir(parents=True)
+    (folder / "sous" / "a.txt").write_text("Bonjour.", encoding="utf-8")
+    _dir_link(folder / "lien", outside)
+    with contextlib.suppress(OSError):  # file links need a privilege on Windows
+        (folder / "fichier.txt").symlink_to(outside / "secret.txt")
+
+    files, links = walk_inputs([folder])
+    assert [n for _, n in files] == ["entree/sous/a.txt"]
+    assert "entree/lien" in [n for _, n in links]
+    result = Pipeline(canary_config).run([folder], tmp_path / "out")
+    by_status = {r.status for r in result.results}
+    assert DocumentStatus.UNSUPPORTED in by_status
+    skipped = [r for r in result.results if r.status is DocumentStatus.UNSUPPORTED]
+    for r in skipped:
+        assert [i.code for i in r.issues] == ["input.link"]
+        assert "uintavalle" not in r.output_name.casefold()
+        assert all("uintavalle" not in i.message.casefold() for i in r.issues)
+    written = [p for p in (tmp_path / "out").rglob("*") if p.is_file()]
+    assert [p.name for p in written] == ["a.txt"]
+
+
+class _CancelInsideItem(CancelToken):
+    """Not cancelled between items, but cancelled once an item is being read."""
+
+    def check(self) -> None:
+        from concurrent.futures import CancelledError
+
+        raise CancelledError()
+
+
+def test_inline_extraction_sees_the_cancel_token(tmp_path: Path, canary_config: Config) -> None:
+    import zipfile
+
+    inputs = tmp_path / "in"
+    inputs.mkdir()
+    with zipfile.ZipFile(inputs / "a.zip", "w") as archive:
+        archive.writestr("x.txt", "Bonjour.")
+    pipeline = Pipeline(canary_config)
+    analysis = pipeline.analyze([inputs / "a.zip"], cancel=_CancelInsideItem())
+    pipeline.close(analysis)
+    assert [d.status for d in analysis.documents] == [DocumentStatus.CANCELLED]

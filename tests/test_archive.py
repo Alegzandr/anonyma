@@ -183,3 +183,53 @@ def test_7z_encrypted_headers(tmp_path: Path, canary_config: Config) -> None:
     doc = extract_file(path, "h.7z", canary_config, tmp_path / "w")
     assert doc.status is DocumentStatus.FAILED
     assert [i.code for i in doc.issues] == ["archive.encrypted"]
+
+
+# -- memory: sizes charged before anything is materialised -------------------------
+
+
+def test_pdf_embedded_file_is_charged_before_it_is_read(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pymupdf
+
+    pdf = pymupdf.open()
+    pdf.new_page().insert_text((72, 72), "Bonjour.")
+    pdf.embfile_add("gros.bin", os.urandom(50_000), filename="gros.bin")
+    data = pdf.tobytes()
+
+    def never(*args: object) -> bytes:
+        raise AssertionError("embedded file read beyond the budget")
+
+    monkeypatch.setattr(pymupdf.Document, "embfile_get", never)
+    canary_config.limits = ArchiveLimits(max_total_bytes=10_000)
+    top = _run(tmp_path, "doc.pdf", data, canary_config)
+    assert top.status is DocumentStatus.FAILED
+    assert "archive.bomb" in [i.code for i in top.issues]
+
+
+def test_compound_file_streams_are_charged_before_they_are_read() -> None:
+    from anonyma.extractors._cfb import read_cfb
+
+    fixture = Path(__file__).parent / "fixtures" / "contract" / "message.msg"
+    sizes: list[int] = []
+    _, entries = read_cfb(fixture, sizes.append)
+    assert sum(sizes) == sum(len(e.data or b"") for e in entries if not e.storage) > 0
+
+
+def test_images_beyond_the_pixel_cap_are_refused(
+    tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PIL import Image
+
+    from anonyma import paths
+
+    paths.limit_images()
+    assert Image.MAX_IMAGE_PIXELS == paths.MAX_IMAGE_PIXELS
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1_000)
+    buffer = io.BytesIO()
+    Image.new("RGB", (40, 40), "white").save(buffer, "PNG")  # 1 600 pixels: a warning
+    with pytest.raises(Image.DecompressionBombWarning):
+        Image.open(io.BytesIO(buffer.getvalue()))
+    top = _run(tmp_path, "image.png", buffer.getvalue(), canary_config)
+    assert top.status is DocumentStatus.FAILED

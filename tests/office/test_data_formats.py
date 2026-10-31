@@ -98,7 +98,9 @@ def test_xml_output_keeps_structure(tmp_path: Path, canary_config: Config) -> No
     data = output.read_bytes()
     assert data.startswith(b"<?xml version='1.0' encoding='ISO-8859-1'?>")
     text = data.decode("iso-8859-1")
-    assert "<!DOCTYPE dossier [" in text and "&org;" in text
+    # Internal entities expanded, internal subset dropped.
+    assert "<!DOCTYPE" not in text and "&org;" not in text
+    assert "<x:organisation>[ORGANISATION_001]</x:organisation>" in text
     assert "<![CDATA[Vu avec <b>[PERSONNE_001]</b> & co]]>" in text
     assert 'auteur="[PERSONNE_001]"' in text
     assert '<?traitement responsable="[PERSONNE_001]"?>' in text
@@ -120,4 +122,15 @@ def test_xml_external_entities_are_not_resolved(tmp_path: Path, canary_config: C
     assert doc.status is DocumentStatus.EXTRACTED
     joined = " ".join(s.text for s in doc.segments)
     assert "CONTENU_SECRET" not in joined
-    assert "aaaaaaaaaaaaaaaaaaaa" not in joined
+    assert "a" * 1000 in joined  # internal entities are expanded (and exposed)
+
+
+def test_xml_entity_bomb_fails(tmp_path: Path, canary_config: Config) -> None:
+    levels = "".join(f'<!ENTITY e{i} "{f"&e{i - 1};" * 10}">' for i in range(1, 8))
+    source = tmp_path / "bombe.xml"
+    source.write_text(
+        f'<?xml version="1.0"?>\n<!DOCTYPE r [<!ENTITY e0 "aaaaaaaaaa">{levels}]>\n<r>&e7;</r>',
+        encoding="utf-8",
+    )
+    doc = extract_file(source, source.name, canary_config, tmp_path / "w")
+    assert doc.status is DocumentStatus.FAILED

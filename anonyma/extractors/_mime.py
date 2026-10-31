@@ -455,6 +455,10 @@ def _extract_child(part: Message, path: str, state: _Extraction) -> None:
     ctype = part.get_content_type()
     state.counter += 1
     name = attachment_name(part)
+    # Charged before decoding: a decoded payload is never larger than its encoding.
+    encoded = part.get_payload() if not part.is_multipart() else ""
+    declared = len(encoded) if isinstance(encoded, str) else 0
+    state.ctx.budget.consume(declared, depth=state.ctx.depth + 1)
     if ctype in ("message/rfc822", "message/global"):
         data = _leaf_bytes(part)
         name = name or f"message-joint-{state.counter}.eml"
@@ -465,7 +469,7 @@ def _extract_child(part: Message, path: str, state: _Extraction) -> None:
         data = _leaf_bytes(part)
         name = name or f"piece-jointe-{state.counter}{extension_for(ctype)}"
     state.ctx.check_cancelled()
-    state.ctx.budget.consume(len(data), depth=state.ctx.depth + 1)
+    state.ctx.budget.top_up(declared, len(data), depth=state.ctx.depth + 1)
     child = state.ctx.extract_child(data, name, state.document)
     state.children[path] = child.id
 

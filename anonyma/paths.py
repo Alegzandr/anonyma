@@ -7,7 +7,15 @@ import os
 import shutil
 import sys
 import tempfile
+import time
+import warnings
 from pathlib import Path
+from typing import IO
+
+#: Largest image decoded (pixels): an A1 sheet scanned at 400 dpi. Beyond, decoding
+#: fails (``DecompressionBombError``/``Warning`` both raise) instead of exhausting
+#: the memory of a worker.
+MAX_IMAGE_PIXELS = 100_000_000
 
 
 def app_root() -> Path:
@@ -76,16 +84,115 @@ def configure_environment() -> None:
     os.environ["XDG_CACHE_HOME"] = str(data_dir() / "cache")
     os.environ.setdefault("ANONYMA_MODELS", models)
     sys.dont_write_bytecode = True
+    limit_images()
+
+
+def limit_images() -> None:
+    """Cap the size of the images Pillow decodes (every process)."""
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    warnings.simplefilter("error", Image.DecompressionBombWarning)
+
+
+#: Lock file of a temporary folder in use (:func:`claim`).
+LOCK_NAME = ".verrou"
+#: Unclaimed temporary entries younger than this are left alone (being created).
+STALE_SECONDS = 3600.0
+#: Folders claimed by this process: their open, locked lock file.
+_claims: dict[Path, IO[bytes]] = {}
+
+
+def _lock(handle: IO[bytes]) -> bool:
+    """Lock ``handle`` exclusively without waiting; False when another process holds it."""
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _unlock(handle: IO[bytes]) -> None:
+    with contextlib.suppress(OSError):
+        if sys.platform == "win32":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    with contextlib.suppress(OSError):
+        handle.close()
+
+
+def claim(folder: Path) -> None:
+    """Create ``folder`` (a batch temporary folder) and mark it in use by this process
+    until :func:`release` or the process ends: :func:`clean_tmp` of another instance
+    never removes it."""
+    folder.mkdir(parents=True, exist_ok=True)
+    handle = (folder / LOCK_NAME).open("a+b")
+    if handle.tell() == 0:
+        handle.write(b"\0")
+        handle.flush()
+    if not _lock(handle):
+        handle.close()
+        return
+    _claims[folder.resolve()] = handle
+
+
+def release(folder: Path) -> None:
+    handle = _claims.pop(folder.resolve(), None)
+    if handle is not None:
+        _unlock(handle)
+
+
+def _in_use(folder: Path) -> bool:
+    """True when a live process holds the lock of ``folder`` (or it has no lock yet
+    and was just created)."""
+    lock = folder / LOCK_NAME
+    if not lock.exists():
+        return _recent(folder)
+    if folder.resolve() in _claims:
+        return True
+    try:
+        handle = lock.open("r+b")
+    except OSError:
+        return True
+    if not _lock(handle):
+        handle.close()
+        return True
+    _unlock(handle)  # its owner is gone
+    return False
+
+
+def _recent(path: Path) -> bool:
+    try:
+        return time.time() - path.stat().st_mtime < STALE_SECONDS
+    except OSError:
+        return False
 
 
 def clean_tmp() -> None:
-    """Remove every leftover temporary file (called at startup and batch end)."""
+    """Remove the temporary files left behind (called at startup): batch folders no
+    live process holds, and other entries untouched for :data:`STALE_SECONDS`. A
+    batch running in another instance of Anonyma is never touched."""
     root = tmp_dir()
     if root.exists():
         for child in root.iterdir():
             if child.is_dir():
-                shutil.rmtree(child, ignore_errors=True)
-            else:
+                if not _in_use(child):
+                    shutil.rmtree(child, ignore_errors=True)
+            elif not _recent(child):
                 with contextlib.suppress(OSError):
                     child.unlink()
     root.mkdir(parents=True, exist_ok=True)

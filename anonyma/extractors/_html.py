@@ -6,6 +6,14 @@ substitutes the source spans that hold replaced characters. Every piece of text
 :class:`Unit` whose decoded text keeps, for each character, the source span it
 comes from, so that character references (``&eacute;``) and percent-encoded URLs
 are handled in both directions.
+
+Nothing in the markup is copied unseen. A ``<`` that does not open a real element
+(``<marc.dupont@exemple.test>``, ``<Jean Dupont>``: not an HTML, SVG or MathML
+element name) is text, written back as ``&lt;``. What a browser hides but a reader
+of the raw file sees (processing instructions, bogus comments and doctypes, end-tag
+attributes, unknown attribute and element names) is a ``MARKUP`` unit, exposed as a
+hidden segment; when a replacement touches one, the writer drops the whole construct
+(:attr:`Unit.outer`) instead of patching it.
 """
 
 from __future__ import annotations
@@ -28,6 +36,9 @@ RCDATA = "rcdata"  # <title>, <textarea> (character references decoded)
 RAW = "raw"  # <script>, <style> contents (verbatim)
 COMMENT = "comment"  # <!-- ... --> (verbatim)
 ATTR = "attr"  # attribute value (character references decoded)
+#: Markup a browser hides (PI, doctype, bogus comment, end-tag junk, unknown names):
+#: verbatim, dropped as a whole (``Unit.outer``) when a replacement touches it.
+MARKUP = "markup"
 
 _RAW_TEXT_TAGS = frozenset({"script", "style", "xmp", "iframe", "noembed", "noframes"})
 _RCDATA_TAGS = frozenset({"title", "textarea"})
@@ -60,6 +71,96 @@ _URL_ATTRS = frozenset(
     }
 )  # fmt: skip
 
+#: Element names a browser parses as tags (HTML, obsolete HTML, SVG, MathML), lower
+#: case. Any other ``<name`` is text, except custom elements (``<mon-widget>``) and
+#: namespaced ones (``<o:p>``, ``<st1:PersonName>`` in Office HTML).
+_ELEMENTS = frozenset(
+    str.split(
+        """
+    a abbr acronym address applet area article aside audio b base basefont bdi bdo
+    bgsound big blink blockquote body br button canvas caption center cite code col
+    colgroup command content data datalist dd del details dfn dialog dir div dl dt
+    element em embed fieldset figcaption figure font footer form frame frameset h1 h2
+    h3 h4 h5 h6 head header hgroup hr html i iframe image img input ins isindex kbd
+    keygen label layer legend li link listing main map mark marquee menu menuitem meta
+    meter multicol nav nextid nobr noembed noframes nolayer noscript object ol optgroup
+    option output p param picture plaintext portal pre progress q rb rp rt rtc ruby s
+    samp script search section select shadow slot small source spacer span strike
+    strong style sub summary sup table tbody td template textarea tfoot th thead time
+    title tr track tt u ul var video wbr xmp
+    svg altglyph altglyphdef altglyphitem animate animatecolor animatemotion
+    animatetransform circle clippath color-profile cursor defs desc discard ellipse
+    feblend fecolormatrix fecomponenttransfer fecomposite feconvolvematrix
+    fediffuselighting fedisplacementmap fedistantlight fedropshadow feflood fefunca
+    fefuncb fefuncg fefuncr fegaussianblur feimage femerge femergenode femorphology
+    feoffset fepointlight fespecularlighting fespotlight fetile feturbulence filter
+    font-face font-face-format font-face-name font-face-src font-face-uri
+    foreignobject g glyph glyphref hatch hatchpath hkern line lineargradient marker
+    mask mesh meshgradient meshpatch meshrow metadata missing-glyph mpath path pattern
+    polygon polyline radialgradient rect set solidcolor stop switch symbol text
+    textpath tref tspan unknown use view vkern
+    math maction annotation annotation-xml menclose merror mfenced mfrac mglyph mi
+    mlabeledtr mmultiscripts mn mo mover mpadded mphantom mprescripts mroot mrow ms
+    mspace msqrt mstyle msub msubsup msup mtable mtd mtext mtr munder munderover none
+    semantics
+    """
+    )
+)
+_CUSTOM_ELEMENT = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)+")
+_NAMESPACED = re.compile(r"([A-Za-z][A-Za-z0-9]*):[A-Za-z][A-Za-z0-9_.-]*")
+#: Office HTML namespaces (``<o:p>``, ``v:shape``, ``w:st``...): fixed vocabularies,
+#: their element and attribute names are never exposed.
+_OFFICE_PREFIXES = re.compile(r"(?:o|v|w|m|x|dt|st\d+|xml|xmlns|xlink|xsl|html|svg)", re.I)
+#: Attribute names of the HTML, SVG and MathML vocabularies (others are exposed).
+_KNOWN_ATTRS = frozenset(
+    str.split(
+        """
+    abbr accept accept-charset accesskey action align alink allow allowfullscreen alt
+    archive async autocapitalize autocomplete autofocus autoplay axis background
+    bgcolor border bordercolor cellpadding cellspacing char charoff charset checked
+    cite class classid clear code codebase codetype color cols colspan compact content
+    contenteditable controls coords crossorigin data datetime declare decoding default
+    defer dir dirname disabled download draggable enctype enterkeyhint face for form
+    formaction formenctype formmethod formnovalidate formtarget frame frameborder
+    headers height hidden high href hreflang hspace http-equiv id inert inputmode
+    integrity is ismap itemid itemprop itemref itemscope itemtype kind label lang
+    language leftmargin link list loading longdesc loop low marginheight marginwidth max
+    maxlength media method min minlength multiple muted name nohref nomodule nonce
+    noresize noshade novalidate nowrap open optimum pattern ping placeholder playsinline
+    popover poster preload profile readonly referrerpolicy rel required rev reversed
+    role rows rowspan rules sandbox scheme scope scrolling selected shape size sizes
+    slot span spellcheck src srcdoc srclang srcset standby start step style summary
+    tabindex target text title topmargin translate type usemap valign value valuetype
+    version vlink vspace width wrap xmlns
+    d x y z cx cy r rx ry x1 x2 y1 y2 dx dy fx fy fr points transform viewbox
+    preserveaspectratio fill fill-opacity fill-rule stroke stroke-width stroke-opacity
+    stroke-linecap stroke-linejoin stroke-dasharray stroke-dashoffset stroke-miterlimit
+    opacity offset stop-color stop-opacity gradientunits gradienttransform
+    patternunits patterntransform clip-path clip-rule clippathunits mask maskunits filter
+    font-family font-size font-style font-weight text-anchor dominant-baseline
+    baseline-shift letter-spacing word-spacing text-decoration visibility display
+    overflow color-interpolation-filters flood-color flood-opacity lighting-color
+    in in2 result stddeviation operator k1 k2 k3 k4 mode values keytimes keysplines
+    calcmode attributename attributetype begin dur end repeatcount repeatdur from to by
+    additive accumulate rotate pathlength marker-start marker-mid marker-end markerwidth
+    markerheight markerunits refx refy orient baseprofile focusable vector-effect
+    shape-rendering image-rendering text-rendering mathvariant mathcolor mathsize
+    mathbackground displaystyle scriptlevel stretchy symmetric fence separator lspace
+    rspace largeop movablelimits accent accentunder linethickness columnalign rowalign
+    notation encoding definitionurl
+    """
+    )
+)
+_KNOWN_ATTR_PATTERN = re.compile(r"aria-[a-z-]+|on[a-z]+")
+#: Doctypes of the W3C/IETF vocabularies (``<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML
+#: 1.0 Transitional//EN" "http://www.w3.org/...">``): nothing in them to expose.
+_STANDARD_DOCTYPE = re.compile(
+    r"doctype\s+html(?:\s+public\s+([\"'])-//(?:w3c|ietf)//[^\"']*\1"
+    r"(?:\s+([\"'])https?://www\.w3\.org/[^\"']*\2)?"
+    r"|\s+system\s+([\"'])about:legacy-compat\3)?\s*",
+    re.I,
+)
+
 _CHARREF = re.compile(r"&(?:#[0-9]+;?|#[xX][0-9a-fA-F]+;?|[A-Za-z][A-Za-z0-9]*;?)")
 _TAG_NAME = re.compile(r"[A-Za-z][^\s/>]*")
 _SPACE = " \t\n\r\f"
@@ -80,6 +181,8 @@ class Unit:
     name: str = ""
     #: Quote character of an attribute value ('"', "'" or "" when unquoted).
     quote: str = ""
+    #: MARKUP units: the source range removed when a replacement touches the unit.
+    outer: tuple[int, int] = (0, 0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +227,8 @@ class HtmlSource:
         self.units: list[Unit] = []
         self._breaks: set[int] = set()
         self._decoded: dict[int, Decoded] = {}
+        #: Source offsets of the ``<`` that open no element (text, escaped on write).
+        self.text_lts: list[int] = []
         self._tokenize()
 
     # -- tokenizer -------------------------------------------------------------
@@ -132,6 +237,10 @@ class HtmlSource:
         self, kind: str, start: int, end: int, tag: str, name: str = "", quote: str = ""
     ) -> None:
         self.units.append(Unit(len(self.units), kind, start, end, tag, name, quote))
+
+    def _markup(self, start: int, end: int, outer: tuple[int, int], label: str) -> None:
+        if self.text[start:end].strip():
+            self.units.append(Unit(len(self.units), MARKUP, start, end, "", label, "", outer))
 
     def _break(self) -> None:
         self._breaks.add(len(self.units))
@@ -168,26 +277,91 @@ class HtmlSource:
                 pos = n if end == -1 else end + 3
                 text_start = pos
             elif nxt in "!?":
+                # Doctype, processing instruction or bogus comment: ends at the first
+                # '>' (as browsers do), hidden on screen but present in the file.
                 flush(lt)
                 end = src.find(">", lt + 2)
+                stop = n if end == -1 else end
                 pos = n if end == -1 else end + 1
+                if not _STANDARD_DOCTYPE.fullmatch(src, lt + 2, stop):
+                    self._markup(lt + 2, stop, (lt, pos), "balisage")
                 text_start = pos
             elif nxt == "/" and lt + 2 < n and src[lt + 2].isascii() and src[lt + 2].isalpha():
-                flush(lt)
                 match = _TAG_NAME.match(src, lt + 2)
-                tag = match.group(0).lower() if match else ""
-                end = src.find(">", lt + 2)
+                assert match is not None
+                if not _element_name(match.group(0)):
+                    self.text_lts.append(lt)
+                    pos = lt + 1
+                    continue
+                flush(lt)
+                tag = match.group(0).lower()
+                end = self._attributes(tag, match.end(), collect=False)
                 if tag in _BLOCK_TAGS:
                     self._break()
-                pos = n if end == -1 else end + 1
+                pos = min(end + 1, n)
+                if _exposed_name(match.group(0)):
+                    self._markup(lt + 2, match.end(), (lt, pos), "balise")
+                else:
+                    # Anything after the name of an end tag is ignored by browsers.
+                    self._markup(match.end(), end, (match.end(), end), "balise")
                 text_start = pos
             elif nxt.isascii() and nxt.isalpha():
+                match = _TAG_NAME.match(src, lt + 1)
+                assert match is not None
+                if not _element_name(match.group(0)):
+                    self.text_lts.append(lt)
+                    pos = lt + 1
+                    continue
                 flush(lt)
                 pos = self._start_tag(lt)
                 text_start = pos
             else:
                 pos = lt + 1
         flush(n)
+
+    def _attributes(self, tag: str, pos: int, *, collect: bool = True) -> int:
+        """Scan the attributes of a tag from ``pos``; returns the offset of its
+        closing ``>`` (or the end of the text). ``collect``: add the attribute units
+        (start tags; browsers ignore those of end tags)."""
+        src = self.text
+        n = len(src)
+        while pos < n:
+            while pos < n and (src[pos] in _SPACE or src[pos] == "/"):
+                pos += 1
+            if pos >= n or src[pos] == ">":
+                break
+            name_start = pos
+            pos += 1  # the first character may be '='
+            while pos < n and src[pos] not in _SPACE and src[pos] not in "/>=":
+                pos += 1
+            name_end = pos
+            name = src[name_start:name_end].lower()
+            scan = pos
+            while scan < n and src[scan] in _SPACE:
+                scan += 1
+            value: tuple[int, int, str] | None = None
+            if scan < n and src[scan] == "=":
+                scan += 1
+                while scan < n and src[scan] in _SPACE:
+                    scan += 1
+                if scan < n and src[scan] in "\"'":
+                    quote = src[scan]
+                    close = src.find(quote, scan + 1)
+                    close = n if close == -1 else close
+                    value = (scan + 1, close, quote)
+                    pos = min(close + 1, n)
+                else:
+                    value_start = scan
+                    while scan < n and src[scan] not in _SPACE and src[scan] != ">":
+                        scan += 1
+                    value = (value_start, scan, "")
+                    pos = scan
+            if collect:
+                if value is not None:
+                    self._attribute(tag, name, *value)
+                if not _known_attribute(name):
+                    self._markup(name_start, name_end, (name_start, pos), "nom d'attribut")
+        return pos
 
     def _start_tag(self, lt: int) -> int:
         """Parse a start tag at ``lt``; returns the position after it (and after the
@@ -199,37 +373,10 @@ class HtmlSource:
         tag = match.group(0).lower()
         if tag in _BLOCK_TAGS:
             self._break()
-        pos = match.end()
-        while pos < n:
-            while pos < n and (src[pos] in _SPACE or src[pos] == "/"):
-                pos += 1
-            if pos >= n or src[pos] == ">":
-                break
-            name_start = pos
-            pos += 1  # the first character may be '='
-            while pos < n and src[pos] not in _SPACE and src[pos] not in "/>=":
-                pos += 1
-            name = src[name_start:pos].lower()
-            scan = pos
-            while scan < n and src[scan] in _SPACE:
-                scan += 1
-            if scan < n and src[scan] == "=":
-                scan += 1
-                while scan < n and src[scan] in _SPACE:
-                    scan += 1
-                if scan < n and src[scan] in "\"'":
-                    quote = src[scan]
-                    close = src.find(quote, scan + 1)
-                    close = n if close == -1 else close
-                    self._attribute(tag, name, scan + 1, close, quote)
-                    pos = min(close + 1, n)
-                else:
-                    value_start = scan
-                    while scan < n and src[scan] not in _SPACE and src[scan] != ">":
-                        scan += 1
-                    self._attribute(tag, name, value_start, scan, "")
-                    pos = scan
-        pos = min(pos + 1, n)  # skip '>'
+        pos = min(self._attributes(tag, match.end()) + 1, n)  # skip '>'
+        if _exposed_name(match.group(0)):
+            # Dropping the whole tag wins over the patches of its attributes.
+            self._markup(lt + 1, match.end(), (lt, pos), "balise")
         if tag in _RAW_TEXT_TAGS or tag in _RCDATA_TAGS or tag == "plaintext":
             if tag == "plaintext":
                 close = n
@@ -255,7 +402,7 @@ class HtmlSource:
         cached = self._decoded.get(index)
         if cached is None:
             unit = self.units[index]
-            if unit.kind in (RAW, COMMENT):
+            if unit.kind in (RAW, COMMENT, MARKUP):
                 cached = Decoded(self.text[unit.start : unit.end], None, unit.start)
             else:
                 cached = _decode_refs(self.text, unit.start, unit.end)
@@ -305,7 +452,7 @@ class HtmlSource:
             if unit.kind == TEXT:
                 flow.append(unit.index)
                 continue
-            if unit.kind != ATTR:
+            if unit.kind not in (ATTR, MARKUP):
                 close_flow()
             if unit.index in skip:
                 continue
@@ -316,6 +463,8 @@ class HtmlSource:
                 kind, label = SegmentKind.ATTRIBUTE, unit.name
             elif unit.kind == COMMENT:
                 kind, label = SegmentKind.COMMENT, "commentaire"
+            elif unit.kind == MARKUP:
+                kind, label = SegmentKind.HIDDEN, unit.name
             elif unit.kind == RCDATA:
                 kind = SegmentKind.HEADER if unit.tag == "title" else SegmentKind.BODY
                 label = "titre" if unit.tag == "title" else unit.tag
@@ -335,9 +484,13 @@ class HtmlSource:
         """Return the source with ``edits`` (unit -> decoded ``(start, end, new)``)
         applied and the whole value of the units in ``values`` replaced (already
         decoded text, escaped here)."""
-        patches: list[tuple[int, int, str]] = []
+        patches: list[tuple[int, int, str]] = [(lt, lt + 1, "&lt;") for lt in self.text_lts]
         for index, unit_edits in edits.items():
             unit = self.units[index]
+            if unit.kind == MARKUP:
+                # Never patched: hidden markup holding a value goes away as a whole.
+                patches.append((*unit.outer, ""))
+                continue
             decoded = self.decoded(index)
             for start, end, new in unit_edits:
                 if start >= end or end > len(decoded.text):
@@ -348,11 +501,12 @@ class HtmlSource:
         for index, value in (values or {}).items():
             unit = self.units[index]
             patches.append((unit.start, unit.end, self._encode(unit, value, url=False)))
-        patches.sort(key=lambda p: (p[0], p[1]))
+        # Outer ranges first: a dropped construct swallows the patches inside it.
+        patches.sort(key=lambda p: (p[0], -p[1]))
         out: list[str] = []
         cursor = 0
         for start, end, new in patches:
-            if start < cursor:  # shares a character reference with the previous patch
+            if start < cursor:  # inside the previous patch (or shares a character reference)
                 continue
             out.append(self.text[cursor:start])
             out.append(new)
@@ -375,6 +529,30 @@ class HtmlSource:
         if unit.quote == "'":
             return out.replace("'", "&#39;")
         return re.sub(r"""[\s"'=<>`]""", lambda m: f"&#{ord(m.group(0))};", out)
+
+
+def _element_name(name: str) -> bool:
+    """True if a browser parses ``<name`` as an element (otherwise it is text)."""
+    lower = name.lower()
+    if lower in _ELEMENTS or _NAMESPACED.fullmatch(name):
+        return True
+    # Custom elements are written in lower case: ``<Jean-Pierre>`` is text.
+    return name == lower and _CUSTOM_ELEMENT.fullmatch(name) is not None
+
+
+def _exposed_name(name: str) -> bool:
+    """An element name outside the known vocabularies (exposed for detection)."""
+    if name.lower() in _ELEMENTS:
+        return False
+    namespaced = _NAMESPACED.fullmatch(name)
+    return not (namespaced and _OFFICE_PREFIXES.fullmatch(namespaced.group(1)))
+
+
+def _known_attribute(name: str) -> bool:
+    if name in _KNOWN_ATTRS or _KNOWN_ATTR_PATTERN.fullmatch(name):
+        return True
+    namespaced = _NAMESPACED.fullmatch(name)
+    return namespaced is not None and _OFFICE_PREFIXES.fullmatch(namespaced.group(1)) is not None
 
 
 def _decode_refs(src: str, start: int, end: int) -> Decoded:

@@ -72,7 +72,7 @@ from anonyma.resolver import (
     resolve,
 )
 from anonyma.textsearch import MultiMatcher, leftmost_longest
-from anonyma.textutils import find_all, normalize, safe_filename
+from anonyma.textutils import find_all, normalize, safe_filename, safe_suffix
 from anonyma.verifier import Verifier, is_ocr_issue, spaced_name
 from anonyma.writers.zip import write_zip
 
@@ -83,6 +83,12 @@ log = get_logger("pipeline")
 #: users zip or upload as a whole, so it must only hold verified files.
 QUARANTINE_SUFFIX = "_quarantaine"
 MANUAL_DETECTOR = "manuel"
+CRASH_MESSAGE = (
+    "Le traitement de ce fichier a fait planter le processus de travail deux fois : "
+    "fichier non traité."
+)
+#: Format of the links skipped in input folders (never read, reported).
+LINK_FORMAT = "lien"
 #: RAM budget per worker process in the STANDARD profile (GLiNER loaded per process).
 GLINER_WORKER_RAM = int(2.5 * 1024**3)
 
@@ -180,23 +186,55 @@ class BatchResult:
 # ---------------------------------------------------------------------------
 
 
-def collect_inputs(inputs: Sequence[Path]) -> list[tuple[Path, str]]:
+def _is_link(path: Path) -> bool:
+    """Symbolic link or Windows junction (``os.walk`` follows junctions)."""
+    try:
+        return path.is_symlink() or os.path.isjunction(path)
+    except OSError:
+        return True
+
+
+def walk_inputs(inputs: Sequence[Path]) -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
     """Expand files and folders into ``(path, logical name)``; folders keep their
-    own name as first component. Symlinked folders are not followed."""
+    own name as first component.
+
+    Inside a folder, symbolic links and junctions (to files or folders) are never
+    followed, nor is anything that resolves outside the folder: they are returned
+    apart, as ``(path, logical name)`` too, so that the batch can report them. Files
+    and folders given explicitly are taken as they are."""
     items: list[tuple[Path, str]] = []
+    links: list[tuple[Path, str]] = []
     for raw in inputs:
         path = Path(raw)
         if path.is_dir():
-            base = path.resolve().parent
+            root = path.resolve()
+            top = path.resolve().name or path.name
             for dirpath, dirnames, filenames in os.walk(path, followlinks=False):
-                dirnames.sort()
+                folder = Path(dirpath)
+                prefix = PurePosixPath(top, folder.relative_to(path).as_posix())
+                kept = []
+                for dirname in sorted(dirnames):
+                    if _is_link(folder / dirname):
+                        links.append((folder / dirname, (prefix / dirname).as_posix()))
+                    else:
+                        kept.append(dirname)
+                dirnames[:] = kept
                 for filename in sorted(filenames):
-                    file = Path(dirpath) / filename
-                    if file.is_file():
-                        items.append((file, file.resolve().relative_to(base).as_posix()))
+                    file = folder / filename
+                    name = (prefix / filename).as_posix()
+                    if _is_link(file) or not file.resolve().is_relative_to(root):
+                        links.append((file, name))
+                    elif file.is_file():
+                        items.append((file, name))
         elif path.is_file():
             items.append((path, path.name))
-    return items
+    return items, links
+
+
+def collect_inputs(inputs: Sequence[Path]) -> list[tuple[Path, str]]:
+    """Expand files and folders into ``(path, logical name)`` (see
+    :func:`walk_inputs`; links inside folders are left out)."""
+    return walk_inputs(inputs)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -296,8 +334,7 @@ class _ExtractionContext(ExtractionContext):
 
 
 def _suffix_of(name: str) -> str:
-    suffix = PurePosixPath(name.replace("\\", "/")).suffix.lower()
-    return suffix if suffix.isascii() and len(suffix) <= 10 else ""
+    return safe_suffix(name)
 
 
 def extract_file(
@@ -493,11 +530,50 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
     return entities
 
 
+#: Why an input is not read (``_analyze_one(..., skipped=...)``).
+SKIP_LINK = "link"
+SKIP_CRASH = "crash"
+
+
 def _analyze_one(
-    source: Path, name: str, config: Config, work_dir: Path
+    source: Path,
+    name: str,
+    config: Config,
+    work_dir: Path,
+    skipped: str = "",
+    cancel: CancelToken | None = None,
 ) -> tuple[Document, list[Entity]]:
-    doc = extract_file(source, name, config, work_dir)
+    """Extract and detect one input; a ``skipped`` input is not read, only its name
+    is analysed (so that it shows up anonymized in reports). ``cancel``: inline runs
+    only (a token does not cross processes), checked by containers between items."""
+    doc = skipped_document(source, name, skipped) if skipped else None
+    doc = doc or extract_file(source, name, config, work_dir, cancel=cancel)
     return doc, detect_tree(doc, config)
+
+
+def skipped_document(source: Path, name: str, reason: str) -> Document:
+    """An input never read: a link of an input folder (``SKIP_LINK``) or a file that
+    crashed its worker process twice (``SKIP_CRASH``)."""
+    if reason == SKIP_LINK:
+        doc = Document(source, name, LINK_FORMAT, status=DocumentStatus.UNSUPPORTED)
+        doc.add_issue(
+            Severity.ERROR,
+            "input.link",
+            "Lien symbolique ou jonction ignoré : sa cible n'est pas traitée "
+            "(copiez les fichiers eux-mêmes dans le dossier).",
+        )
+    else:
+        doc = Document(source, name, "inconnu", status=DocumentStatus.FAILED)
+        doc.add_issue(Severity.ERROR, "worker.crash", CRASH_MESSAGE)
+    doc.segments.append(
+        Segment(
+            id=FILENAME_SEGMENT_ID,
+            text=name,
+            locator=(),
+            context=SegmentContext(SegmentKind.FILENAME, label="nom de fichier"),
+        )
+    )
+    return doc
 
 
 # ---------------------------------------------------------------------------
@@ -872,6 +948,23 @@ def _write_and_verify(job: _WriteJob) -> DocumentResult:
     return result
 
 
+def _write_crashed(job: _WriteJob) -> DocumentResult:
+    """A document whose writing crashed its worker twice: failed, nothing written."""
+    doc = job.document
+    _, extension, _ = _output_shape(doc)
+    entities = [e for e in job.entities if e.document_id == doc.id]
+    name = job.neutral_names.get(doc.id) or anonymized_name(doc, entities, job.table, extension)
+    return DocumentResult(
+        document_id=doc.id,
+        output_name=name,
+        format=doc.format,
+        output_format=doc.format,
+        status=DocumentStatus.FAILED,
+        entity_counts=_counts(entities),
+        issues=[Issue(Severity.ERROR, "worker.crash", CRASH_MESSAGE)],
+    )
+
+
 def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[DocumentStatus, Path]:
     """Verify ``written`` and fill ``result`` (counters, issues). Returns the status of
     the tree and the folder the output belongs in: the output folder, or the
@@ -954,13 +1047,16 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
     try:
         output_doc = extract_file(path, name, job.config, verify_dir)
         verifier = Verifier(job.config, detectors_for(job.config))
-        return verifier.verify(
-            output_doc,
-            job.sensitive,
-            job.table.all_substitutes(),
-            job.allowed,
-            names=job.names,
+        substitutes = job.table.all_substitutes()
+        result = verifier.verify(
+            output_doc, job.sensitive, substitutes, job.allowed, names=job.names
         )
+        if result.clean:
+            # Backstop: what no extractor exposed is still in the bytes.
+            result.residues.extend(
+                verifier.verify_raw(output_doc, job.sensitive, substitutes, job.allowed)
+            )
+        return result
     except Exception as exc:
         log.warning("verification failed for %s: %s", job.document.id, type(exc).__name__)
         return VerificationResult(
@@ -1016,26 +1112,84 @@ class Pipeline:
         stage: str,
         progress: ProgressCallback | None,
         cancel: CancelToken | None,
+        crashed: Callable[..., Any],
     ) -> list[Any | None]:
-        """Run ``fn(*job)`` for each job; ``None`` for jobs skipped by cancellation."""
+        """Run ``fn(*job)`` for each job; ``None`` for jobs skipped by cancellation.
+
+        Worker processes may die (native crash, memory): the items left are then run
+        one at a time in a fresh single-worker pool, never in this process, and an
+        item that crashes that pool too gets ``crashed(*job)`` as its result."""
         results: list[Any | None] = [None] * len(jobs)
         total = len(jobs)
+        finished: set[int] = set()
+
+        def done(index: int, value: Any) -> None:
+            results[index] = value
+            finished.add(index)
+            if progress:
+                progress(ProgressEvent(stage, len(finished), total, index=index))
+
         if progress:
             progress(ProgressEvent(stage, 0, total))
         if self._workers(total) == 1:
             for i, job in enumerate(jobs):
                 if cancel and cancel.cancelled:
                     break
-                results[i] = fn(*job)
-                if progress:
-                    progress(ProgressEvent(stage, i + 1, total, index=i))
+                try:
+                    done(i, fn(*job))
+                except CancelledError:  # raised inside the item (inline extraction)
+                    break
             return results
-        finished: set[int] = set()
         try:
-            with ProcessPoolExecutor(self._workers(total), initializer=_worker_init) as pool:
-                futures: dict[Future[Any], int] = {
-                    pool.submit(fn, *job): i for i, job in enumerate(jobs)
-                }
+            self._pool(fn, jobs, list(range(total)), self._workers(total), cancel, done)
+        except BrokenProcessPool:
+            log.warning("worker pool broken during %s; retrying the remaining items", stage)
+            while not (cancel and cancel.cancelled):
+                pending = [i for i in range(total) if i not in finished]
+                culprit = self._serial(fn, jobs, pending, cancel, done) if pending else None
+                if culprit is None:
+                    break
+                log.warning("item %d of %s crashed its worker twice", culprit, stage)
+                done(culprit, crashed(*jobs[culprit]))
+        return results
+
+    @staticmethod
+    def _serial(
+        fn: Callable[..., Any],
+        jobs: list[tuple[Any, ...]],
+        indices: list[int],
+        cancel: CancelToken | None,
+        done: Callable[[int, Any], None],
+    ) -> int | None:
+        """Run ``jobs[indices]`` one at a time in a fresh single-worker pool; returns
+        the index of the item that broke it (None when all ran or cancelled)."""
+        with ProcessPoolExecutor(1, initializer=_worker_init) as pool:
+            for index in indices:
+                if cancel and cancel.cancelled:
+                    return None
+                try:
+                    value = pool.submit(fn, *jobs[index]).result()
+                except BrokenProcessPool:
+                    return index
+                done(index, value)
+        return None
+
+    @staticmethod
+    def _pool(
+        fn: Callable[..., Any],
+        jobs: list[tuple[Any, ...]],
+        indices: list[int],
+        workers: int,
+        cancel: CancelToken | None,
+        done: Callable[[int, Any], None],
+    ) -> None:
+        """Run ``jobs[indices]`` in a fresh pool, reporting each result to ``done``.
+        Raises ``BrokenProcessPool`` after reporting every result completed before
+        the break."""
+        reported: set[int] = set()
+        with ProcessPoolExecutor(workers, initializer=_worker_init) as pool:
+            futures: dict[Future[Any], int] = {pool.submit(fn, *jobs[i]): i for i in indices}
+            try:
                 for future in as_completed(futures):
                     if cancel and cancel.cancelled:
                         # Pending jobs are dropped; running ones still finish and are
@@ -1044,28 +1198,29 @@ class Pipeline:
                             f.cancel()
                     if future.cancelled():
                         continue
-                    index = futures[future]
-                    results[index] = future.result()
-                    finished.add(index)
-                    if progress:
-                        progress(ProgressEvent(stage, len(finished), total, index=index))
+                    value = future.result()
+                    reported.add(futures[future])
+                    done(futures[future], value)
+            except BrokenProcessPool:
+                for future, index in futures.items():
+                    if index in reported or not future.done() or future.cancelled():
+                        continue
+                    if future.exception() is None:
+                        done(index, future.result())
+                raise
+
+    def _analysis_crashed(
+        self, source: Path, name: str, config: Config, work_dir: Path, *rest: Any
+    ) -> tuple[Document, list[Entity]]:
+        """An input that crashed its worker twice: only its name is analysed (in a
+        worker as well), so that it is reported anonymized."""
+        job = (source, name, config, work_dir, SKIP_CRASH)
+        try:
+            with ProcessPoolExecutor(1, initializer=_worker_init) as pool:
+                result: tuple[Document, list[Entity]] = pool.submit(_analyze_one, *job).result()
+                return result
         except BrokenProcessPool:
-            # A worker died (native crash, memory): finish the remaining items here.
-            log.warning(
-                "worker pool broken during %s; finishing %d item(s) inline",
-                stage,
-                total - len(finished),
-            )
-            for index, job in enumerate(jobs):
-                if index in finished:
-                    continue
-                if cancel and cancel.cancelled:
-                    break
-                results[index] = fn(*job)
-                finished.add(index)
-                if progress:
-                    progress(ProgressEvent(stage, len(finished), total, index=index))
-        return results
+            return skipped_document(source, name, SKIP_CRASH), []
 
     # -- public API ----------------------------------------------------------
 
@@ -1077,12 +1232,24 @@ class Pipeline:
     ) -> BatchAnalysis:
         batch_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + new_id()[:6]
         work_dir = paths.tmp_dir() / batch_id
-        work_dir.mkdir(parents=True, exist_ok=True)
-        items = collect_inputs(inputs)
+        paths.claim(work_dir)  # kept by clean_tmp() of other instances
+        files, links = walk_inputs(inputs)
+        if links:
+            log.warning("%d link(s) skipped in input folders", len(links))
+        items = [*files, *links]
+        inline = cancel if self._workers(len(items)) == 1 else None
         jobs = [
-            (path, name, self.config, work_dir / f"f{i}") for i, (path, name) in enumerate(items)
+            (
+                path,
+                name,
+                self.config,
+                work_dir / f"f{i}",
+                SKIP_LINK if i >= len(files) else "",
+                inline,
+            )
+            for i, (path, name) in enumerate(items)
         ]
-        outputs = self._map(_analyze_one, jobs, "analyse", progress, cancel)
+        outputs = self._map(_analyze_one, jobs, "analyse", progress, cancel, self._analysis_crashed)
 
         documents: list[Document] = []
         entities: list[Entity] = []
@@ -1125,7 +1292,8 @@ class Pipeline:
     ) -> BatchResult:
         decisions = decisions or ReviewDecisions()
         output_dir = Path(output_dir).resolve()
-        validate_output_dir([*analysis.inputs, *(d.source for d in analysis.documents)], output_dir)
+        sources = [d.source for d in analysis.documents if d.format != LINK_FORMAT]
+        validate_output_dir([*analysis.inputs, *sources], output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         resolved = resolve_decisions(analysis, decisions)
@@ -1174,7 +1342,7 @@ class Pipeline:
                     ),
                 )
             )
-        outputs = self._map(_write_and_verify, jobs, "ecriture", progress, cancel)
+        outputs = self._map(_write_and_verify, jobs, "ecriture", progress, cancel, _write_crashed)
         results: list[DocumentResult] = []
         for job, out in zip(jobs, outputs, strict=True):
             doc = job[0].document
@@ -1199,6 +1367,7 @@ class Pipeline:
             self.close(analysis)
 
     def close(self, analysis: BatchAnalysis) -> None:
+        paths.release(analysis.work_dir)
         shutil.rmtree(analysis.work_dir, ignore_errors=True)
 
 
@@ -1377,4 +1546,5 @@ __all__ = [
     "quarantine_dir",
     "resolve_decisions",
     "validate_output_dir",
+    "walk_inputs",
 ]

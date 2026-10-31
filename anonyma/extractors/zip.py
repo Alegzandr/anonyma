@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import zipfile
 from concurrent.futures import CancelledError
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from anonyma.extractors._archive import (
     clean_entry_name,
@@ -20,6 +20,7 @@ from anonyma.extractors._archive import (
 )
 from anonyma.models import ArchiveBombError, Document, ExtractionContext, Extractor
 from anonyma.registry import register_extractor
+from anonyma.textutils import safe_suffix
 
 _UTF8_FLAG = 0x800
 _ENCRYPTED_FLAG = 0x1
@@ -71,7 +72,7 @@ class ZipExtractor(Extractor):
                 ctx.budget.consume(
                     info.file_size, compressed=info.compress_size, depth=ctx.depth + 1
                 )
-                target = ctx.temp_path(PurePosixPath(name).suffix.lower()[:10])
+                target = ctx.temp_path(safe_suffix(name))
                 try:
                     with archive.open(info) as src:
                         copy_limited(src, target, info.file_size)

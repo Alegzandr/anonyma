@@ -163,3 +163,63 @@ def test_data_uri_image_becomes_child(
     assert top.output_path is not None
     out = top.output_path.read_text(encoding="utf-8")
     assert out.startswith('<p>[PERSONNE_001]</p><img src="data:image/png;base64,')
+
+
+# -- markup a browser hides must never survive unseen ----------------------------------
+
+
+def test_text_like_tags_are_text_and_escaped() -> None:
+    html = f"<p>De : {CANARY_PERSON} <{CANARY_EMAIL}> et <Jean Dupont></p><o:p></o:p>"
+    source = HtmlSource(html)
+    texts = [s.text for s in build_segments(source, "h")]
+    assert texts == [f"De : {CANARY_PERSON} <{CANARY_EMAIL}> et <Jean Dupont>"]
+    out = _rewrite(html, [CANARY_EMAIL, "Jean Dupont"])
+    assert out == "<p>De : Zéphyrin Quintavalle &lt;[X_001]> et &lt;[X_001]></p><o:p></o:p>"
+    # Unchanged text-like tags are escaped too: the output reads as it was analysed.
+    assert _rewrite("<p><Jean Dupont></p>", []) == "<p>&lt;Jean Dupont></p>"
+    assert _rewrite("<p></Jean Dupont></p>", []) == "<p>&lt;/Jean Dupont></p>"
+
+
+@pytest.mark.parametrize(
+    ("html", "hidden"),
+    [
+        (f"<!DOCTYPE html PUBLIC '-//{CANARY_PERSON}//FR'><p>x</p>", "balisage"),
+        (f"<p>x</p><?note {CANARY_PERSON} ?>", "balisage"),
+        (f"<p>x</p><!{CANARY_PERSON}>", "balisage"),
+        (f'<p>x</p title="{CANARY_PERSON}">', "balise"),
+        ("<p data-zephyrin-quintavalle>x</p>", "nom d'attribut"),
+        ("<zephyrin-quintavalle>x</zephyrin-quintavalle>", "balise"),
+    ],
+)
+def test_hidden_markup_is_exposed_and_dropped_when_touched(html: str, hidden: str) -> None:
+    segments = build_segments(HtmlSource(html), "h")
+    exposed = [s for s in segments if s.context.label == hidden]
+    assert exposed and all(s.context.kind is SegmentKind.HIDDEN for s in exposed)
+    assert _rewrite(html, []) == html  # untouched: kept byte for byte
+    out = _rewrite(html, ["Zéphyrin Quintavalle", "zephyrin-quintavalle"])
+    assert "uintavalle" not in out.casefold()
+    assert "x" in out
+
+
+def test_standard_markup_is_not_exposed() -> None:
+    html = (
+        '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" '
+        '"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">'
+        '<p class=MsoNormal style="x" aria-label="y" onclick="z" xml:lang=fr>t<o:p></o:p>'
+        '<st1:PersonName w:st="on">t</st1:PersonName></p><svg viewBox="0 0 1 1"></svg>'
+    )
+    segments = build_segments(HtmlSource(html), "h")
+    assert not [s for s in segments if s.context.kind is SegmentKind.HIDDEN]
+
+
+def test_html_mail_markup_leaks_are_anonymized(tmp_path: Path, canary_config: Config) -> None:
+    mail = (
+        "From: a@exemple.test\nTo: b@exemple.test\nSubject: x\nMIME-Version: 1.0\n"
+        "Content-Type: text/html; charset=utf-8\n\n"
+        f"<html><body><p>De : {CANARY_PERSON} <{CANARY_EMAIL}></p>"
+        f"<!DOCTYPE {CANARY_PERSON}><?pi {CANARY_EMAIL}?></body></html>\n"
+    ).encode()
+    output, _ = _run(tmp_path, "m.eml", mail, canary_config)
+    data = output.read_bytes().decode("ascii", "replace").casefold()
+    assert "uintavalle" not in data.replace("=\n", "")
+    assert "&lt;[email_003]></p></body>" in data.replace("=\n", "")

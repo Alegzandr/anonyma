@@ -181,7 +181,9 @@ class MsgExtractor(Extractor):
     extensions = {".msg": "msg"}
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
-        _, entries = read_cfb(source)
+        _, entries = read_cfb(
+            source, lambda size: ctx.budget.consume(size, depth=ctx.depth, files=0)
+        )
         tree = MsgTree(entries)
         if tree.root is None:
             raise ValueError("pas un message Outlook")
@@ -214,7 +216,8 @@ class MsgExtractor(Extractor):
             data = obj.stream(PR_ATTACH_DATA, PT_BINARY)
             if method != ATTACH_BY_VALUE or data is None:
                 continue  # references only (file paths, URLs): exposed as strings
-            ctx.budget.consume(len(data), depth=ctx.depth + 1)
+            # Its bytes were charged when the compound file was read.
+            ctx.budget.consume(0, depth=ctx.depth + 1)
             child = ctx.extract_child(data, attachment_name(tree, obj, index), document)
             children["/".join(obj.path)] = child.id
         document.properties["msg_children"] = children

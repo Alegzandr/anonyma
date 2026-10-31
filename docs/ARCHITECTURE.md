@@ -77,7 +77,9 @@ reported in `registry.unavailable` and its format becomes "non supporté".
   HF cache and XDG cache into the application folder; `netguard.install()` blocks
   every outbound connection except inside `netguard.allow_network()`.
 * Temp files live in `data/tmp/<batch>/`, removed by `Pipeline.close` and
-  `paths.clean_tmp()` at startup.
+  `paths.clean_tmp()` at startup. A batch folder is claimed (`paths.claim`: a locked
+  `.verrou` file held until `Pipeline.close` or the end of the process), so the
+  startup cleanup of another instance only removes folders whose owner is gone.
 * Every output is written in the batch temp folder and only moved to the output
   folder (or to `<output>_quarantaine/`, a sibling,) once verified, under a name reserved by
   exclusive creation; any failure on the way deletes it. Outputs that fail

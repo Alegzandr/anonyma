@@ -9,7 +9,7 @@ entry a FAILED child; encrypted headers make the whole archive fail.
 from __future__ import annotations
 
 import io
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 import py7zr
@@ -31,6 +31,7 @@ from anonyma.models import (
     Severity,
 )
 from anonyma.registry import register_extractor
+from anonyma.textutils import safe_suffix
 
 SEVEN_ZIP_MAGIC = b"7z\xbc\xaf\x27\x1c"
 
@@ -149,7 +150,7 @@ class SevenZipExtractor(Extractor):
             ctx.check_cancelled()
             share = max(1, round(size * packed / unpacked))
             ctx.budget.consume(size, compressed=share, depth=ctx.depth + 1)
-            targets[key] = (ctx.temp_path(PurePosixPath(name).suffix.lower()[:10]), size)
+            targets[key] = (ctx.temp_path(safe_suffix(name)), size)
         if targets:
             factory = _Factory(targets)
             try:

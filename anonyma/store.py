@@ -124,6 +124,13 @@ class KdfParams:
     lanes: int = 4
 
 
+#: Bounds of the KDF parameters read from a file (never trusted as such: a
+#: tampered file must not make opening it exhaust memory or run for hours).
+MAX_MEMORY_COST = 2 * 1024 * 1024  # KiB: 2 GiB
+MAX_ITERATIONS = 64
+MAX_LANES = 64
+MIN_SALT = 8
+
 SCHEMA_VERSION = 1
 _MAGIC = b"anonyma-mapping-store"
 _CHECK_LABEL = b"anonyma/check/v1"
@@ -131,6 +138,32 @@ _NONCE = 12
 _SALT = 16
 _READ_ERROR = "Lecture impossible dans la table de correspondance."
 _WRITE_ERROR = "Écriture impossible dans la table de correspondance."
+
+
+def _sane(params: KdfParams, salt: bytes) -> bool:
+    """KDF parameters within :data:`MAX_MEMORY_COST`... and valid for Argon2id."""
+    return (
+        1 <= params.lanes <= MAX_LANES
+        and 8 * params.lanes <= params.memory_cost <= MAX_MEMORY_COST
+        and 1 <= params.iterations <= MAX_ITERATIONS
+        and len(salt) >= MIN_SALT
+    )
+
+
+def _owner_only(path: Path, exists: bool) -> None:
+    """POSIX: the file is created readable by its owner only (0600), and an existing
+    one is narrowed to that when possible. SQLite gives its journal the same mode."""
+    if os.name == "nt":
+        return
+    if exists:
+        with contextlib.suppress(OSError):
+            os.chmod(path, 0o600)
+        return
+    try:
+        os.close(os.open(path, os.O_CREAT | os.O_WRONLY, 0o600))
+        os.chmod(path, 0o600)  # whatever the umask
+    except OSError as exc:
+        raise StoreError("Impossible de créer la table de correspondance.") from exc
 
 
 def _derive(passphrase: str, salt: bytes, params: KdfParams) -> tuple[bytes, bytes, bytes, bytes]:
@@ -202,6 +235,7 @@ class EncryptedMappingStore:
             raise StoreError("Table de correspondance introuvable.")
         if not exists:
             path.parent.mkdir(parents=True, exist_ok=True)
+        _owner_only(path, exists)
         try:
             db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
         except sqlite3.Error as exc:
@@ -297,7 +331,7 @@ class EncryptedMappingStore:
             raise StoreError(
                 "Cette table de correspondance a été créée par une version plus récente d'Anonyma."
             )
-        if meta.get("kdf") != b"argon2id":
+        if meta.get("kdf") != b"argon2id" or not _sane(params, salt):
             raise StoreError("Table de correspondance endommagée.")
         enc, idx, sub, check = _derive(passphrase, salt, params)
         if not hmac.compare_digest(check, expected):

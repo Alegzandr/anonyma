@@ -17,7 +17,7 @@ from lxml import etree
 
 from anonyma.codec import decode_bytes
 from anonyma.extractors._tabular import tokenize_json
-from anonyma.extractors._xml import local_name, parse_xml
+from anonyma.extractors._xml import doctype_ids, local_name, parse_xml
 from anonyma.extractors._xmlscan import ScanSpec, Unit, scan
 from anonyma.fieldhints import field_hint, with_key_hint
 from anonyma.models import (
@@ -61,6 +61,8 @@ def _all_attributes(el: etree._Element, name: str, value: str) -> bool:
     return True
 
 
+#: Segment of the DOCTYPE public and system identifiers.
+DOCTYPE_SEGMENT = "xdoctype"
 XML_SPEC = ScanSpec(para_tags=frozenset(), attr_filter=_all_attributes, comments=True)
 
 
@@ -105,7 +107,17 @@ class XmlExtractor(Extractor):
     }
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
-        tree = parse_xml(source.read_bytes())
+        tree = parse_xml(source.read_bytes(), doctype=True)
+        ids = doctype_ids(tree)
+        if ids:
+            document.segments.append(
+                Segment(
+                    id=DOCTYPE_SEGMENT,
+                    text=ids,
+                    locator=(),
+                    context=SegmentContext(SegmentKind.HIDDEN, label="DOCTYPE"),
+                )
+            )
         for i, unit in enumerate(xml_tree_units(tree)):
             if unit.kind == "attr":
                 kind = SegmentKind.ATTRIBUTE

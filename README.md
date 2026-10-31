@@ -300,10 +300,31 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
 - **Originaux intacts** : les fichiers sources ne sont jamais modifiés ; le dossier de
   sortie doit être distinct des entrées.
 - **Fichiers temporaires** : uniquement dans `data/tmp/`, supprimés en fin de lot et au
-  démarrage suivant (en cas d'arrêt brutal).
+  démarrage suivant (en cas d'arrêt brutal), sans jamais toucher au lot d'une autre
+  instance d'Anonyma en cours.
 - **Vérification systématique** : chaque fichier produit est relu ; s'il reste une valeur
   sensible ou si la relecture est impossible, il part en **quarantaine**
   (`<sortie>_quarantaine/`, hors du dossier de sortie) et n'est jamais compté comme anonymisé.
+- **Contrôle des octets bruts** : en plus de cette relecture, les octets du fichier produit
+  et de chacun de ses éléments (membres d'archive, parties Office, pièces jointes, flux
+  PDF et Outlook) sont fouillés, sous leurs encodages courants (UTF-8, UTF-16, Windows-1252,
+  entités HTML/XML, quoted-printable, base64), à la recherche des valeurs d'origine
+  identifiantes du lot : la moindre trouvaille envoie le fichier en quarantaine.
+- **Balisage caché** : en HTML et dans les courriels HTML, rien n'est recopié sans avoir été
+  analysé (instructions de traitement, DOCTYPE, commentaires atypiques, noms d'attributs
+  inconnus) ; une fausse balise comme `<prenom.nom@exemple.fr>` est traitée comme du texte.
+  En XML, la DTD interne n'est jamais recopiée (ses entités sont remplacées par leur texte
+  anonymisé) ; une partie Office ou OpenDocument qui en contient une est refusée.
+- **Liens ignorés** : dans un dossier d'entrée, les liens symboliques et les jonctions ne
+  sont jamais suivis ; ils sont signalés « non pris en charge ».
+- **LibreOffice isolé** : profil jetable sans macros, contenu actif, contenu distant, mise
+  à jour des liens ni recalcul à l'ouverture ; il ne reçoit que les variables système
+  (aucun proxy, jamais la phrase secrète).
+- **Processus de travail** : si l'un d'eux plante, les fichiers restants sont repris un par
+  un dans un nouveau processus, jamais dans l'application ; un fichier qui le fait planter
+  à nouveau est signalé en échec. Les images de plus de 100 millions de pixels sont refusées.
+- **Table de correspondance** : créée lisible par son seul propriétaire (macOS, Linux) ; des
+  paramètres de dérivation aberrants la font refuser comme endommagée.
 - **Journaux et rapports** : `data/logs/` et les rapports ne contiennent ni valeur
   sensible ni nom de fichier d'origine (seulement des noms anonymisés, des nombres et des
   codes).
@@ -318,10 +339,12 @@ anonyma-cli reidentifier sortie/ --sortie reidentifies/   # fichiers texte (.txt
 - La ré-identification de fichiers ne traite que les formats texte ; pour les autres
   formats, utilisez `--balise`.
 - Seuls les dépôts Hugging Face publics sont pris en charge (aucun jeton n'est envoyé).
+- Le contrôle des octets bruts ne cherche que les identifiants (personnes, contacts,
+  numéros, termes métier) d'au moins 6 caractères : les organisations, lieux et dates
+  figurent légitimement dans la structure des formats binaires. Le contenu des archives
+  7z est contrôlé élément par élément après extraction.
 - macOS : application non signée (voir Gatekeeper ci-dessus), prévue pour les Mac
   Apple Silicon uniquement.
-- Ne lancez pas deux instances d'Anonyma sur le même dossier portable en même temps :
-  le nettoyage des fichiers temporaires au démarrage pourrait gêner l'autre instance.
 - Windows : gardez le chemin du dossier portable sous une centaine de caractères
   (par exemple `C:\Outils\Anonyma`). Au-delà, LibreOffice ne peut plus créer son profil
   temporaire et les `.doc`, `.xls` et `.ppt` échouent (fichiers signalés en échec, jamais

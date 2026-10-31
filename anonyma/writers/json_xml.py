@@ -3,8 +3,9 @@
 JSON: replacements are spliced into the original text (formatting, key order and
 escaping style kept); a replaced number becomes a string.
 
-XML: the tree is re-serialized with its declaration, encoding and DOCTYPE; CDATA
-sections stay CDATA.
+XML: the tree is re-serialized with its declaration and encoding; CDATA sections stay
+CDATA. Internal entities were expanded on reading; the internal subset of the DOCTYPE
+is dropped (only its public/system identifiers are kept, unless they held a value).
 """
 
 from __future__ import annotations
@@ -16,9 +17,9 @@ from lxml import etree
 
 from anonyma.codec import TextEncoding, decode_bytes
 from anonyma.extractors._tabular import encode_json_string, tokenize_json
-from anonyma.extractors._xml import parse_xml
+from anonyma.extractors._xml import drop_doctype, parse_xml
 from anonyma.extractors._xmlscan import Unit, apply_unit
-from anonyma.extractors.json_xml import xml_tree_units
+from anonyma.extractors.json_xml import DOCTYPE_SEGMENT, xml_tree_units
 from anonyma.models import (
     Document,
     Issue,
@@ -82,7 +83,8 @@ class XmlWriter(Writer):
         ctx: WriteContext,
     ) -> list[Issue]:
         data = document.source.read_bytes()
-        tree = parse_xml(data)
+        tree = parse_xml(data, doctype=True)
+        drop_doctype(tree, keep_ids=not plan.for_segment(DOCTYPE_SEGMENT))
         units = xml_tree_units(tree)
         cdata: list[Unit] = []
         for i, unit in enumerate(units):

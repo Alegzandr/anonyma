@@ -131,6 +131,17 @@ class _Run:
         self.boxes.extend(boxes)
 
 
+def _declared_size(info: dict[str, Any]) -> int:
+    """Uncompressed size of an embedded file as its PDF dictionary declares it."""
+    value = info.get("size")
+    return value if isinstance(value, int) and value > 0 else 0
+
+
+def _packed_size(info: dict[str, Any]) -> int | None:
+    value = info.get("length")
+    return value if isinstance(value, int) and value > 0 else None
+
+
 def _is_white(color: int) -> bool:
     return all(((color >> shift) & 0xFF) >= 0xF0 for shift in (16, 8, 0))
 
@@ -776,8 +787,13 @@ class PdfExtractor(Extractor):
                         )
                 if annot.type[0] == pymupdf.PDF_ANNOT_FILE_ATTACHMENT:
                     try:
+                        info = annot.file_info
+                        declared = _declared_size(info)
+                        ctx.budget.consume(
+                            declared, compressed=_packed_size(info), depth=ctx.depth + 1
+                        )
                         data = annot.get_file()
-                        name = str(annot.file_info.get("filename") or "piece_jointe")
+                        name = str(info.get("filename") or "piece_jointe")
                     except Exception:  # the writer deletes every attachment annotation
                         document.add_issue(
                             Severity.WARNING,
@@ -785,7 +801,7 @@ class PdfExtractor(Extractor):
                             "Pièce jointe illisible : elle est omise.",
                         )
                         continue
-                    ctx.budget.consume(len(data), depth=ctx.depth + 1)
+                    ctx.budget.top_up(declared, len(data), depth=ctx.depth + 1)
                     child = ctx.extract_child(data, name, document)
                     attachments[child.id] = name
             for l_index, link in enumerate(page.get_links()):
@@ -845,8 +861,10 @@ class PdfExtractor(Extractor):
                         "description de pièce jointe",
                     )
                 )
+            declared = _declared_size(info)
+            ctx.budget.consume(declared, compressed=_packed_size(info), depth=ctx.depth + 1)
             data = doc.embfile_get(name)
-            ctx.budget.consume(len(data), depth=ctx.depth + 1)
+            ctx.budget.top_up(declared, len(data), depth=ctx.depth + 1)
             filename = str(info.get("ufilename") or info.get("filename") or name)
             child = ctx.extract_child(data, filename, document)
             embedded[child.id] = name

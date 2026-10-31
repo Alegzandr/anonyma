@@ -66,7 +66,7 @@ class FakeApi:
 
     def model_info(self, repo_id: str, *, revision: str | None = None) -> Any:
         self.calls.append((repo_id, revision))
-        self.network_allowed.append(netguard._allowed > 0)
+        self.network_allowed.append(netguard.is_allowed())
         return SimpleNamespace(card_data={"license": self.license}, tags=self.tags)
 
 
@@ -81,7 +81,7 @@ class FakeTransport:
     @contextlib.contextmanager
     def stream(self, spec: ModelSpec, filename: str, start: int) -> Iterator[RemoteStream]:
         assert spec.revision == REVISION
-        assert netguard._allowed > 0, "download outside allow_network()"
+        assert netguard.is_allowed(), "download outside allow_network()"
         self.starts.append((filename, start))
         payload = self.data[filename]
         offset = 0 if self.ignore_range else start
