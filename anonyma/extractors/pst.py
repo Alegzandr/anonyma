@@ -19,6 +19,7 @@ from typing import Any
 
 import pypff
 
+from anonyma.extractors._empty import empty_file
 from anonyma.extractors._html import extension_for
 from anonyma.extractors._mime import (
     DROPPED_HEADERS,
@@ -278,6 +279,8 @@ class PstExtractor(Extractor):
         return "pst" if head.startswith(PST_MAGIC) and head[8:10] == b"SM" else None
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         pst = pypff.file()
         pst.open(str(source))
         try:

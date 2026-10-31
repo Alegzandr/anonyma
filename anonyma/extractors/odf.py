@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from anonyma.extractors import _odf
+from anonyma.extractors._empty import empty_file
 from anonyma.models import Document, ExtractionContext, Extractor
 from anonyma.registry import register_extractor
 
@@ -26,4 +27,6 @@ class OdfExtractor(Extractor):
         return _odf.sniff_odf(head)
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         _odf.extract(source, document, ctx, document.format)

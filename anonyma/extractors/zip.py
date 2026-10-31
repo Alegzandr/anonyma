@@ -18,6 +18,7 @@ from anonyma.extractors._archive import (
     empty_directories,
     failed_child,
 )
+from anonyma.extractors._empty import empty_file
 from anonyma.models import ArchiveBombError, Document, ExtractionContext, Extractor
 from anonyma.registry import register_extractor
 from anonyma.textutils import safe_suffix
@@ -48,6 +49,8 @@ class ZipExtractor(Extractor):
     extensions = {".zip": "zip"}
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         directories: list[str] = []
         files: list[str] = []
         with zipfile.ZipFile(source) as archive:

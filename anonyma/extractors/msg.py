@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 
 from anonyma.codec import chunk_text
 from anonyma.extractors._cfb import read_cfb
+from anonyma.extractors._empty import empty_file
 from anonyma.extractors._html import HtmlSource, build_segments, extension_for
 from anonyma.extractors._mime import DROPPED_HEADERS, decode_header_value
 from anonyma.extractors._msgfile import (
@@ -181,6 +182,8 @@ class MsgExtractor(Extractor):
     extensions = {".msg": "msg"}
 
     def extract(self, source: Path, document: Document, ctx: ExtractionContext) -> None:
+        if empty_file(source, document):
+            return
         _, entries = read_cfb(
             source, lambda size: ctx.budget.consume(size, depth=ctx.depth, files=0)
         )
