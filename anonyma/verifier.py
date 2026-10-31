@@ -57,7 +57,7 @@ from anonyma.models import (
     Severity,
     VerificationResult,
 )
-from anonyma.names import PARTICLES, civility_of
+from anonyma.names import PARTICLES, civility_of, needs_capital
 from anonyma.policy import keeps
 from anonyma.replacer import BLACKOUT_CHAR
 from anonyma.resolver import NAME_TYPES, cluster_forms
@@ -351,8 +351,6 @@ def _substitutes(substitutes: set[str]) -> MultiMatcher[str]:
 
 
 def _needs_capital(entity_type: str, value: str) -> bool:
-    from anonyma.names import needs_capital
-
     return entity_type in NAME_TYPES and needs_capital(value)
 
 

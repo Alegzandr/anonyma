@@ -453,7 +453,8 @@ class SettingsPage(QWidget):
         combo.addItem("Automatique", "")
         try:
             specs = [s for s in self.context.model_manager.catalog() if s.kind is kind]
-        except Exception:
+        except Exception as exc:  # unreadable catalog: only "Automatique" is offered
+            log.warning("model catalog unreadable: %s", type(exc).__name__)
             specs = []
         for spec in specs:
             combo.addItem(spec.title or spec.id, spec.id)

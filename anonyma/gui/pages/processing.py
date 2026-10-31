@@ -400,10 +400,7 @@ class ProcessingPage(QWidget):
 
     def _on_progress(self, event: ProgressEvent) -> None:
         label = STAGE_LABELS.get(event.stage, event.stage)
-        text = f"{label} : {event.done} / {event.total}"
-        if event.message:
-            text += f" — {event.message}"
-        self.stage_label.setText(text)
+        self.stage_label.setText(f"{label} : {event.done} / {event.total}")
         self.progress_bar.setRange(0, max(event.total, 1))
         self.progress_bar.setValue(event.done)
         if event.index is not None:

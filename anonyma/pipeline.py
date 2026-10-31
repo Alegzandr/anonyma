@@ -93,7 +93,6 @@ class ProgressEvent:
     stage: str  # "analyse" | "ecriture"
     done: int
     total: int
-    message: str = ""  # French, never sensitive
     #: Index of the item just finished, in input order (``BatchAnalysis.documents``
     #: order); None for start/global events.
     index: int | None = None
