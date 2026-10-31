@@ -7,6 +7,8 @@ il repère les données personnelles (noms, adresses, courriels, téléphones, I
 les remplace de façon cohérente dans tout le lot, purge les métadonnées, puis
 **relit chaque fichier produit** pour vérifier qu'il ne reste rien.
 
+![Revue d'un lot : chaque entité détectée, ses occurrences et la vue côte à côte original / anonymisé](docs/screenshots/revue.png)
+
 > [!CAUTION]
 > **Usage interne uniquement.** Anonyma embarque des composants sous licence AGPL-3.0
 > (PyMuPDF) et GPL-3.0 (extract-msg) : il ne doit pas être distribué à des tiers.
@@ -102,6 +104,12 @@ passe en local : aucune donnée ne quitte le poste.
   la seule action réseau, toujours à votre demande) et réglages enregistrés dans
   `data/config.json`, en onglets : Détection, Remplacement, Listes (valeurs à ne jamais
   masquer, valeurs à toujours masquer, listes métier), Organisations, Avancé et Système.
+
+| Traitement | Revue visuelle d'un PDF |
+|---|---|
+| ![Page Traitement après un lot : statut et occurrences de chaque fichier](docs/screenshots/traitement.png) | ![Revue visuelle d'un PDF : zones encadrées dans l'original et l'anonymisé](docs/screenshots/revue-visuel.png) |
+| **Rapport** | **Réglages** |
+| ![Rapport du lot : verdict, fichiers, quarantaine, résidus et échecs](docs/screenshots/rapport.png) | ![Réglages, onglet Détection : profil, seuils, modèles](docs/screenshots/reglages.png) |
 
 Statuts d'un fichier : **Anonymisé** (vérifié, rien à signaler ; **Pseudonymisé** en
 pseudonymisation) ; **À revoir** (vérifié, mais des entités incertaines ont été masquées
