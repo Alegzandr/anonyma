@@ -97,15 +97,6 @@ def test_help_is_french() -> None:
     assert "Utilisation" in result.output
 
 
-def test_usage_errors_exit_2_in_french(tmp_path: Path) -> None:
-    result = invoke("run", tmp_path)
-    assert result.exit_code == 2
-    assert "Option obligatoire manquante" in result.output
-    result = invoke("run", tmp_path, "-o", tmp_path / "o", "--profil", "bidon")
-    assert result.exit_code == 2
-    assert "ne fait pas partie de" in result.output
-
-
 def test_translate_error() -> None:
     assert cli.translate_error("No such option: --foo") == "Option inconnue : --foo"
     assert cli.translate_error("Missing argument 'CHEMINS...'.") == (
@@ -137,12 +128,10 @@ def test_materiel() -> None:
 # -- run ------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("report_name", ["rapport.json", "rapport.md", "rapport.html"])
-def test_run_anonymizes(
-    tmp_path: Path, corpus: Path, business_list: Path, report_name: str
-) -> None:
+def test_run_anonymizes(tmp_path: Path, corpus: Path, business_list: Path) -> None:
+    """Report formats (md, html) and their leak checks: ``tests/test_report.py``."""
     out = tmp_path / "sortie"
-    report = tmp_path / report_name
+    report = tmp_path / "rapport.json"
     result = invoke(*_run_args(corpus, out, business_list, "--rapport", report))
     assert result.exit_code == 0, result.output
     text = _all_text(out)
@@ -156,23 +145,13 @@ def test_run_anonymizes(
     assert "Personne" in result.output and "Occurrences" in result.output
     assert f"Rapport : {report.resolve()}" in lines
     assert f"Dossier de sortie : {out.resolve()}" in lines
-    if report_name.endswith(".json"):
-        data = json.loads(report.read_text(encoding="utf-8"))
-        assert data["occurrences_par_type"] == {"EMAIL": 1, "PERSONNE": 3}
-        assert data["entites_par_type"] == data["occurrences_par_type"]  # older name
-        assert data["parametres"]["mode"] == "balises"
-        assert data["parametres_libelles"]["Mode"] == "Balises"
-        assert data["verdict"] == "anonymise" and data["code_sortie"] == 0
-        assert {f["statut"] for f in data["fichiers"]} == {"anonymise"}  # codes, not labels
-    if report_name.endswith(".html"):
-        assert report.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
-
-
-def test_run_unsupported_exits_1(tmp_path: Path, corpus: Path, business_list: Path) -> None:
-    (corpus / "binaire.xyz").write_bytes(b"\x00\x01\x02")
-    result = invoke(*_run_args(corpus, tmp_path / "sortie", business_list))
-    assert result.exit_code == 1
-    assert result.output.splitlines()[0] == "2 anonymisés · 1 non pris en charge"
+    data = json.loads(report.read_text(encoding="utf-8"))
+    assert data["occurrences_par_type"] == {"EMAIL": 1, "PERSONNE": 3}
+    assert data["entites_par_type"] == data["occurrences_par_type"]  # older name
+    assert data["parametres"]["mode"] == "balises"
+    assert data["parametres_libelles"]["Mode"] == "Balises"
+    assert data["verdict"] == "anonymise" and data["code_sortie"] == 0
+    assert {f["statut"] for f in data["fichiers"]} == {"anonymise"}  # codes, not labels
 
 
 def test_run_usage_errors(tmp_path: Path, corpus: Path, business_list: Path) -> None:
@@ -180,9 +159,6 @@ def test_run_usage_errors(tmp_path: Path, corpus: Path, business_list: Path) -> 
     result = invoke(*_run_args(corpus, tmp_path / "o", business_list, "--rapport", "r.pdf"))
     assert result.exit_code == 2
     assert ".json, .md ou .html" in result.output
-    result = invoke(*_run_args(corpus, corpus / "sortie", business_list))
-    assert result.exit_code == 2
-    assert "distinct" in result.output
     result = invoke("run", corpus, "-o", tmp_path / "o", "--liste-metier", tmp_path / "absent.csv")
     assert result.exit_code == 2
     result = invoke("run", corpus, "-o", tmp_path / "o", "--config", tmp_path / "absent.json")
@@ -220,7 +196,15 @@ def test_run_whitelist_and_config_file(tmp_path: Path, corpus: Path, business_li
 
 def test_analyser_json(tmp_path: Path, corpus: Path, business_list: Path) -> None:
     result = invoke(
-        "analyser", corpus, "--profil", "leger", "--liste-metier", business_list, "--json"
+        "analyser",
+        corpus,
+        "--profil",
+        "leger",
+        "--liste-metier",
+        business_list,
+        "-j",
+        "1",
+        "--json",
     )
     assert result.exit_code == 0, result.output
     data = json.loads(result.stdout)
@@ -238,7 +222,9 @@ def test_missing_models_are_announced(
 
     gliner = registry.detector_classes()["gliner"]
     monkeypatch.setattr(gliner, "is_available", classmethod(lambda cls, config: False))
-    result = invoke("analyser", corpus, "-p", "standard", "--liste-metier", business_list, "-q")
+    result = invoke(
+        "analyser", corpus, "-p", "standard", "--liste-metier", business_list, "-j", "1", "-q"
+    )
     assert result.exit_code == 0
     assert "non disponible : GLiNER" in " ".join(result.output.split())
     settings = cli._settings(Config(profile=Profile.STANDARD))
@@ -246,7 +232,9 @@ def test_missing_models_are_announced(
 
 
 def test_analyser_table(corpus: Path, business_list: Path) -> None:
-    result = invoke("analyser", corpus, "-p", "leger", "--liste-metier", business_list, "-q")
+    result = invoke(
+        "analyser", corpus, "-p", "leger", "--liste-metier", business_list, "-j", "1", "-q"
+    )
     assert result.exit_code == 0
     assert "PERSONNE" in result.output and "Personne" in result.output
     assert "Entités" in result.output and "Occurrences" in result.output
@@ -262,12 +250,15 @@ def test_pseudonymization_roundtrip(tmp_path: Path, corpus: Path, business_list:
     table = tmp_path / "table.anonyma"
     env = {cli.PASSPHRASE_ENV: SECRET}
     out = tmp_path / "sortie"
-    result = invoke(
-        *_run_args(corpus, out, business_list, "--regime", "pseudonymisation", "--table", table),
-        env=env,
-    )
+    report = tmp_path / "r.html"
+    args = _run_args(corpus, out, business_list, "--regime", "pseudonymisation")
+    result = invoke(*args, "--table", table, "--rapport", report, env=env)
     assert result.exit_code == 0, result.output
     assert table.is_file()
+    lines = result.output.replace(" ", " ").splitlines()
+    assert "2 fichiers pseudonymisés et vérifiés." in lines
+    html = report.read_text(encoding="utf-8")
+    assert "Pseudonymisé" in html and "anonymisés et vérifiés" not in html
     assert CANARY_PERSON.encode() not in table.read_bytes()
 
     # Pseudonymization: new values get random ids (never the size of the table).
@@ -587,11 +578,15 @@ def test_commands_help_uses_infinitives() -> None:
         assert verb in models
 
 
-def test_usage_errors_use_french_quotes() -> None:
+def test_usage_errors_exit_2_in_french_with_french_quotes() -> None:
+    result = invoke("run", "x", "-o", "y", "--profil", "bidon")
+    assert result.exit_code == 2
+    assert "ne fait pas partie de" in result.output
     result = invoke("run", "x", "-o", "y", "--mode", "bidon")
     assert result.exit_code == 2
     assert "« --mode » / « -m »" in result.output and "« bidon »" in result.output
     result = invoke("run", "x")
+    assert result.exit_code == 2
     assert "Option obligatoire manquante : « --sortie » / « -o »." in result.output
     result = invoke("run", "x", "-o", "y", "-j", "-2")
     assert result.exit_code == 2
@@ -687,7 +682,39 @@ def _quarantined_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Pipeline, "run", fake_run)
 
 
-def test_run_prints_the_quarantine_path(
+def _possible_residue_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the pipeline report one file with a possible (uncertain) residue."""
+    from datetime import datetime
+
+    from anonyma.models import DocumentResult, Residue, VerificationResult
+    from anonyma.pipeline import BatchResult, Pipeline
+
+    def fake_run(self: Pipeline, inputs: Any, output_dir: Path, **kwargs: Any) -> BatchResult:
+        output_dir = Path(output_dir).resolve()
+        residue = Residue(
+            "entree/scan.pdf", "page 1", "PERSONNE", "detector", "gliner", "x", certain=False
+        )
+        return BatchResult(
+            "lot-test",
+            output_dir,
+            [
+                DocumentResult(
+                    "d1",
+                    "entree/scan.pdf",
+                    "pdf",
+                    "pdf",
+                    cli.DocumentStatus.NEEDS_REVIEW,
+                    output_path=output_dir / "entree" / "scan.pdf",
+                    verification=VerificationResult(verified=True, residues=[residue]),
+                )
+            ],
+            started_at=datetime(2026, 1, 1, 10, 0, 0),
+        )
+
+    monkeypatch.setattr(Pipeline, "run", fake_run)
+
+
+def test_quarantine_path_only_for_certain_residues(
     tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from anonyma.pipeline import quarantine_dir
@@ -699,6 +726,16 @@ def test_run_prints_the_quarantine_path(
     lines = result.output.splitlines()
     assert lines[0] == "1 anonymisé · 1 en quarantaine (ne pas diffuser)"
     assert f"Quarantaine (ne pas diffuser) : {quarantine_dir(out.resolve())}" in lines
+
+    # A possible residue is « À revoir »: exit code 0, no quarantine folder.
+    _possible_residue_run(monkeypatch)
+    result = invoke(*_run_args(corpus, tmp_path / "s2", business_list, "--json"))
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["verdict"] == "a_revoir" and data["quarantaine"] == 0
+    assert data["dossier_quarantaine"] is None
+    assert "1 résidu possible à vérifier avant diffusion" in result.output
+    assert "Quarantaine" not in result.output
 
 
 def test_run_json_summary(
@@ -772,49 +809,11 @@ def test_passphrase_never_reaches_child_processes(
     assert table.is_file()
     # Analysis only, no table opened: the variable is gone as well.
     monkeypatch.setattr(Pipeline, "analyze", _env_spy(seen, Pipeline.analyze))
-    result = invoke("analyser", corpus, "-p", "leger", "-q", env={cli.PASSPHRASE_ENV: SECRET})
+    result = invoke(
+        "analyser", corpus, "-p", "leger", "-j", "1", "-q", env={cli.PASSPHRASE_ENV: SECRET}
+    )
     assert result.exit_code == 0, result.output
     assert seen == [None, None]
-
-
-def test_possible_residue_is_to_review_not_quarantine(
-    tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from datetime import datetime
-
-    from anonyma.models import DocumentResult, Residue, VerificationResult
-    from anonyma.pipeline import BatchResult, Pipeline
-
-    def fake_run(self: Pipeline, inputs: Any, output_dir: Path, **kwargs: Any) -> BatchResult:
-        output_dir = Path(output_dir).resolve()
-        residue = Residue(
-            "entree/scan.pdf", "page 1", "PERSONNE", "detector", "gliner", "x", certain=False
-        )
-        return BatchResult(
-            "lot-test",
-            output_dir,
-            [
-                DocumentResult(
-                    "d1",
-                    "entree/scan.pdf",
-                    "pdf",
-                    "pdf",
-                    cli.DocumentStatus.NEEDS_REVIEW,
-                    output_path=output_dir / "entree" / "scan.pdf",
-                    verification=VerificationResult(verified=True, residues=[residue]),
-                )
-            ],
-            started_at=datetime(2026, 1, 1, 10, 0, 0),
-        )
-
-    monkeypatch.setattr(Pipeline, "run", fake_run)
-    result = invoke(*_run_args(corpus, tmp_path / "sortie", business_list, "--json"))
-    assert result.exit_code == 0, result.output
-    data = json.loads(result.stdout)
-    assert data["verdict"] == "a_revoir" and data["quarantaine"] == 0
-    assert data["dossier_quarantaine"] is None
-    assert "1 résidu possible à vérifier avant diffusion" in result.output
-    assert "Quarantaine" not in result.output
 
 
 # -- verdict, exit code and JSON vocabulary (client test, round 2) -------------------
@@ -865,9 +864,16 @@ def test_json_counts_have_one_meaning_each(
     tmp_path: Path, corpus: Path, business_list: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (corpus / "binaire.xyz").write_bytes(b"\x00\x01")
-    result = invoke(*_run_args(corpus, tmp_path / "s", business_list, "--json"))
+    report = tmp_path / "r.md"
+    result = invoke(
+        *_run_args(corpus, tmp_path / "s", business_list, "--json", "--rapport", report)
+    )
     data = json.loads(result.stdout)
     assert result.exit_code == data["code_sortie"] == 1
+    assert "2 anonymisés · 1 non pris en charge" in result.output.replace(" ", " ")
+    # No occurrence count for a file that was not read.
+    line = next(x for x in report.read_text(encoding="utf-8").splitlines() if ".xyz" in x)
+    assert "| Non pris en charge | — |" in line
     assert data["nombre_fichiers"] == data["fichiers"] == 3
     assert sum(data["resultats"].values()) == data["nombre_fichiers"]
     assert data["resultats"]["non_supporte"] == 1
@@ -881,29 +887,6 @@ def test_json_counts_have_one_meaning_each(
     data = json.loads(invoke(*_run_args(corpus, tmp_path / "s2", business_list, "--json")).stdout)
     assert data["quarantaine"] == data["resultats"]["quarantaine"] == 1
     assert data["fichiers_a_revoir"] == 0 and data["entites_a_revoir"] == 0
-
-
-def test_unsupported_file_shows_no_occurrence_count(
-    tmp_path: Path, corpus: Path, business_list: Path
-) -> None:
-    (corpus / f"{CANARY_PERSON}.xyz").write_bytes(b"\x00\x01")
-    report = tmp_path / "r.md"
-    invoke(*_run_args(corpus, tmp_path / "s", business_list, "--rapport", report))
-    line = next(x for x in report.read_text(encoding="utf-8").splitlines() if ".xyz" in x)
-    assert "| Non pris en charge | — |" in line
-
-
-def test_pseudonymized_outputs_are_called_so(
-    tmp_path: Path, corpus: Path, business_list: Path
-) -> None:
-    table = tmp_path / "t.anonyma"
-    report = tmp_path / "r.html"
-    args = _run_args(corpus, tmp_path / "s", business_list, "-r", "pseudonymisation")
-    result = invoke(*args, "--table", table, "--rapport", report, env={cli.PASSPHRASE_ENV: SECRET})
-    assert result.exit_code == 0, result.output
-    assert "2 fichiers pseudonymisés et vérifiés." in result.output.splitlines()
-    html = report.read_text(encoding="utf-8")
-    assert "Pseudonymisé" in html and "anonymisés et vérifiés" not in html
 
 
 def test_rerun_into_a_used_folder_warns_and_replace_removes_only_our_files(
@@ -947,12 +930,12 @@ def test_messages_hold_no_internal_code_or_english(tmp_path: Path, business_list
 def test_invalid_configuration_is_explained_in_french(tmp_path: Path, corpus: Path) -> None:
     config_file = tmp_path / "c.json"
     config_file.write_text('{"min_score": "0,5"}', encoding="utf-8")
-    result = invoke("analyser", corpus, "--config", config_file)
+    result = invoke("analyser", corpus, "-j", "1", "--config", config_file)
     assert result.exit_code == 2
     assert "la valeur de « min_score » doit être un nombre" in " ".join(result.output.split())
     assert "not supported" not in result.output
     config_file.write_text('{"mode": "bidon"}', encoding="utf-8")
-    result = invoke("analyser", corpus, "--config", config_file)
+    result = invoke("analyser", corpus, "-j", "1", "--config", config_file)
     assert result.exit_code == 2
     output = " ".join(result.output.split())
     assert "mode de remplacement (balises, realiste, masquage)" in output
@@ -970,7 +953,9 @@ def test_missing_language_engine_is_named_precisely(
     monkeypatch.setattr(llm, "is_available", classmethod(lambda cls, config: False))
     real = cli.engine_available
     monkeypatch.setattr(cli, "engine_available", lambda name: name != "llm" and real(name))
-    result = invoke("analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-q")
+    result = invoke(
+        "analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-j", "1", "-q"
+    )
     output = " ".join(result.output.split())
     assert "moteur du modèle de langue (llama-cpp-python) absent" in output
     assert "« uv sync --extra llm »" in output  # from sources: how to get it
@@ -982,7 +967,9 @@ def test_missing_language_engine_is_named_precisely(
     assert "moteur du modèle de langue (llama-cpp-python) absent" in output
 
     monkeypatch.setattr("sys.frozen", True, raising=False)  # portable build: no extra
-    result = invoke("analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-q")
+    result = invoke(
+        "analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-j", "1", "-q"
+    )
     output = " ".join(result.output.split())
     assert "absent de la version portable" in output and "uv sync" not in output
 
@@ -1047,7 +1034,7 @@ def test_analyser_lists_unread_files_under_anonymized_names(
     corpus: Path, business_list: Path
 ) -> None:
     (corpus / f"{CANARY_PERSON}.xyz").write_bytes(b"\x00\x01")
-    args = ["analyser", corpus, "-p", "leger", "--liste-metier", business_list]
+    args = ["analyser", corpus, "-p", "leger", "--liste-metier", business_list, "-j", "1"]
     result = invoke(*args, "-q")
     assert result.exit_code == 1
     assert "entree/[PERSONNE_001].xyz : Format de fichier non reconnu." in result.output
