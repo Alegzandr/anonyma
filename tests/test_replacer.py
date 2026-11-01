@@ -470,3 +470,12 @@ def test_stored_person_takes_the_case_of_each_mention() -> None:
     assert again["Régis Fontaine"] == f"{given} {surname.title()}"
     assert again["Régis FONTAINE"] == f"{given} {surname}"
     assert again["Régis"] == given
+
+
+def test_compound_surname_keeps_the_lines_of_the_original() -> None:
+    from anonyma.replacer import _lines_of
+
+    assert _lines_of("Gaspard\n\nVALMONT", "Kleber DA COSTA") == "Kleber\n\nDA COSTA"
+    assert _lines_of("LE GOFF\nJean", "DA COSTA Paul") == "DA COSTA\nPaul"
+    assert _lines_of("Jean\nDupont", "Paul Da Costa") == "Paul\nDa Costa"
+    assert _lines_of("Jean\nDUPONT", "Paul MARTIN") == "Paul\nMARTIN"

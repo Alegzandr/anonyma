@@ -947,13 +947,26 @@ _SPACES = re.compile(r"\s+")
 
 def _lines_of(original: str, substitute: str) -> str:
     """A name written over several lines (« Jean » then « DUPONT ») gets its substitute
-    over the same lines when the words line up one for one: the layout stays."""
+    over the same lines: the layout stays. A substitute with more words than the
+    original (« Kleber DA COSTA » for « Gaspard » / « VALMONT ») keeps a compound
+    surname together: neighbouring upper-case words first, else the last words."""
     if "\n" not in original:
         return substitute
     separators = _SPACES.findall(original.strip())
-    words = substitute.split()
-    if len(words) != len(separators) + 1:
+    groups = [[word] for word in substitute.split()]
+    if len(groups) < len(separators) + 1:
         return substitute
+
+    def upper(group: list[str]) -> bool:
+        return all(w.isupper() and len(w) > 1 for w in group)
+
+    while len(groups) > len(separators) + 1:
+        at = next(
+            (i for i in range(len(groups) - 1) if upper(groups[i]) and upper(groups[i + 1])),
+            len(groups) - 2,
+        )
+        groups[at : at + 2] = [groups[at] + groups[at + 1]]
+    words = [" ".join(group) for group in groups]
     return words[0] + "".join(sep + word for sep, word in zip(separators, words[1:], strict=True))
 
 
