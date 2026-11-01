@@ -1,3 +1,3 @@
 """Anonyma: local, bulk anonymization of documents of every format."""
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
