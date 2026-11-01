@@ -174,10 +174,21 @@ def gui_path(folder: Path) -> Path:
     return folder / APP
 
 
-def reset_runtime_dirs(folder: Path) -> None:
+def reset_runtime_dirs(folder: Path, retry_seconds: float = 30.0) -> None:
+    """Empty ``models`` and ``data`` before packaging. On Windows the smoke test's
+    LibreOffice (soffice.bin) may still be exiting and recreating folders in its
+    profile: removal is retried until the folder is gone."""
     for name in ("models", "data"):
-        shutil.rmtree(folder / name, ignore_errors=True)
-        (folder / name).mkdir()
+        target = folder / name
+        deadline = time.monotonic() + retry_seconds
+        while True:
+            shutil.rmtree(target, ignore_errors=True)
+            if not target.exists() or time.monotonic() >= deadline:
+                break
+            time.sleep(0.5)
+        if target.exists():
+            raise SystemExit(f"Impossible de vider « {name} » avant l'archivage.")
+        target.mkdir()
 
 
 def _frozen_env() -> dict[str, str]:
