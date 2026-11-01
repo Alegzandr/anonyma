@@ -82,6 +82,7 @@ TOKEN_TYPES = frozenset(
         EntityType.EMAIL,
         EntityType.MESSAGE_ID,
         EntityType.BARCODE,
+        EntityType.THREAD_INDEX,
     }
 )
 _BUILTIN_TYPES = frozenset(t.value for t in EntityType)
