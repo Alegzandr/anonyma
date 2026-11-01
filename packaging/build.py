@@ -17,7 +17,7 @@ Portable folder layout::
       _internal/                                               shared libraries (not macOS)
       libreoffice/                                             bundled LibreOffice (MPL-2.0)
       models/   data/                                          empty, filled at runtime
-      LICENSES.md   README.md
+      LICENSES.md   README.md   REFERENCE.md
 
 LibreOffice is downloaded at build time only (pinned version, SHA-256 checked, see
 ``packaging/libreoffice_bundle.py``); the application never downloads it.
@@ -148,7 +148,7 @@ def assemble() -> Path:
         raise SystemExit("Le dossier portable est introuvable : la construction a échoué.")
     for name in ("models", "data"):
         (folder / name).mkdir(exist_ok=True)
-    for doc in ("LICENSES.md", "README.md"):
+    for doc in ("LICENSES.md", "README.md", "REFERENCE.md"):
         if (ROOT / doc).is_file():
             shutil.copy2(ROOT / doc, folder / doc)
     return folder

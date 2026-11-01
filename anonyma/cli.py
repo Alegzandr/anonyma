@@ -1495,7 +1495,7 @@ def run_summary(
     """Machine-readable outcome of ``run`` (``--json``): codes, counts and paths only,
     never an original value or file name (file names are the anonymized ones).
 
-    The vocabulary is documented in the README (« Automatisation ») and shared with
+    The vocabulary is documented in REFERENCE.md (« Automatisation ») and shared with
     the JSON report (:meth:`BatchReport.counts`); ``code_sortie`` is derived from
     ``verdict`` (:meth:`BatchReport.exit_code`)."""
     from anonyma.pipeline import is_quarantined, quarantine_dir

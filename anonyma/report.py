@@ -4,7 +4,7 @@ sensitive value.
 The verdict, the exit code of ``run`` and every count come from the same outcomes of
 the top-level files (:meth:`BatchReport.file_outcomes`): they never disagree. The
 JSON vocabulary (:meth:`BatchReport.to_dict`, :meth:`BatchReport.counts`) is the one
-documented in the README (« Automatisation »).
+documented in REFERENCE.md (« Automatisation »).
 """
 
 from __future__ import annotations

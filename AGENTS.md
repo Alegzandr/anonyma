@@ -2,9 +2,10 @@
 
 Guidance for coding agents working on Anonyma. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 for the pipeline and the plugin contracts, [PRODUCT.md](PRODUCT.md) for users and positioning,
-[README.md](README.md) for user-facing behaviour (formats, CLI, exit codes) and
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for sources, build, CI and releases. Keep the
-README user-only: developer material goes to `docs/`.
+[REFERENCE.md](REFERENCE.md) for the detailed user-facing behaviour (formats, CLI, JSON
+summary, exit codes) and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for sources, build, CI
+and releases. Keep [README.md](README.md) a short, plain-language guide for end users
+(install, one batch, statuses); details go to `REFERENCE.md`, developer material to `docs/`.
 
 ## What this is
 
@@ -41,8 +42,9 @@ before you consider a change done. On Windows, keep pytest's base temp short
   may contain one in logs, reports or `Issue` messages. Sensitive model fields are
   `repr=False`; use `logs.fingerprint(value)` for correlation.
 - **Offline**: `netguard` blocks outbound connections; only a user-triggered model download
-  runs inside `netguard.allow_network()`. Do not add network calls, telemetry or new
-  downloads at runtime.
+  and the startup update check of the portable build (`anonyma/updater.py`, GitHub
+  releases, `Config.check_updates`) run inside `netguard.allow_network()`. Do not add
+  other network calls, telemetry or new downloads at runtime.
 - **Original format is the contract**: each output keeps its input format, folder tree and
   layout (msg stays msg, legacy Office via bundled LibreOffice, PST as a folder of eml,
   file and folder names anonymised). Changing an output format is a regression.
@@ -67,6 +69,7 @@ before you consider a change done. On Windows, keep pytest's base temp short
 | `anonyma/verifier.py` | re-reads outputs: certain residue → quarantine, statistical signal → « À revoir » |
 | `anonyma/store.py` | encrypted mapping table (pseudonymisation) |
 | `anonyma/config.py`, `paths.py`, `netguard.py`, `logs.py` | settings, portable folders, network guard, value-free logging |
+| `anonyma/updater.py`, `gui/update.py` | update check against GitHub releases, verified download, self-replacing installer |
 | `anonyma/gui/` | Qt Widgets app; French enum labels in `gui/labels.py`, styling in `gui/theme.py` |
 | `anonyma/data/` | compact lexicons built offline by `packaging/build_detection_data.py` |
 | `packaging/` | PyInstaller spec, portable build, LibreOffice bundling, icons, licences |
