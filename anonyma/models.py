@@ -94,8 +94,8 @@ class EntityType(enum.StrEnum):
     MESSAGE_ID = "ID_MESSAGE"
     THREAD_INDEX = "INDEX_CONVERSATION"  # Outlook thread index: always rebuilt
     INDIRECT = "IDENTIFIANT_INDIRECT"
-    PROPER_NOUN = "NOM_PROPRE"  # paranoid mode
-    SUSPICIOUS_TOKEN = "SEQUENCE_SUSPECTE"  # paranoid mode
+    PROPER_NOUN = "NOM_PROPRE"  # user lists
+    SUSPICIOUS_TOKEN = "SEQUENCE_SUSPECTE"  # user lists
     BUSINESS_TERM = "TERME_METIER"  # business lists without explicit type
     OPAQUE_ID = "IDENTIFIANT_TECHNIQUE"  # high-entropy tokens: hashes, UUIDs, transaction ids
     BARCODE = "CODE_BARRES"  # QR code / Data Matrix / barcode: always masked as a whole
@@ -330,7 +330,9 @@ class EntityCluster:
     max_score: float = 0.0
     detectors: set[str] = field(default_factory=set)
     attributes: dict[str, str] = field(default_factory=dict)
-    needs_review: bool = False
+    #: Scored below ``Config.review_threshold``: masked all the same, but not searched
+    #: through the batch as a lone common word, and shown as low confidence.
+    uncertain: bool = False
     review: ReviewStatus = ReviewStatus.AUTO
 
 
@@ -418,8 +420,12 @@ class Residue:
     detector: str
     value: str = field(repr=False)
     #: True: original value found again, or a deterministic detector hit (file goes
-    #: to quarantine). False: statistical detector hit only (file sent to review).
+    #: to quarantine). False: statistical detector hit only.
     certain: bool = True
+    #: Significant parts of ``value`` outside the substitutes it overlaps (a model
+    #: span « [PERSONNE_001] Sophie » gives « Sophie »): what the corrective pass
+    #: masks. Empty: ``value`` itself.
+    fragments: tuple[str, ...] = field(default=(), repr=False)
 
 
 @dataclass(slots=True)
@@ -465,10 +471,9 @@ class DocumentResult:
     entity_counts: dict[str, int] = field(default_factory=dict)
     residue_count: int = 0  # certain residues
     possible_residue_count: int = 0
-    review_count: int = 0
-    #: ``(entity type, substitute)`` of the clusters awaiting review: the tags or
-    #: substitutes already present in the output, never an original value.
-    review_items: list[tuple[str, str]] = field(default_factory=list)
+    #: Values masked by the corrective pass (residues found by the first
+    #: verification, then masked and rewritten).
+    corrected_count: int = 0
     issues: list[Issue] = field(default_factory=list)
     children: list[DocumentResult] = field(default_factory=list)
     verification: VerificationResult | None = None

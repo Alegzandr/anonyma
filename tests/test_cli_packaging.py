@@ -104,9 +104,8 @@ def test_bundled_libreoffice_wins_over_path(
         rel = Path("libreoffice/program/soffice")
     bundled = _fake_soffice(portable_home / rel)
     assert libreoffice.find_soffice(Config()) == bundled
-    # An explicit setting still wins; disabling LibreOffice disables everything.
+    # An explicit setting still wins.
     assert libreoffice.find_soffice(Config(libreoffice_path=str(system_copy))) == system_copy
-    assert libreoffice.find_soffice(Config(use_libreoffice=False)) is None
 
 
 def test_libreoffice_profile_is_short_and_inside_batch(portable_home: Path) -> None:

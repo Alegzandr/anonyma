@@ -170,8 +170,6 @@ def find_soffice(config: Config) -> Path | None:
     in the portable folder (and other portable copies next to the application),
     ``PATH``, then the standard locations of Windows, macOS and Linux.
     """
-    if not config.use_libreoffice:
-        return None
     if config.libreoffice_path:
         configured = _from_setting(config.libreoffice_path)
         if configured is not None:

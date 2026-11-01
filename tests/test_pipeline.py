@@ -135,25 +135,28 @@ def low_score_detector(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
 
 
-def test_review_flow(tmp_path: Path, canary_config: Config, low_score_detector: None) -> None:
+def test_uncertain_entities_are_masked_without_review(
+    tmp_path: Path, canary_config: Config, low_score_detector: None
+) -> None:
     src = tmp_path / "in"
     src.mkdir()
     (src / "a.txt").write_text("Le projet Hélios avance. Signé Bérénice.\n", encoding="utf-8")
     (src / "b.txt").write_text("Rien sur HÉLIOS ici, mais Bérénice relit.\n", encoding="utf-8")
     pipeline = Pipeline(canary_config)
     analysis = pipeline.analyze([src])
-    clusters = analysis.review_clusters()
+    clusters = analysis.uncertain_clusters()
     assert len(clusters) == 1
     # Propagation found the case variant in the second file.
     assert sum(1 for e in analysis.entities if e.cluster_id == clusters[0].id) == 2
 
+    # An uncertain entity is masked, and the file is anonymized: nothing to review.
     first = pipeline.apply(analysis, tmp_path / "o1")
-    assert {r.status for r in first.results} == {DocumentStatus.NEEDS_REVIEW}
-    # Every « À revoir » says why, without the value (D365: problemes: [] before).
+    assert {r.status for r in first.results} == {DocumentStatus.ANONYMIZED}
     for r in first.results:
-        [issue] = [i for i in r.issues if i.code == "review.uncertain"]
-        assert issue.message.startswith("1 entité incertaine (Projet) masquée par précaution")
-        assert "zones : « " in issue.message and "lios" not in issue.message
+        assert not [i for i in r.issues if i.code.startswith("review")]
+        assert r.output_path is not None
+        text = r.output_path.read_text(encoding="utf-8")
+        assert "élios" not in text and "ÉLIOS" not in text
 
     decisions = ReviewDecisions(
         confirmed_clusters={clusters[0].id}, manual=[ManualEntity("Bérénice", "PERSONNE")]
@@ -331,7 +334,9 @@ def test_whitelisted_value_is_kept_intact(tmp_path: Path) -> None:
 
 
 class _OutputOnlyStatistical(Detector):
-    """Statistical detector that only fires on produced text (contains a tag)."""
+    """Statistical detector that only fires on produced text (contains a tag), on a
+    fragment too short to search (like a stray OCR piece): the corrective pass cannot
+    mask it."""
 
     name = "statistique"
     deterministic = False
@@ -341,11 +346,11 @@ class _OutputOnlyStatistical(Detector):
         for s in segments:
             i = s.text.find("Relu")
             if i >= 0 and "[PERSONNE_" in s.text:
-                out.append(Entity("PERSONNE", "Relu", document_id, s.id, i, i + 4, 0.9, self.name))
+                out.append(Entity("SIGNAL", "Re", document_id, s.id, i, i + 2, 0.9, self.name))
         return out
 
 
-def test_possible_residue_means_review_not_quarantine(
+def test_uncorrectable_possible_residue_means_review_not_quarantine(
     tmp_path: Path, canary_config: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     registry.load_plugins()

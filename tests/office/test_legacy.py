@@ -26,9 +26,6 @@ def test_find_soffice_respects_settings(tmp_path: Path) -> None:
     exe.write_bytes(b"")
     assert libreoffice.find_soffice(Config(libreoffice_path=str(exe))) == exe
     assert libreoffice.find_soffice(Config(libreoffice_path=str(install))) == exe
-    assert (
-        libreoffice.find_soffice(Config(use_libreoffice=False, libreoffice_path=str(exe))) is None
-    )
 
 
 def test_portable_copy_next_to_the_application_is_found(

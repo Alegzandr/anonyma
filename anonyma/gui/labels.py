@@ -63,13 +63,13 @@ DETECTOR_LABELS: dict[str, str] = {
     "listes_metier": "Listes métier",
     "gliner": "Modèle GLiNER",
     "llm": "Modèle de langue",
-    "paranoiaque": "Mode paranoïaque",
     "codes": "Codes-barres",
     "index_conversation": "Index de conversation",
     "identifiants_techniques": "Identifiants techniques",
     "politique": "Organisations",
     "propagation": "Propagation dans le lot",
     "manuel": "Ajout manuel",
+    "verification": "Seconde passe après vérification",
 }
 
 

@@ -6,11 +6,10 @@ import time
 from pathlib import Path
 from typing import override
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -28,7 +27,7 @@ from anonyma import registry
 from anonyma.frenchtext import NBSP, item_progress, plural, typo
 from anonyma.gui import dialogs
 from anonyma.gui.context import OUTPUT_DIR_KEY
-from anonyma.gui.controller import REVIEW_POLICIES, REVIEW_POLICY_GLOSSES, BatchController, Phase
+from anonyma.gui.controller import BatchController, Phase
 from anonyma.gui.itemmodels import QueueModel, QueueRow
 from anonyma.gui.labels import STATUS_LEVELS, status_label
 from anonyma.gui.widgets import (
@@ -71,18 +70,10 @@ def duration(seconds: float) -> str:
     return f"{s // 3600}{NBSP}h{NBSP}{s % 3600 // 60:02d}{NBSP}min"
 
 
-def pending_review_question(count: int) -> str:
-    """Confirmation asked before applying with uncertain entities left unreviewed."""
-    entities = plural(count, "entité incertaine n'a", "entités incertaines n'ont")
-    reviewed = "revue" if abs(count) < 2 else "revues"
-    return (
-        f"{entities} pas été {reviewed}. Les fichiers concernés seront marqués « À revoir ». "
-        "Appliquer quand même ?"
-    )
-
-
 class ProcessingPage(QWidget):
     review_requested = Signal()
+    #: (top-level document id) — a file of the list was double-clicked.
+    document_requested = Signal(str)
     report_requested = Signal()
 
     def __init__(self, controller: BatchController, parent: QWidget | None = None) -> None:
@@ -132,7 +123,7 @@ class ProcessingPage(QWidget):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
             self.table.setColumnWidth(col, width)
         self.table.setItemDelegateForColumn(2, BadgeDelegate(self.table))
-        self.table.doubleClicked.connect(lambda _i: self.review_requested.emit())
+        self.table.doubleClicked.connect(self._row_activated)
         self.queue_stack.addWidget(self.table)
         layout.addWidget(self.queue_stack, 1)
 
@@ -175,26 +166,6 @@ class ProcessingPage(QWidget):
         self.output_error.hide()
         layout.addWidget(self.output_error)
 
-        policy_row = QHBoxLayout()
-        policy_label = QLabel("&Relecture")
-        policy_row.addWidget(policy_label)
-        self.policy_combo = QComboBox()
-        self.policy_combo.setObjectName("ReviewPolicy")
-        for key, label in REVIEW_POLICIES.items():
-            self.policy_combo.addItem(label, key)
-            self.policy_combo.setItemData(
-                self.policy_combo.count() - 1,
-                typo(REVIEW_POLICY_GLOSSES[key]),
-                Qt.ItemDataRole.ToolTipRole,
-            )
-        policy_label.setBuddy(self.policy_combo)
-        self.policy_combo.currentIndexChanged.connect(self._policy_changed)
-        policy_row.addWidget(self.policy_combo)
-        self.policy_hint = muted("")
-        self.policy_hint.setWordWrap(False)
-        policy_row.addWidget(self.policy_hint, 1)
-        layout.addLayout(policy_row)
-
         # Global progress: visible while running, or to say why a run stopped.
         self.progress_box = QWidget()
         progress_row = QHBoxLayout(self.progress_box)
@@ -223,8 +194,8 @@ class ProcessingPage(QWidget):
         actions = QHBoxLayout()
         self.analyze_button = button("Analyser")
         self.analyze_button.setToolTip("Détecter les entités sans rien écrire.")
-        self.review_button = button("Revoir")
-        self.review_button.setToolTip("Contrôler et corriger les entités détectées.")
+        self.review_button = button("Aperçu")
+        self.review_button.setToolTip("Voir ce qui est masqué, fichier par fichier.")
         self.report_button = button("Voir le rapport")
         self.cancel_button = button("Annuler")
         self.cancel_button.setProperty("danger", True)
@@ -256,10 +227,7 @@ class ProcessingPage(QWidget):
         c.result_ready.connect(self._on_result)
         c.failed.connect(self._on_failed)
         c.cancelled.connect(self._on_cancelled)
-        c.review_required.connect(self._on_review_required)
         c.effective_ready.connect(self.refresh)
-        c.context.config_changed.connect(self._load_policy)
-        self._load_policy()
         self._restore_output()
         self.refresh()
 
@@ -290,31 +258,6 @@ class ProcessingPage(QWidget):
             f"charge : " + ", ".join(extensions)
         )
 
-    def _load_policy(self) -> None:
-        policy = self.controller.review_policy()
-        self.policy_combo.blockSignals(True)
-        self.policy_combo.setCurrentIndex(max(self.policy_combo.findData(policy), 0))
-        self.policy_combo.blockSignals(False)
-        gloss = typo(REVIEW_POLICY_GLOSSES[policy])
-        self.policy_hint.setText(gloss)
-        self._update_buttons()
-
-    def _policy_changed(self) -> None:
-        policy = str(self.policy_combo.currentData())
-        context = self.controller.context
-        if context.config.review_policy == policy:
-            return
-        config = context.config_copy()
-        config.review_policy = policy
-        try:
-            context.update_config(config)
-        except (OSError, ValueError):
-            self.banner.show_message("Impossible d'enregistrer ce réglage.", "error")
-        self._load_policy()
-
-    def set_review_policy(self, policy: str) -> None:
-        self.policy_combo.setCurrentIndex(self.policy_combo.findData(policy))
-
     def _keep_decisions(self, action: str, ok_label: str) -> bool:
         """True when the user prefers to keep the review decisions that ``action``
         would discard (nothing to ask when there are none)."""
@@ -323,7 +266,7 @@ class ProcessingPage(QWidget):
             return False
         return not dialogs.confirm(
             self,
-            f"{action} efface {plural(count, 'décision', 'décisions')} de revue.",
+            f"{action} efface {plural(count, 'décision', 'décisions')} prises dans l'aperçu.",
             title=ok_label,
             ok_label=ok_label,
             cancel_label="Garder mes décisions",
@@ -396,6 +339,12 @@ class ProcessingPage(QWidget):
             self._remember_output()
         self._update_buttons()
         return not error
+
+    def _row_activated(self, index: QModelIndex) -> None:
+        """Double click: the preview of that file once analysed."""
+        rows = self.model.rows
+        if 0 <= index.row() < len(rows) and rows[index.row()].document_id:
+            self.document_requested.emit(rows[index.row()].document_id)
 
     def _remember_output(self) -> None:
         out = self.controller.output_dir
@@ -530,14 +479,6 @@ class ProcessingPage(QWidget):
             ok_label="Appliquer",
         ):
             return
-        pending = c.pending_review_count()
-        if pending and not dialogs.confirm(
-            self,
-            pending_review_question(pending),
-            title=APPLY_LABEL,
-            ok_label="Appliquer",
-        ):
-            return
         replacing = False
         if c.result is not None and c.result.output_dir == c.output_dir:
             if not dialogs.confirm(
@@ -665,22 +606,6 @@ class ProcessingPage(QWidget):
         )
         self._update_progress_visibility()
 
-    def _on_review_required(self, count: int) -> None:
-        entities = plural(count, "entité")
-        if self.controller.review_policy() == "systematique":
-            text = (
-                f"Relecture systématique : {entities} à contrôler dans « Revue », puis "
-                f"cliquez sur « {APPLY_LABEL} »."
-            )
-        else:
-            uncertain = plural(count, "entité incertaine", "entités incertaines")
-            text = (
-                f"{uncertain} à vérifier avant l'écriture. Vérifiez-les dans « Revue », "
-                f"puis cliquez sur « {APPLY_LABEL} »."
-            )
-        self.banner.show_message(text, "warning")
-        self.review_requested.emit()
-
     # -- table ---------------------------------------------------------------------------
 
     def _root_for(self, source: Path) -> str:
@@ -768,16 +693,12 @@ class ProcessingPage(QWidget):
             n = len(c.queue)
             self.summary.setText(f"{plural(n, 'fichier')} dans la liste." if n else "")
             return
-        pending = c.pending_review_count()
-        decided, total = c.decided_counts()
+        _decided, total = c.decided_counts()
         parts = [
             plural(len(c.analysis.documents), "fichier"),
             plural(total, "entité"),
             plural(len(c.analysis.entities), "occurrence"),
-            f"{decided}{NBSP}/{NBSP}{total} décidées",
         ]
-        if pending:
-            parts.append(f"{pending}{NBSP}à revoir")
         self.summary.setText(" · ".join(parts))
 
     def _update_buttons(self) -> None:
@@ -792,7 +713,6 @@ class ProcessingPage(QWidget):
             self.output_edit,
             self.output_button,
             self.remove_button,
-            self.policy_combo,
         ):
             w.setEnabled(not busy)
         self.clear_button.setEnabled(not busy and has_inputs)
@@ -806,9 +726,10 @@ class ProcessingPage(QWidget):
         self.run_button.setEnabled(not busy and (has_inputs or applying))
         if applying:
             self.run_button.setToolTip(
-                "Écrire les fichiers avec les décisions de revue, sans relancer l'analyse "
+                "Écrire les fichiers avec les décisions de l'aperçu, sans relancer l'analyse "
                 "(Ctrl+Entrée)."
             )
         else:
-            gloss = REVIEW_POLICY_GLOSSES[c.review_policy()]
-            self.run_button.setToolTip(typo(f"{gloss} (Ctrl+Entrée)"))
+            self.run_button.setToolTip(
+                "Analyser puis écrire les fichiers anonymisés et vérifiés (Ctrl+Entrée)."
+            )

@@ -248,10 +248,6 @@ def entity_format(
         bg, fg = theme.entity_colors(entity_type)
         fmt.setBackground(bg)
         fmt.setForeground(fg)
-        if state is RowState.REVIEW:
-            fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.DashUnderline)
-            fmt.setUnderlineColor(QColor(t.warning))
-            fmt.setFontUnderline(True)
     if tooltip:
         fmt.setToolTip(tooltip)
     return fmt
@@ -261,5 +257,5 @@ def row_tooltip(row: EntityRow) -> str:
     e = row.entity
     return (
         f"{entity_type_label(row.entity_type)} · {STATE_LABELS[row.state]} · "
-        f"{detector_label(e.detector)} · {confidence_label(e.score, row.needs_review)}"
+        f"{detector_label(e.detector)} · {confidence_label(e.score, row.uncertain)}"
     )

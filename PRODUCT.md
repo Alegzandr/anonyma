@@ -52,18 +52,22 @@ through a file the tool silently skipped.
   layout (msg stays msg, legacy Office via the bundled LibreOffice, PST as a folder of eml),
   with file and folder names anonymised too.
 - **Batch-consistent decisions**: one entity, one substitute, across the whole batch; a
-  review decision applies to every occurrence at once.
+  decision taken in the preview applies to every occurrence at once.
+- **Decides instead of asking**: the user is almost never asked anything. Uncertain values
+  are masked, what the verification still finds is masked by a second pass, and the
+  application chooses everything a user could not judge (profile, models, OCR, workers,
+  thresholds). Settings are only what depends on the user's needs.
 
 ## Operating Context
 
 - Input: files or folders dropped in; output: a separate folder (originals are never
   modified). Archives, mailboxes and attachments are processed recursively.
-- Workflow in the GUI: **Traitement** → optional **Revue** → **Rapport**, plus **Modèles**
-  and **Réglages**. The "Relecture" setting decides whether "Anonymiser" pauses for review
-  (*aucune*, *entités incertaines seulement* by default, *systématique*).
-- Review is entity-centric ("Bérénice Lagarde — PERSONNE — 14 occurrences dans 6
-  fichiers"), most uncertain first, with side-by-side context (text, rendered PDF/image with
-  boxed zones) and keyboard shortcuts (N / P, Maj+N, V, R, T, A).
+- Workflow in the GUI: **Traitement** → **Rapport**, "Anonymiser" never pauses; plus an
+  **Aperçu** to consult (double-click a file), **Modèles** and **Réglages**.
+- The preview is consultative and entity-centric ("Bérénice Lagarde — PERSONNE — 14
+  occurrences dans 6 fichiers"), with side-by-side context (text, rendered PDF/image with
+  boxed zones) and keyboard shortcuts (N / P, Maj+N, V, R, T, A). Corrections there are
+  possible, never required.
 - Workflow in the CLI: `run`, `analyser` (dry run), `formats`, `materiel`, `modeles`,
   `config`, `reidentifier`; exit codes 0 / 1 / 2 are a contract.
 - Runs from a portable folder (local disk or USB key): config, logs, temp files and models
@@ -82,8 +86,8 @@ through a file the tool silently skipped.
   (encrypted correspondence table protected by a passphrase that is never stored).
 - File statuses are fixed vocabulary: **Anonymisé**, **À revoir**, **Résidus** (quarantine),
   **Échec**, **Non pris en charge**.
-- Recall over precision: one detection is enough to mask; uncertain entities are masked *and*
-  sent to review, never left visible.
+- Recall over precision: one detection is enough to mask; uncertain entities are masked,
+  never left visible, never handed to the user.
 - Anything that cannot be anonymised is omitted and reported, never copied as is.
 - Logs and reports contain no sensitive value and no original file name.
 - No Qt native file dialogs (they write recent folders to the Windows registry, outside the

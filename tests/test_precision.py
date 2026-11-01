@@ -118,7 +118,7 @@ def _cluster(entity_type: str, canonical: str, *variants: str, score: float = 0.
     cluster = EntityCluster(id="c", entity_type=entity_type, canonical=canonical)
     cluster.variants.update({canonical, *variants})
     cluster.max_score = score
-    cluster.needs_review = score < 0.6
+    cluster.uncertain = score < 0.6
     return cluster
 
 
@@ -228,14 +228,6 @@ REFERENCES = (
 def test_references_masked_by_default() -> None:
     found = _values(_detect(Config(), REFERENCES), "NUMERO_DOSSIER")
     assert {"CAS-11478-QRV7QP", "CTR-4297539", "FAC-2026-166002", "HX-C-941260"} <= set(found)
-
-
-def test_conserver_identifiants_keeps_business_references() -> None:
-    found = _values(_detect(Config(mask_opaque_ids=False), REFERENCES), "NUMERO_DOSSIER")
-    assert "CAS-11478-QRV7QP" not in found
-    assert "CTR-4297539" not in found and "FAC-2026-166002" not in found
-    # Numbers that designate someone stay masked.
-    assert "HX-C-941260" in found and "12AB34567" in found
 
 
 def test_allowed_identifier_prefix() -> None:

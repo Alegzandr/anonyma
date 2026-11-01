@@ -1,4 +1,7 @@
-"""« Réglages » page: every ``Config`` field, saved to ``data/config.json``."""
+"""« Réglages » page: the choices only the user can make (replacement, lists,
+organizations, internal patterns, appearance), saved to ``data/config.json``. Everything
+else (profile, models, OCR, workers, LibreOffice, thresholds) is decided by the
+application."""
 
 from __future__ import annotations
 
@@ -12,7 +15,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -23,7 +25,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -31,23 +32,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from anonyma import libreoffice, paths
+from anonyma import paths
 from anonyma.config import Config, load_business_list
 from anonyma.frenchtext import plural, typo
 from anonyma.gui import dialogs, theme
 from anonyma.gui.context import AppContext
-from anonyma.gui.controller import (
-    DEFAULT_STORE_NAME,
-    REVIEW_POLICIES,
-    REVIEW_POLICY_GLOSSES,
-    review_policy,
-)
+from anonyma.gui.controller import DEFAULT_STORE_NAME
 from anonyma.gui.dialogs import normalize_type
 from anonyma.gui.labels import (
     MODE_GLOSSES,
     MODE_LABELS,
-    PROFILE_GLOSSES,
-    PROFILE_LABELS,
     REGIME_GLOSSES,
     REGIME_LABELS,
 )
@@ -56,14 +50,12 @@ from anonyma.gui.widgets import (
     button,
     left_header,
     muted,
-    pad_spin,
     page_header,
     primary_button,
     section_title,
 )
 from anonyma.logs import get_logger
-from anonyma.model_catalog import ModelKind
-from anonyma.models import EntityType, Profile, Regime, ReplacementMode
+from anonyma.models import EntityType, Regime, ReplacementMode
 from anonyma.policy import (
     POLICY_ALL,
     POLICY_BLACKLIST,
@@ -84,17 +76,6 @@ ORGANIZATION_POLICY_GLOSSES: dict[str, str] = {
     POLICY_EXCEPT_WHITELIST: "Sauf les organisations et domaines « à ne jamais masquer ».",
     POLICY_ALL: "Même les éditeurs, prestataires et sites publics.",
     POLICY_BLACKLIST: "Seulement les organisations et domaines « à toujours masquer ».",
-}
-TAG_NUMBERING_LABELS: dict[str, str] = {
-    "sequentiel": "Séquentielle",
-    "aleatoire": "Aléatoire",
-}
-TAG_NUMBERING_GLOSSES: dict[str, str] = {
-    "sequentiel": "[PERSONNE_001], [PERSONNE_002]… dans l'ordre du lot.",
-    "aleatoire": (
-        "[PERSONNE_K7Q2] : ne révèle ni le nombre ni l'ordre. En pseudonymisation, une "
-        "nouvelle valeur reçoit toujours un identifiant aléatoire."
-    ),
 }
 #: Width of the label column of every settings form, and cap of the content.
 LABEL_WIDTH = 200
@@ -130,27 +111,6 @@ def _two_column_table(headers: tuple[str, str]) -> QTableWidget:
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.setMinimumHeight(140)
     return table
-
-
-#: What the legacy formats become without LibreOffice.
-NO_LIBREOFFICE_EFFECT = (
-    "les .doc et .ppt ne sont pas pris en charge, les .xls sont restitués en .xlsx."
-)
-
-
-def libreoffice_status(enabled: bool, path: str) -> str:
-    """Status line under the LibreOffice settings: the executable that will be used
-    (configured path, bundled copy or installation found), or the consequence of
-    having none."""
-    if not enabled:
-        return f"LibreOffice désactivé : {NO_LIBREOFFICE_EFFECT}"
-    found = libreoffice.find_soffice(Config(use_libreoffice=True, libreoffice_path=path))
-    if found is None:
-        where = "à ce chemin ni ailleurs" if path else "trouvé"
-        return f"Aucun LibreOffice {where} : {NO_LIBREOFFICE_EFFECT}"
-    if path and libreoffice.configured_soffice(path) is None:
-        return f"Aucun LibreOffice à ce chemin ; celui-ci sera utilisé : {found}"
-    return f"LibreOffice utilisé : {found}"
 
 
 class _Form(QGridLayout):
@@ -203,58 +163,6 @@ class SettingsPage(QWidget):
         self.tabs.setObjectName("SettingsTabs")
         outer.addWidget(self.tabs, 1)
 
-        # Detection --------------------------------------------------------------------
-        f, _box = self._tab("Détection")
-        self.profile = QComboBox()
-        for profile, label in PROFILE_LABELS.items():
-            self.profile.addItem(label, profile.value if profile else "")
-        self._gloss(
-            f,
-            "&Profil",
-            self.profile,
-            {(p.value if p else ""): g for p, g in PROFILE_GLOSSES.items()},
-        )
-        self.min_score = QDoubleSpinBox()
-        self.review_threshold = QDoubleSpinBox()
-        for spin in (self.min_score, self.review_threshold):
-            spin.setRange(0.0, 1.0)
-            spin.setSingleStep(0.05)
-            spin.setDecimals(2)
-            spin.setMaximumWidth(120)
-        pad_spin(self.min_score, self.review_threshold)
-        self._row(f, "Score &minimal retenu", self.min_score)
-        self._row(
-            f,
-            "Seuil d'envoi en &revue",
-            self.review_threshold,
-            "Sous le score minimal : ignoré. Sous le seuil de revue : masqué et signalé "
-            "« À revoir ».",
-        )
-        self.paranoid = QCheckBox("Mode paranoïaque")
-        self._row(f, "", self.paranoid, "Masque aussi les noms propres et les séquences suspectes.")
-        self.gliner_model = QComboBox()
-        self.llm_model = QComboBox()
-        for combo in (self.gliner_model, self.llm_model):
-            combo.setMaximumWidth(360)
-        self._row(f, "Modèle &GLiNER", self.gliner_model)
-        self._row(f, "Modèle de &langue", self.llm_model)
-        self.detect_dates = QCheckBox("Masquer toutes les dates")
-        self.detect_dates.setObjectName("DetectDates")
-        self._row(
-            f,
-            "Dates",
-            self.detect_dates,
-            "Les dates de naissance et les horodatages de signature sont toujours masqués.",
-        )
-        self.mask_opaque_ids = QCheckBox("Masquer les identifiants techniques")
-        self.mask_opaque_ids.setObjectName("MaskOpaqueIds")
-        self._row(
-            f,
-            "Identifiants",
-            self.mask_opaque_ids,
-            "Empreintes, UUID, jetons, numéros de transaction.",
-        )
-
         # Replacement --------------------------------------------------------------------
         f, _box = self._tab("Remplacement")
         self.mode = QComboBox()
@@ -265,16 +173,6 @@ class SettingsPage(QWidget):
         for regime, label in REGIME_LABELS.items():
             self.regime.addItem(label, regime.value)
         self._gloss(f, "Ré&gime", self.regime, {r.value: g for r, g in REGIME_GLOSSES.items()})
-        self.review_policy = QComboBox()
-        self.review_policy.setObjectName("SettingsReviewPolicy")
-        for key, label in REVIEW_POLICIES.items():
-            self.review_policy.addItem(label, key)
-        self._gloss(f, "&Relecture avant écriture", self.review_policy, REVIEW_POLICY_GLOSSES)
-        self.tag_numbering = QComboBox()
-        self.tag_numbering.setObjectName("TagNumbering")
-        for key, label in TAG_NUMBERING_LABELS.items():
-            self.tag_numbering.addItem(label, key)
-        self._gloss(f, "&Numérotation des balises", self.tag_numbering, TAG_NUMBERING_GLOSSES)
         self.neutral_filenames = QCheckBox("Noms de fichiers neutres")
         self.neutral_filenames.setObjectName("NeutralFilenames")
         self._row(
@@ -417,44 +315,8 @@ class SettingsPage(QWidget):
         self.case_patterns.textChanged.connect(self._check_patterns)
         av.addStretch(1)
 
-        # System ---------------------------------------------------------------------------
-        f, _box = self._tab("Système")
-        self.workers = QSpinBox()
-        self.workers.setRange(0, 64)
-        self.workers.setSpecialValueText("Automatique")
-        self.workers.setMaximumWidth(160)
-        pad_spin(self.workers)
-        self._row(f, "&Processus de traitement", self.workers)
-        self.ocr = QCheckBox("Reconnaître le texte des images et des documents numérisés")
-        self._row(f, "OCR", self.ocr)
-        self.ocr_full_pages = QCheckBox("PDF : relire aussi chaque page rendue")
-        self.ocr_full_pages.setObjectName("OcrFullPages")
-        self._row(f, "", self.ocr_full_pages, "Tampons, signatures, champs aplatis.")
-        self.decode_barcodes = QCheckBox("Lire et masquer les QR codes et codes-barres")
-        self.decode_barcodes.setObjectName("DecodeBarcodes")
-        self._row(f, "Codes-barres", self.decode_barcodes)
-        self.remove_invisible_text = QCheckBox("Supprimer le texte invisible")
-        self.remove_invisible_text.setObjectName("RemoveInvisibleText")
-        self._row(f, "PDF", self.remove_invisible_text)
-        self.use_libreoffice = QCheckBox("Utiliser LibreOffice pour les anciens formats")
-        self._row(f, "LibreOffice", self.use_libreoffice, ".doc, .xls, .ppt…")
-        lo_row = QHBoxLayout()
-        lo_row.setContentsMargins(0, 0, 0, 0)
-        self.libreoffice_path = QLineEdit()
-        self.libreoffice_path.setPlaceholderText("Détection automatique")
-        lo_button = button("Choisir…")
-        lo_button.clicked.connect(self._pick_libreoffice)
-        lo_row.addWidget(self.libreoffice_path, 1)
-        lo_row.addWidget(lo_button)
-        lo_widget = QWidget()
-        lo_widget.setLayout(lo_row)
-        self.libreoffice_status = muted("")
-        self.libreoffice_status.setObjectName("LibreOfficeStatus")
-        self.libreoffice_status.setWordWrap(True)
-        self.libreoffice_status.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        self._row(f, "&Chemin de LibreOffice", lo_widget, self.libreoffice_status)
+        # Application ------------------------------------------------------------------------
+        f, _box = self._tab("Application")
         self.theme = QComboBox()
         for key, label in theme.THEMES.items():
             self.theme.addItem(label, key)
@@ -480,35 +342,11 @@ class SettingsPage(QWidget):
         buttons.addWidget(self.save_button)
         outer.addLayout(buttons)
 
-        for w in (
-            self.profile,
-            self.mode,
-            self.regime,
-            self.review_policy,
-            self.gliner_model,
-            self.llm_model,
-            self.tag_numbering,
-            self.organization_policy,
-        ):
+        for w in (self.mode, self.regime, self.organization_policy):
             w.currentIndexChanged.connect(self._mark_dirty)
-        for spin in (self.min_score, self.review_threshold):
-            spin.valueChanged.connect(self._mark_dirty)
-        self.workers.valueChanged.connect(self._mark_dirty)
-        for check in (
-            self.paranoid,
-            self.ocr,
-            self.use_libreoffice,
-            self.detect_dates,
-            self.mask_opaque_ids,
-            self.neutral_filenames,
-            self.ocr_full_pages,
-            self.decode_barcodes,
-            self.remove_invisible_text,
-            self.check_updates,
-        ):
+        for check in (self.neutral_filenames, self.check_updates):
             check.toggled.connect(self._mark_dirty)
-        for edit in (self.store_path, self.libreoffice_path):
-            edit.textChanged.connect(self._mark_dirty)
+        self.store_path.textChanged.connect(self._mark_dirty)
         for text in (
             self.whitelist,
             self.case_patterns,
@@ -518,15 +356,10 @@ class SettingsPage(QWidget):
         ):
             text.textChanged.connect(self._mark_dirty)
         self.organization_policy.currentIndexChanged.connect(self._update_organization_lists)
-        self.mask_opaque_ids.toggled.connect(self.opaque_id_whitelist.setEnabled)
-        self.ocr.toggled.connect(self.ocr_full_pages.setEnabled)
         for table in (self.always_mask, self.custom_labels):
             table.itemChanged.connect(self._mark_dirty)
         self.regime.currentIndexChanged.connect(self._update_store_visibility)
         self.context.config_changed.connect(self._external_change)
-        self.use_libreoffice.toggled.connect(lo_widget.setEnabled)
-        self.use_libreoffice.toggled.connect(lambda _on: self._update_libreoffice_status())
-        self.libreoffice_path.textChanged.connect(lambda _t: self._update_libreoffice_status())
         self.load()
 
     # -- layout helpers -------------------------------------------------------------
@@ -617,20 +450,6 @@ class SettingsPage(QWidget):
 
     # -- load / collect ---------------------------------------------------------------
 
-    def _fill_models(self, combo: QComboBox, kind: ModelKind, current: str) -> None:
-        combo.clear()
-        combo.addItem("Automatique", "")
-        try:
-            specs = [s for s in self.context.model_manager.catalog() if s.kind is kind]
-        except Exception as exc:  # unreadable catalog: only "Automatique" is offered
-            log.warning("model catalog unreadable: %s", type(exc).__name__)
-            specs = []
-        for spec in specs:
-            combo.addItem(spec.title or spec.id, spec.id)
-        if current and combo.findData(current) < 0:
-            combo.addItem(f"{current} (hors catalogue)", current)
-        combo.setCurrentIndex(max(combo.findData(current), 0))
-
     @staticmethod
     def _select(combo: QComboBox, value: str) -> None:
         combo.setCurrentIndex(max(combo.findData(value), 0))
@@ -640,15 +459,8 @@ class SettingsPage(QWidget):
         config = self.context.config
         self._loading = True
         try:
-            self._select(self.profile, config.profile.value if config.profile else "")
-            self.min_score.setValue(config.min_score)
-            self.review_threshold.setValue(config.review_threshold)
-            self.paranoid.setChecked(config.paranoid)
-            self._fill_models(self.gliner_model, ModelKind.GLINER, config.gliner_model)
-            self._fill_models(self.llm_model, ModelKind.LLM, config.llm_model)
             self._select(self.mode, config.mode.value)
             self._select(self.regime, config.regime.value)
-            self._select(self.review_policy, review_policy(config))
             self.store_path.setText(config.store_path)
             self.whitelist.setPlainText("\n".join(config.whitelist))
             self.always_mask.setRowCount(0)
@@ -661,58 +473,25 @@ class SettingsPage(QWidget):
             for label, entity_type in config.custom_labels.items():
                 self._add_row(self.custom_labels, label, entity_type)
             self.case_patterns.setPlainText("\n".join(config.case_number_patterns))
-            self.workers.setValue(config.workers)
-            self.ocr.setChecked(config.ocr_enabled)
-            self.use_libreoffice.setChecked(config.use_libreoffice)
             self.check_updates.setChecked(config.check_updates)
-            self.libreoffice_path.setText(config.libreoffice_path)
             self._select(self.theme, str(config.ui.get("theme", theme.DEFAULT_THEME)))
-            self.detect_dates.setChecked(config.detect_dates)
-            self.mask_opaque_ids.setChecked(config.mask_opaque_ids)
             self.opaque_id_whitelist.setPlainText("\n".join(config.opaque_id_whitelist))
-            self._select(self.tag_numbering, config.tag_numbering)
             self.neutral_filenames.setChecked(config.neutral_filenames)
             self._select(self.organization_policy, config.organization_policy)
             self.organization_whitelist.setPlainText("\n".join(effective_whitelist(config)))
             self.organization_blacklist.setPlainText("\n".join(config.organization_blacklist))
-            self.ocr_full_pages.setChecked(config.ocr_full_pages)
-            self.decode_barcodes.setChecked(config.decode_barcodes)
-            self.remove_invisible_text.setChecked(config.remove_invisible_text)
         finally:
             self._loading = False
-        self.opaque_id_whitelist.setEnabled(self.mask_opaque_ids.isChecked())
-        self.ocr_full_pages.setEnabled(self.ocr.isChecked())
         self._update_organization_lists()
         self._update_store_visibility()
         self._check_patterns()
-        self._update_libreoffice_status()
         self._set_dirty(False)
-
-    def _update_libreoffice_status(self) -> None:
-        """Say which LibreOffice the current settings use, or what happens without."""
-        self.libreoffice_status.setText(
-            typo(
-                libreoffice_status(
-                    self.use_libreoffice.isChecked(), self.libreoffice_path.text().strip()
-                )
-            )
-        )
 
     def collect(self) -> Config:
         """Build a new ``Config`` from the widgets. Raises ValueError (French)."""
         config = self.context.config_copy()
-        profile = self.profile.currentData()
-        config.profile = Profile(profile) if profile else None
-        config.min_score = round(self.min_score.value(), 4)
-        config.review_threshold = round(self.review_threshold.value(), 4)
-        if config.min_score > config.review_threshold:
-            raise ValueError("Le score minimal ne peut pas dépasser le seuil de revue.")
-        config.paranoid = self.paranoid.isChecked()
-        config.gliner_model = str(self.gliner_model.currentData() or "")
-        config.llm_model = str(self.llm_model.currentData() or "")
         config.mode = ReplacementMode(self.mode.currentData())
         config.regime = Regime(self.regime.currentData())
-        config.review_policy = str(self.review_policy.currentData())
         config.store_path = self.store_path.text().strip()
         config.whitelist = _lines(self.whitelist)
         terms: list[dict[str, str]] = []
@@ -746,20 +525,13 @@ class SettingsPage(QWidget):
         if errors:
             raise ValueError("Numéros de dossier : " + " ; ".join(m for _, m in errors) + ".")
         config.case_number_patterns = patterns
-        config.workers = self.workers.value()
-        config.ocr_enabled = self.ocr.isChecked()
-        config.use_libreoffice = self.use_libreoffice.isChecked()
         config.check_updates = self.check_updates.isChecked()
-        config.libreoffice_path = self.libreoffice_path.text().strip()
         config.ui["theme"] = str(self.theme.currentData())
-        config.detect_dates = self.detect_dates.isChecked()
-        config.mask_opaque_ids = self.mask_opaque_ids.isChecked()
         opaque = _lines(self.opaque_id_whitelist)
         errors = validate_patterns([p[3:] for p in opaque if p.startswith("re:")])
         if errors:
             raise ValueError("Identifiants techniques : " + " ; ".join(m for _, m in errors) + ".")
         config.opaque_id_whitelist = opaque
-        config.tag_numbering = str(self.tag_numbering.currentData())
         config.neutral_filenames = self.neutral_filenames.isChecked()
         config.organization_policy = str(self.organization_policy.currentData())
         whitelist = _lines(self.organization_whitelist)
@@ -768,14 +540,11 @@ class SettingsPage(QWidget):
             None if whitelist == list(default_whitelist()) else whitelist
         )
         config.organization_blacklist = _lines(self.organization_blacklist)
-        config.ocr_full_pages = self.ocr_full_pages.isChecked()
-        config.decode_barcodes = self.decode_barcodes.isChecked()
-        config.remove_invisible_text = self.remove_invisible_text.isChecked()
         config.validate()
         return config
 
     def _external_change(self) -> None:
-        """Another page changed the configuration (review policy, learned lists)."""
+        """Another page changed the configuration (learned lists)."""
         if not self._dirty and not self._saving:
             self.load()
 
@@ -907,16 +676,6 @@ class SettingsPage(QWidget):
         )
         if chosen is not None:
             self.store_path.setText(str(chosen))
-
-    def _pick_libreoffice(self) -> None:
-        current = self.libreoffice_path.text().strip()
-        start = Path(current).parent if current else self.context.last_dir("libreoffice")
-        files = dialogs.open_files(
-            self, "Exécutable de LibreOffice", ["soffice*", "libreoffice*"], start
-        )
-        self.context.remember_selection("libreoffice", files)
-        if files:
-            self.libreoffice_path.setText(str(files[0]))
 
     def _reset_organization_whitelist(self) -> None:
         self.organization_whitelist.setPlainText("\n".join(default_whitelist()))

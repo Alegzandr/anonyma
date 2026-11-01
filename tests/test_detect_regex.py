@@ -344,9 +344,6 @@ def test_other_dates_and_sentence_boundary(detector: RegexDetector) -> None:
     text = "Elle est née le 03/04/1985. Réunion le 12 mars 2021."
     assert found(detector, text, "DATE_NAISSANCE") == ["03/04/1985"]
     assert found(detector, text, "DATE") == ["12 mars 2021"]
-    quiet = RegexDetector(Config(detect_dates=False))
-    assert not found(quiet, text, "DATE")
-    assert found(quiet, text, "DATE_NAISSANCE") == ["03/04/1985"]
 
 
 def test_case_numbers(detector: RegexDetector) -> None:
@@ -354,6 +351,12 @@ def test_case_numbers(detector: RegexDetector) -> None:
     assert found(detector, "Dossier n° 2023/AB-1234.", "NUMERO_DOSSIER") == ["2023/AB-1234"]
     assert not found(detector, "dossier : en cours", "NUMERO_DOSSIER")
     assert not found(detector, "Clients/CV.pdf", "NUMERO_DOSSIER", kind=SegmentKind.FILENAME)
+    assert found(detector, "N° de billet : 41730268", "NUMERO_DOSSIER") == ["41730268"]
+    assert found(detector, "Réservation n° QX7K2B9", "NUMERO_DOSSIER") == ["QX7K2B9"]
+    assert found(
+        detector, "billet 41730268 - quintavalle.pdf", "NUMERO_DOSSIER", kind=SegmentKind.FILENAME
+    ) == ["41730268"]
+    assert not found(detector, "Le billet est soumis aux conditions", "NUMERO_DOSSIER")
 
 
 def test_invalid_case_pattern_is_ignored() -> None:

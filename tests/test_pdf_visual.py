@@ -229,20 +229,6 @@ def test_invisible_text_is_analysed_then_deleted(
         assert [v["on"] for v in out.get_ocgs().values()] == [False]
 
 
-def test_invisible_text_kept_when_disabled(tmp_path: Path, config: Config, ink: RedInkOcr) -> None:
-    config.remove_invisible_text = False
-    source = tmp_path / "invisible.pdf"
-    _invisible_pdf(source)
-    result = _run(source, tmp_path, config)
-    with pymupdf.open(result.output_path) as out:
-        text = _all_text(out)
-        assert "Mode3" in text and "Blanc" in text  # not sensitive: kept
-        assert CANARY_EMAIL not in text and "Quintavalle" not in text
-
-
-# -- full-page OCR and vector glyphs ---------------------------------------------
-
-
 def test_page_ocr_keeps_only_purely_visual_text(
     tmp_path: Path, config: Config, ink: RedInkOcr
 ) -> None:

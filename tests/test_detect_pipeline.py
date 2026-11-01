@@ -161,6 +161,26 @@ def test_display_name_matching_the_address_is_a_person(tmp_path: Path) -> None:
     assert "[PERSONNE_" in outputs["b_note.txt"] and "EMAIL" not in outputs["b_note.txt"]
 
 
+def test_numbered_address_still_names_the_person(tmp_path: Path) -> None:
+    """``ludovic1.braquemart@`` (homonyms of a school directory): the number is not
+    part of the name, which is masked alone on its lines and in the file name."""
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "billet - ludovic braquemart.txt").write_text(
+        "Ludovic\nBraquemart\nEntrée + 1 boisson\nAcheteur : ludovic1.braquemart@exemple.test\n",
+        encoding="utf-8",
+    )
+    pipeline = Pipeline(Config(profile=Profile.LIGHT, workers=1))
+    analysis = pipeline.analyze([src])
+    result = pipeline.apply(analysis, tmp_path / "out")
+    pipeline.close(analysis)
+    (top,) = result.results
+    assert top.output_path is not None
+    name, out = top.output_path.name, top.output_path.read_text(encoding="utf-8")
+    assert "braquemart" not in (name + out).casefold() and "ludovic" not in name + out, name
+    assert out.startswith("[PERSONNE_") and "[PERSONNE_" in name, (name, out)
+
+
 def test_forms_of_a_name_completed_by_propagation_are_searched(tmp_path: Path) -> None:
     """« Siobhan O'Callaghan » is only completed by propagation (around a known
     surname): its login « socallaghan » must still be masked, not just found by the

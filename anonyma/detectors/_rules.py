@@ -793,7 +793,7 @@ RULES: tuple[Rule, ...] = (
         EntityType.CASE_NUMBER,
         r"(?<=\b(?:dossier|affaire|r[ée]f[ée]rence|r[ée]f|rg|ticket|contrat|police|sinistre|"
         r"client|adh[ée]rent|matricule|passeport|passport|cni|carte d'identit[ée]|permis|"
-        r"titre de s[ée]jour|facture|commande|devis|patient|ipp|nda|"
+        r"titre de s[ée]jour|facture|commande|devis|patient|ipp|nda|billet|r[ée]servation|"
         r"n°"
         + SP
         + r"?(?:de"
@@ -820,7 +820,7 @@ RULES: tuple[Rule, ...] = (
         flags=regex.MULTILINE | regex.IGNORECASE,
         prefilter=r"dossier|affaire|r[ée]f|rg|ticket|contrat|police|sinistre|client|adh[ée]rent"
         r"|matricule|passeport|passport|cni|carte d'identit|permis|titre de|facture|commande"
-        r"|devis|patient|ipp|nda",
+        r"|devis|patient|ipp|nda|billet|r[ée]servation",
     ),
 )
 

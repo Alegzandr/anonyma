@@ -8,7 +8,7 @@ sociale… sont remplacés partout de la même façon. Chaque fichier garde son 
 mise en forme. Anonyma **relit ensuite chaque fichier produit** pour vérifier qu'il ne
 reste rien.
 
-![Revue d'un lot : chaque entité détectée, ses occurrences et la vue côte à côte original / anonymisé](docs/screenshots/revue.png)
+![Aperçu d'un lot : chaque entité détectée, ses occurrences et la vue côte à côte original / anonymisé](docs/screenshots/revue.png)
 
 > [!CAUTION]
 > **Usage interne uniquement.** Anonyma contient des composants sous licence AGPL-3.0 et
@@ -40,25 +40,27 @@ désinstaller, supprimez le dossier.
 1. **Traitement** : déposez des fichiers ou des dossiers.
 2. Choisissez un **dossier de sortie**, distinct de celui des originaux. Les originaux ne
    sont jamais modifiés.
-3. Cliquez sur **Anonymiser**.
-4. Si Anonyma a un doute, il ouvre la **Revue** : pour chaque nom ou valeur détecté,
-   choisissez « Masquer » ou « Ne pas masquer ». La décision s'applique à tout le lot.
-   Sélectionnez du texte pour masquer ce qu'Anonyma aurait oublié.
-5. Le **Rapport** donne le résultat de chaque fichier.
+3. Cliquez sur **Anonymiser**. Anonyma détecte, masque, relit chaque fichier produit et
+   masque aussi ce que cette relecture trouve encore. Il ne vous demande rien : dans le
+   doute, il masque.
+4. Le **Rapport** donne le résultat de chaque fichier.
+5. Pour voir ce qui a été masqué, double-cliquez sur un fichier : l'**Aperçu** montre
+   l'original et le fichier anonymisé côte à côte. Vous pouvez y démasquer un mot masqué
+   à tort, ou masquer un oubli, puis réappliquer ; ce n'est jamais nécessaire.
 
-| Traitement | Revue visuelle d'un PDF |
+| Traitement | Aperçu visuel d'un PDF |
 |---|---|
-| ![Page Traitement après un lot : statut et occurrences de chaque fichier](docs/screenshots/traitement.png) | ![Revue visuelle d'un PDF : zones encadrées dans l'original et l'anonymisé](docs/screenshots/revue-visuel.png) |
+| ![Page Traitement après un lot : statut et occurrences de chaque fichier](docs/screenshots/traitement.png) | ![Aperçu visuel d'un PDF : zones encadrées dans l'original et l'anonymisé](docs/screenshots/revue-visuel.png) |
 | **Rapport** | **Réglages** |
-| ![Rapport du lot : verdict, fichiers, quarantaine, résidus et échecs](docs/screenshots/rapport.png) | ![Réglages, onglet Détection : profil, seuils, modèles](docs/screenshots/reglages.png) |
+| ![Rapport du lot : verdict, fichiers, quarantaine, résidus et échecs](docs/screenshots/rapport.png) | ![Réglages : mode de remplacement, régime, listes](docs/screenshots/reglages.png) |
 
 ## Comprendre le résultat
 
 | Statut | Ce que ça veut dire | Que faire |
 |---|---|---|
 | **Anonymisé** | Vérifié, rien à signaler. | Le fichier peut être partagé. |
-| **À revoir** | Vérifié, mais Anonyma a masqué des éléments par précaution, ou a dû retirer une pièce jointe illisible. | Jetez un œil à la revue avant de partager. |
-| **Résidus** | Une donnée d'origine a été retrouvée : le fichier est mis en **quarantaine**. | Ne le diffusez pas. Corrigez dans la revue, puis réappliquez. |
+| **À revoir** | Rare : une image n'a pas pu être lue, une pièce jointe illisible a été retirée, ou un doute subsiste même après la seconde passe. | Jetez un œil à l'aperçu avant de partager. |
+| **Résidus** | Une donnée d'origine a été retrouvée : le fichier est mis en **quarantaine**. | Ne le diffusez pas. Masquez-la dans l'aperçu, puis réappliquez. |
 | **Échec** ou **Non pris en charge** | Le fichier n'a pas pu être traité. Rien n'est produit. | Voir la raison dans le rapport. |
 
 Le dossier de sortie ne contient que des fichiers vérifiés. Les fichiers en quarantaine
@@ -153,7 +155,7 @@ les commandes.
 ## Bon à savoir
 
 - **Dans le doute, Anonyma masque.** Mieux vaut un mot masqué en trop qu'un nom oublié.
-  La détection automatique n'est jamais parfaite : relisez les fichiers « À revoir ».
+  La détection automatique n'est jamais parfaite : regardez les fichiers « À revoir ».
 - **Commentaires et révisions** : les commentaires Word sont conservés et anonymisés, et
   les révisions suivies sont acceptées.
 - **Dates en mode réaliste** : toutes les dates du lot sont décalées du même nombre de

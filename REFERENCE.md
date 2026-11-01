@@ -66,35 +66,40 @@ Lancez `Anonyma.exe` (Windows), `Anonyma.app` (macOS) ou `./Anonyma` (Linux). To
 passe en local : aucune donnée ne quitte le poste.
 
 - **Traitement** : déposez des fichiers ou des dossiers, choisissez un dossier de sortie
-  distinct des originaux, puis cliquez sur « Anonymiser ». Le réglage **Relecture** décide
-  si ce bouton s'arrête pour une revue : *aucune* (écriture directe), *entités incertaines*
-  (par défaut) ou *systématique*. Dès que des décisions de revue existent, le même bouton
-  devient « Appliquer les décisions » ; relancer l'analyse, qui les effacerait, demande
-  d'abord confirmation. « Analyser » (sans rien écrire) et « Revoir » restent disponibles.
+  distinct des originaux, puis cliquez sur « Anonymiser » : Anonyma analyse, écrit et
+  vérifie sans jamais s'arrêter pour demander quoi que ce soit. Dans le doute, il masque ;
+  ce que la vérification trouve encore est masqué par une seconde passe. « Analyser »
+  (sans rien écrire) reste disponible. Double-cliquez sur un fichier pour l'ouvrir dans
+  l'aperçu. Dès que des décisions existent dans l'aperçu, le bouton devient « Appliquer
+  les décisions » ; relancer l'analyse, qui les effacerait, demande d'abord confirmation.
   En pseudonymisation, une phrase secrète protège la table de correspondance chiffrée.
-- **Revue** (facultative) : une ligne par entité, par exemple « Bérénice Lagarde —
-  Personne — 14 occurrences dans 6 fichiers », les plus incertaines d'abord, avec le
-  niveau de confiance et le détecteur. Une décision (masquer, ne pas masquer, changer le
-  type) s'applique à toutes les occurrences du lot. Dépliez une ligne pour voir chaque
-  occurrence dans son contexte et y accéder dans la vue côte à côte : texte (en-têtes de
-  courriel regroupés), ou rendu visuel des PDF et des images avec les zones encadrées. Un
-  compteur « 12 / 40 décidées », le bouton « Suivante non décidée », la recherche, les
-  filtres et les actions groupées accélèrent la relecture. Sélectionnez du texte pour
-  ajouter une entité oubliée. Anonyma propose ensuite de ne plus jamais masquer un faux
+- **Aperçu** (consultatif) : une ligne par entité, par exemple « Bérénice Lagarde —
+  Personne — 14 occurrences dans 6 fichiers », avec le niveau de confiance et le
+  détecteur. Dépliez une ligne pour voir chaque occurrence dans son contexte et y accéder
+  dans la vue côte à côte : texte (en-têtes de courriel regroupés), ou rendu visuel des
+  PDF et des images avec les zones encadrées ; après l'écriture, le côté droit montre le
+  fichier produit. Rien n'y est à faire, mais une décision reste possible (masquer, ne
+  pas masquer, changer le type) et s'applique à toutes les occurrences du lot.
+  Sélectionnez du texte pour ajouter une entité oubliée. Anonyma propose ensuite de ne plus jamais masquer un faux
   positif, ou de toujours masquer un ajout (modification annulable). Raccourcis, affichés
   sur les boutons : N / P naviguer, Maj+N suivante non décidée, V masquer, R ne pas
   masquer, O ne pas masquer l'occurrence, T changer le type, U retirer la décision,
   A ajouter, Ctrl+Entrée appliquer les décisions. Partout : Ctrl+1 à Ctrl+5 changent de
-  page (Traitement, Revue, Rapport, Modèles, Réglages), Ctrl+O ajoute des fichiers.
+  page (Traitement, Aperçu, Rapport, Modèles, Réglages), Ctrl+O ajoute des fichiers.
 - **Rapport** : verdict du lot, exportable en JSON, Markdown ou HTML. Les fichiers en
   quarantaine (dossier `<sortie>_quarantaine`, à côté du dossier de sortie) sont expliqués et ne doivent pas être diffusés. Chaque
-  résidu s'ouvre à son emplacement dans le fichier produit, et « Corriger et réappliquer »
-  ramène à la revue puis remplace les fichiers produits précédemment.
-- **Modèles** et **Réglages** : matériel détecté, modèles installés (téléchargement à
-  votre demande) et réglages enregistrés dans `data/config.json`, en onglets : Détection,
-  Remplacement, Listes (valeurs à ne jamais masquer, valeurs à toujours masquer, listes
-  métier), Organisations, Avancé et Système. Anonyma s'y souvient aussi du dernier dossier
-  de sortie et du dernier dossier parcouru par chaque sélecteur.
+  résidu s'ouvre à son emplacement dans le fichier produit, un double-clic sur un fichier
+  ouvre son aperçu, et « Corriger et réappliquer » ramène à l'aperçu puis remplace les
+  fichiers produits précédemment.
+- **Modèles** : matériel détecté et modèles installés (téléchargement à votre demande).
+  Anonyma choisit seul le profil de détection (selon le matériel et les modèles
+  installés), les modèles, l'OCR, le nombre de processus et LibreOffice.
+- **Réglages** : seulement ce qui dépend de vos besoins, enregistré dans
+  `data/config.json`, en onglets : Remplacement (mode, régime, noms neutres, table de
+  correspondance), Listes (valeurs à ne jamais masquer, valeurs à toujours masquer, listes
+  métier), Organisations, Avancé (libellés GLiNER, numéros de dossier internes) et
+  Application (thème, mises à jour). Anonyma s'y souvient aussi du dernier dossier de
+  sortie et du dernier dossier parcouru par chaque sélecteur.
 - **Mises à jour** : au démarrage, la version portable demande à GitHub si une version
   plus récente est publiée et la propose. Si vous acceptez, elle télécharge l'archive de
   votre système, vérifie son empreinte SHA-256, se ferme, remplace le programme puis
@@ -104,9 +109,9 @@ passe en local : aucune donnée ne quitte le poste.
   cette vérification.
 
 Statuts d'un fichier : **Anonymisé** (vérifié, rien à signaler ; **Pseudonymisé** en
-pseudonymisation) ; **À revoir** (vérifié, mais des entités incertaines ont été masquées
-par précaution, un détecteur statistique signale un résidu possible, ou un élément
-inclus — pièce jointe, membre d'archive chiffré ou illisible — a dû être omis) ;
+pseudonymisation) ; **À revoir**, rare (vérifié, mais un résidu possible subsiste après
+la seconde passe, une image n'a pas pu être lue par l'OCR, ou un élément inclus — pièce
+jointe, membre d'archive chiffré ou illisible — a dû être omis) ;
 **Résidus** (une valeur d'origine a été retrouvée : fichier en quarantaine) ; **Échec**
 ou **Non pris en charge** (rien n'est produit ; une archive dont aucun élément n'a pu
 être gardé est en échec plutôt que restituée vide).
@@ -150,7 +155,6 @@ Options principales de `run` :
 | `--profil`, `-p` | `auto` (selon le matériel), `leger`, `standard`, `complet` |
 | `--mode`, `-m` | `balises` (`[PERSONNE_001]`), `realiste` (substituts vraisemblables), `masquage` |
 | `--regime`, `-r` | `anonymisation` (irréversible) ou `pseudonymisation` (table chiffrée) |
-| `--paranoiaque` | masque aussi tout nom propre et toute séquence suspecte |
 | `--liste-blanche FICHIER` | valeurs à ne jamais masquer, une par ligne (`#` = commentaire) |
 | `--liste-metier CSV` | valeurs à toujours masquer, colonnes `valeur[,type]` ; répétable |
 | `--processus N`, `-j N` | nombre de processus (0 = automatique) |
@@ -177,22 +181,19 @@ fichiers… (2 min 05 s) », « Écriture et vérification : 205/205 fichiers, t
 10 s) ». Elles ne contiennent que des nombres, jamais un nom de fichier ni une valeur ;
 la sortie standard n'est pas touchée.
 
-`anonyma-cli run --help` liste toutes les options (OCR, codes-barres, texte invisible des
-PDF, identifiants techniques, organisations, noms de fichiers neutres, numérotation des
-balises).
+`anonyma-cli run --help` liste toutes les options (OCR, identifiants autorisés,
+organisations, noms de fichiers neutres). Toutes les dates, les identifiants techniques
+(empreintes, UUID, jetons, références), les codes-barres et le texte invisible des PDF
+(supprimé) sont toujours traités, et chaque page de PDF est relue par OCR : ce ne sont
+pas des options. Les balises sont numérotées dans l'ordre du lot (identifiants
+aléatoires pour une nouvelle valeur en pseudonymisation).
 
-Avec `--conserver-identifiants`, les identifiants techniques (empreintes, UUID, jetons)
-**et les références métier** restent lisibles : numéros de facture, de commande, de
-devis, de ticket, de dossier, d'affaire, de sinistre ou de contrat introduits par leur
-mot-clé et écrits comme une référence (lettres puis chiffres, par exemple
-`FAC-2026-166002`, `CAS-11478-QRV7QP`, `CTR-4297539`). Restent toujours masqués les
-numéros qui désignent une personne : numéro client, d'adhérent, de patient, matricule,
-police d'assurance, pièce d'identité (passeport, CNI, permis, titre de séjour), ainsi
-que l'IBAN, le NIR, la carte bancaire, le téléphone, l'adresse électronique et la plaque
-d'immatriculation. `--identifiant-autorise` (répétable) liste des identifiants à ne
-jamais masquer, même sans `--conserver-identifiants` : une valeur exacte, ou une
-expression régulière préfixée par `re:` ; une expression ancrée (`re:^CAS-`, `re:-FR$`)
-est cherchée dans la valeur, une autre doit la couvrir entièrement (`re:FAC-\d{4}-\d{6}`).
+`--identifiant-autorise` (répétable) liste des identifiants à ne jamais masquer : une
+valeur exacte, ou une expression régulière préfixée par `re:` ; une expression ancrée
+(`re:^CAS-`, `re:-FR$`) est cherchée dans la valeur, une autre doit la couvrir
+entièrement (`re:FAC-\d{4}-\d{6}`). Les numéros qui désignent une personne (IBAN, NIR,
+carte bancaire, téléphone, adresse électronique, plaque d'immatriculation) restent
+toujours masqués.
 
 Le dossier de sortie est contrôlé **avant** l'analyse : un dossier qui chevauche les
 originaux ou un fichier existant arrête la commande aussitôt (code 2). Un dossier de
@@ -206,9 +207,10 @@ par un verdict sur une ligne (« 8 fichiers anonymisés et vérifiés. », ou
 « 6 anonymisés · 1 à revoir · 1 en quarantaine (ne pas diffuser) »), puis le tableau des
 données masquées (type, code, occurrences) et les chemins du dossier de sortie, de la
 quarantaine si elle existe, et du rapport, chacun sur une ligne. Seul un résidu
-**certain** envoie un fichier en quarantaine ; un résidu **possible** (signal statistique,
-souvent une balise mal relue par l'OCR) le laisse « à revoir » et le résumé invite à
-vérifier la zone signalée dans le rapport. Les éléments en échec sont nommés par leur
+**certain** envoie un fichier en quarantaine ; un résidu **possible** (signal statistique)
+est d'abord masqué par une seconde passe qui réécrit les fichiers concernés avec les mêmes
+substituts ; s'il subsiste, le fichier est « à revoir » et le résumé invite à vérifier la
+zone signalée dans le rapport. Les éléments en échec sont nommés par leur
 chemin anonymisé, un élément inclus sous la forme « archive.zip › membre.pdf ». Dans ce
 résumé comme dans `analyser` et les rapports, une **entité** est une valeur distincte (une
 même personne) et une **occurrence** chacune de ses mentions ; un fichier qui n'a rien
@@ -245,7 +247,7 @@ d'archives, messages d'une boîte, à toute profondeur) et l'ensemble des **él�
 
 | Clé | Contenu |
 |---|---|
-| `schema` | version du vocabulaire (2) |
+| `schema` | version du vocabulaire (3) |
 | `verdict`, `verdict_libelle` | `anonymise`, `a_revoir`, `quarantaine`, `echec` ou `vide` ; la phrase du résumé |
 | `code_sortie` | code de sortie, déduit du verdict (0 ou 1) |
 | `lot`, `regime` | identifiant du lot ; `anonymisation` ou `pseudonymisation` |
@@ -257,21 +259,21 @@ d'archives, messages d'une boîte, à toute profondeur) et l'ensemble des **él�
 | `statuts_elements` | tous les éléments par statut |
 | `quarantaine` | fichiers effectivement placés dans le dossier de quarantaine |
 | `fichiers_a_revoir`, `fichiers_en_echec` | fichiers au résultat `a_revoir`, `echec` |
-| `entites_a_revoir` (alias `a_revoir`) | entités incertaines masquées et à revoir, comptées par fichier |
+| `masques_apres_verification` | occurrences masquées par la seconde passe, après une première vérification |
 | `residus_certains`, `residus_possibles` | résidus trouvés à la vérification (`residus` : leur somme) |
 | `echecs` | éléments, à toute profondeur, listés en échec dans le rapport (un fichier en quarantaine n'y figure pas : il est compté dans `quarantaine` et ses résidus dans `residus`) |
 | `occurrences`, `occurrences_par_type` | occurrences masquées, au total et par type (`PERSONNE`, `EMAIL`…) |
 | `dossier_sortie`, `dossier_quarantaine`, `rapport` | chemins absolus (`null` si sans objet) |
 | `dossier_sortie_non_vide`, `sorties_precedentes_supprimees` | le dossier de sortie contenait déjà des fichiers ; fichiers d'exécutions précédentes supprimés par `--remplacer` |
-| `parametres` | `profil` (choisi, ou conseillé en `auto`), `profil_effectif` (celui que les modèles et moteurs installés servent réellement : `complet` sans moteur de modèle de langue tourne en `standard`), `detecteurs` (détecteurs effectivement employés), `detecteurs_indisponibles` et `detecteurs_indisponibles_raisons` (détecteur → raison : modèle non installé, moteur absent et comment l'obtenir), `mode`, `regime`, `paranoiaque`, `ocr`, `noms_neutres`, `organisations` |
-| `documents` | par fichier : `fichier` (nom anonymisé), `chemin` (fichier produit ou `null`), `chemin_relatif` (le même, relatif au dossier de sortie ou de quarantaine), `format`, `format_sortie`, `statut`, `statut_libelle`, `resultat`, `quarantaine`, `occurrences`, `residus` (certains), `residus_possibles`, `a_revoir` (entités incertaines), `elements_omis`, `problemes` (liste de `element`, `code`, `gravite`, `message`) |
+| `parametres` | `profil` (choisi, ou conseillé en `auto`), `profil_effectif` (celui que les modèles et moteurs installés servent réellement : `complet` sans moteur de modèle de langue tourne en `standard`), `detecteurs` (détecteurs effectivement employés), `detecteurs_indisponibles` et `detecteurs_indisponibles_raisons` (détecteur → raison : modèle non installé, moteur absent et comment l'obtenir), `mode`, `regime`, `ocr`, `noms_neutres`, `organisations` |
+| `documents` | par fichier : `fichier` (nom anonymisé), `chemin` (fichier produit ou `null`), `chemin_relatif` (le même, relatif au dossier de sortie ou de quarantaine), `format`, `format_sortie`, `statut`, `statut_libelle`, `resultat`, `quarantaine`, `occurrences`, `residus` (certains), `residus_possibles`, `masques_apres_verification`, `elements_omis`, `problemes` (liste de `element`, `code`, `gravite`, `message`) |
 
 Le rapport JSON reprend `schema`, `lot`, `regime`, `verdict`, `verdict_libelle`,
 `code_sortie` et les comptages (de `nombre_fichiers` à `occurrences_par_type`, sans les
 alias), avec `debut`, `fin` et le détail : `fichiers` (mêmes champs que `documents`, sans `chemin`, `chemin_relatif` ni
 `problemes`), `residus` (`fichier`, `emplacement`, `zone`, `type`, `origine` —
 `valeur_origine` ou `detecteur` —, `detecteur`, `certitude` — `certain` ou `possible` —,
-et leurs libellés), `a_revoir` (`fichier`, `type`, `remplacement`), `echecs` (`fichier`
+et leurs libellés), `echecs` (`fichier`
 sous la forme « archive.zip › membre.pdf », `statut`, `statut_libelle`, `problemes` en
 français, `codes`), `verifications_incompletes`, `parametres` (codes) et
 `parametres_libelles` (libellés du rapport lisible). L'ancienne clé `entites_par_type` y
@@ -448,9 +450,8 @@ ré-identifiés.
 
 ## Limites connues
 
-- La détection automatique n'est jamais parfaite : relisez les fichiers marqués
-  « À revoir » et les résidus signalés. Le mode paranoïaque réduit les oublis au prix de
-  davantage de faux positifs.
+- La détection automatique n'est jamais parfaite : regardez les fichiers marqués
+  « À revoir » et les résidus signalés.
 - La ré-identification de fichiers ne traite que les formats texte ; pour les autres
   formats, utilisez `--balise`.
 - Seuls les dépôts Hugging Face publics sont pris en charge (aucun jeton n'est envoyé).
@@ -470,10 +471,16 @@ ré-identifiés.
 ## Comportements à connaître
 
 - **Dans le doute, Anonyma masque** : une seule détection suffit ; les entités
-  incertaines sont masquées *et* proposées en revue, jamais laissées visibles.
+  incertaines sont masquées sans rien vous demander, jamais laissées visibles.
+- **Seconde passe** : ce que la vérification trouve encore dans un fichier produit (un
+  prénom seul, un lieu que les modèles ne voient qu'une fois les noms remplacés) est
+  masqué dans tout le lot, puis les fichiers concernés sont réécrits et vérifiés à
+  nouveau, avec les mêmes substituts que les autres. Le rapport l'indique (« 2
+  occurrences supplémentaires masquées après vérification »).
 - **« À revoir » n'est pas « Résidus »** : une valeur d'origine retrouvée met le fichier
-  en quarantaine ; un simple signalement des modèles d'IA (GLiNER, modèle de langage) le
-  marque seulement « À revoir », car ils réagissent parfois aux balises elles-mêmes.
+  en quarantaine ; un signalement des modèles d'IA (GLiNER, modèle de langage) que la
+  seconde passe n'a pas pu masquer le marque seulement « À revoir », car ils réagissent
+  parfois aux balises elles-mêmes.
 - **Liste blanche stricte** : rien n'est masqué à l'intérieur d'une valeur de la liste
   blanche (un courriel conservé reste intact même si son identifiant est masqué ailleurs).
 - **Rien n'est recopié tel quel** : un élément non anonymisable est omis de la sortie et
@@ -504,7 +511,7 @@ ré-identifiés.
   en hexadécimal, ou toute autre valeur qui se décode comme tel, dans un JSON, un CSV, un
   XML ou un texte) contient la date réelle de début du fil : laissé tel quel, il
   trahirait le décalage secret des dates. Il est donc toujours reconstruit, dans tous les
-  modes et même avec `--conserver-identifiants` : date de début décalée comme les autres
+  modes et même pour un identifiant autorisé : date de début décalée comme les autres
   dates (date neutre du 1er mars 1970 en modes balises et masquage), identifiant recalculé
   avec une clé du lot (gardée dans la table en pseudonymisation), encodage d'origine
   conservé. Le même index reçoit la même valeur dans l'eml, le JSON et le CSV, et une
@@ -512,11 +519,9 @@ ré-identifiés.
   rien n'a reconstruit est supprimé ; un index d'origine retrouvé dans un fichier produit
   est un résidu certain. La propriété binaire équivalente des msg
   (`PR_CONVERSATION_INDEX`) reste supprimée.
-- **Chaque fichier « À revoir » dit pourquoi** : le bilan `--json` (`documents[].problemes`,
-  code `review.uncertain`) et les rapports donnent le nombre d'entités incertaines, leurs
-  types et les zones concernées (jamais les valeurs), par exemple « 1 entité incertaine
-  (Personne) masquée par précaution : à confirmer ou rejeter dans la revue avant
-  diffusion ; zones : « $.*[3].* » ».
+- **Chaque fichier « À revoir » dit pourquoi** : le bilan `--json`
+  (`documents[].problemes`) et les rapports donnent la raison (résidu possible et sa zone,
+  image non lue, élément omis), jamais la valeur.
 
 ## Licences
 

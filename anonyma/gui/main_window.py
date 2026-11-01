@@ -39,7 +39,7 @@ IndexLike = QModelIndex | QPersistentModelIndex
 #: batch pages from the configuration pages.
 PAGES = (
     ("processing", "Traitement", "process"),
-    ("review", "Revue", "review"),
+    ("review", "Aperçu", "review"),
     ("report", "Rapport", "report"),
     ("models", "Modèles", "models"),
     ("settings", "Réglages", "settings"),
@@ -130,8 +130,9 @@ class MainWindow(QMainWindow):
 
         self.processing.review_requested.connect(lambda: self.show_page("review"))
         self.processing.report_requested.connect(lambda: self.show_page("report"))
+        self.processing.document_requested.connect(self._show_document)
+        self.report.document_requested.connect(self._show_document)
         self.review.apply_requested.connect(self._apply_from_review)
-        self.review.pending_changed.connect(self._update_review_label)
         self.report.correct_requested.connect(self._correct_and_reapply)
         self.report.residue_requested.connect(self._show_residue)
         self.updates = UpdateManager(self)
@@ -201,11 +202,6 @@ class MainWindow(QMainWindow):
             if item is not None:
                 item.setIcon(icons.icon(icon_name, colour))
 
-    def _update_review_label(self, pending: int) -> None:
-        item = self._nav_item("review")
-        if item is not None:
-            item.setText(f"Revue ({pending})" if pending else "Revue")
-
     def _apply_from_review(self) -> None:
         self.show_page("processing")
         self.processing.start_apply()
@@ -218,6 +214,10 @@ class MainWindow(QMainWindow):
             "seront remplacés.",
             "info",
         )
+
+    def _show_document(self, document_id: str) -> None:
+        self.show_page("review")
+        self.review.select_document(document_id)
 
     def _show_residue(self, top_document_id: str, location: str, value: str) -> None:
         self.show_page("review")

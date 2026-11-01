@@ -158,10 +158,13 @@ def test_cluster_ids_are_stable_across_calls() -> None:
     assert len(clusters2) == 3
 
 
-def test_review_flag() -> None:
+def test_uncertain_flag() -> None:
     low = Entity("PROJET", "Hélios", "d", "s", 0, 6, 0.4, "x")
-    _, clusters = resolve([low], Config(review_threshold=0.6))
-    assert next(iter(clusters.values())).needs_review
+    high = Entity("PROJET", "Sélène", "d", "s", 10, 16, 0.9, "x")
+    kept, clusters = resolve([low, high], Config())
+    assert len(kept) == 2  # an uncertain entity is masked all the same
+    flags = {c.canonical: c.uncertain for c in clusters.values()}
+    assert flags == {"Hélios": True, "Sélène": False}
 
 
 # -- propagation -------------------------------------------------------------------

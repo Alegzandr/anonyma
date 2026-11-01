@@ -21,7 +21,7 @@ domain (``signaturio`` of ``www.signaturio.example``) is masked in the text as w
 A generic e-mail address of a kept domain (``noreply@``, ``contact@``) is kept; any
 other address stays masked.
 
-Persons, places, logins and paranoid proper nouns whose value is a whitelisted name
+Persons, places, logins and proper nouns whose value is a whitelisted name
 (« Signé par Yousign ») follow the organization decision. User decisions win:
 manual entities and confirmed clusters are never dropped.
 """

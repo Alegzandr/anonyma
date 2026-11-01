@@ -337,17 +337,17 @@ def test_config_set_and_show(tmp_path: Path) -> None:
     conf = tmp_path / "c.json"
     assert invoke("config", "definir", "profile", "complet", "--config", conf).exit_code == 0
     assert invoke("config", "definir", "workers", "3", "--config", conf).exit_code == 0
-    assert invoke("config", "definir", "paranoid", "oui", "--config", conf).exit_code == 0
+    assert invoke("config", "definir", "neutral_filenames", "oui", "--config", conf).exit_code == 0
     assert invoke("config", "definir", "whitelist", "a, b", "--config", conf).exit_code == 0
     assert invoke("config", "definir", "limits.max_files", "10", "--config", conf).exit_code == 0
-    assert invoke("config", "definir", "min_score", "0,4", "--config", conf).exit_code == 0
+    assert invoke("config", "definir", "gliner_threshold", "0,4", "--config", conf).exit_code == 0
     config = Config.load(conf)
     assert config.profile is Profile.FULL
     assert config.workers == 3
-    assert config.paranoid is True
+    assert config.neutral_filenames is True
     assert config.whitelist == ["a", "b"]
     assert config.limits.max_files == 10
-    assert config.min_score == 0.4
+    assert config.gliner_threshold == 0.4
     assert invoke("config", "definir", "profile", "auto", "--config", conf).exit_code == 0
     assert Config.load(conf).profile is None
     result = invoke("config", "afficher", "--config", conf)
@@ -457,16 +457,12 @@ def test_run_protection_options(tmp_path: Path, corpus: Path, business_list: Pat
             business_list,
             "--noms-neutres",
             "--sans-ocr",
-            "--sans-codes-barres",
-            "--conserver-identifiants",
             "--identifiant-autorise",
             "re:^REF-",
             "--organisations",
             "sauf_liste_blanche",
             "--organisations-blanches",
             orgs,
-            "--numerotation",
-            "aleatoire",
             "--rapport",
             tmp_path / "rapport.json",
         )
@@ -489,21 +485,15 @@ def test_apply_protection_options() -> None:
         config,
         cli.ProtectionOptions(
             ocr=False,
-            ocr_pages=False,
-            barcodes=False,
-            remove_invisible=False,
-            opaque_ids=False,
             opaque_whitelist=["re:^X"],
             organizations=cli.OrganizationChoice.BLACKLIST,
             neutral_names=True,
-            numbering=cli.NumberingChoice.RANDOM,
         ),
     )
-    assert not (config.ocr_enabled or config.ocr_full_pages or config.decode_barcodes)
-    assert not (config.remove_invisible_text or config.mask_opaque_ids)
+    assert not config.ocr_enabled
     assert config.opaque_id_whitelist == ["re:^X"]
     assert config.organization_policy == "liste_noire"
-    assert config.neutral_filenames and config.tag_numbering == "aleatoire"
+    assert config.neutral_filenames
 
 
 def test_missing_input_path_is_not_echoed(tmp_path: Path) -> None:
@@ -779,7 +769,6 @@ def test_run_json_summary(
     assert data["parametres"]["profil_effectif"] == "leger"
     used = data["parametres"]["detecteurs"]
     assert "regex_fr" in used and "gliner" not in used
-    assert "paranoiaque" not in used  # switched off: it finds nothing, not listed
     assert data["parametres"]["detecteurs_indisponibles"] == []
     assert data["parametres"]["detecteurs_indisponibles_raisons"] == {}
     assert {d["statut"] for d in data["documents"]} == {"anonymise"}
@@ -907,7 +896,7 @@ def test_json_counts_have_one_meaning_each(
     _quarantined_run(monkeypatch)
     data = json.loads(invoke(*_run_args(corpus, tmp_path / "s2", business_list, "--json")).stdout)
     assert data["quarantaine"] == data["resultats"]["quarantaine"] == 1
-    assert data["fichiers_a_revoir"] == 0 and data["entites_a_revoir"] == 0
+    assert data["fichiers_a_revoir"] == 0 and "entites_a_revoir" not in data
 
 
 def test_rerun_into_a_used_folder_warns_and_replace_removes_only_our_files(
@@ -950,10 +939,10 @@ def test_messages_hold_no_internal_code_or_english(tmp_path: Path, business_list
 
 def test_invalid_configuration_is_explained_in_french(tmp_path: Path, corpus: Path) -> None:
     config_file = tmp_path / "c.json"
-    config_file.write_text('{"min_score": "0,5"}', encoding="utf-8")
+    config_file.write_text('{"workers": "deux"}', encoding="utf-8")
     result = invoke("analyser", corpus, "-j", "1", "--config", config_file)
     assert result.exit_code == 2
-    assert "la valeur de « min_score » doit être un nombre" in " ".join(result.output.split())
+    assert "la valeur de « workers » doit être un nombre" in " ".join(result.output.split())
     assert "not supported" not in result.output
     config_file.write_text('{"mode": "bidon"}', encoding="utf-8")
     result = invoke("analyser", corpus, "-j", "1", "--config", config_file)

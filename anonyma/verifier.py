@@ -8,7 +8,7 @@ Two independent checks on every segment of the re-extracted output tree:
    Residue reason ``original_value``, detector ``table`` (exact value) or
    ``table_variante`` (derived form).
 2. **Detectors**: every detector of the profile is run again. A hit is ignored when
-   it is an allowed value, scores below ``min_score``, or is covered by substitutes
+   it is an allowed value, scores below ``MIN_SCORE``, or is covered by substitutes
    (what remains outside them is only punctuation, civilities or stop words).
    Residue reason ``detector``, detector = its name.
 3. **OCR forms**: in text read by OCR, the same values are also searched in a
@@ -50,7 +50,7 @@ from pathlib import PurePosixPath
 
 from anonyma import checksums
 from anonyma.atomic import AtomicIndex
-from anonyma.config import Config
+from anonyma.config import MIN_SCORE, Config
 from anonyma.data import is_common_word
 from anonyma.detectors._custom import STOP_WORDS
 from anonyma.detectors.opaque import IdWhitelist
@@ -68,7 +68,14 @@ from anonyma.models import (
     Severity,
     VerificationResult,
 )
-from anonyma.names import PARTICLES, ROLE_WORDS, civility_of, is_functional_name, needs_capital
+from anonyma.names import (
+    PARTICLES,
+    ROLE_WORDS,
+    civility_of,
+    has_proper_name,
+    is_functional_name,
+    needs_capital,
+)
 from anonyma.policy import keeps
 from anonyma.rawscan import RawScanner, raw_residues
 from anonyma.replacer import BLACKOUT_CHAR
@@ -153,9 +160,9 @@ class Verifier:
         self.config = config
         #: Detectors flagged ``verify = False`` (slow, non-deterministic LLM) are skipped.
         self.detectors = [d for d in detectors if d.verify]
-        #: References kept on purpose are no residues (« --conserver-identifiants »).
+        #: References kept on purpose are no residues (« --identifiant-autorise »).
         self.ids = IdWhitelist(config.opaque_id_whitelist or [])
-        self.keeping = bool(self.ids) or not config.mask_opaque_ids
+        self.keeping = bool(self.ids)
 
     def verify(
         self,
@@ -281,7 +288,7 @@ class Verifier:
             for detector in self.detectors:
                 for entity in detector.detect(doc.segments, doc.id):
                     found = segments.get(entity.segment_id)
-                    if found is None or entity.score < self.config.min_score:
+                    if found is None or entity.score < MIN_SCORE:
                         continue
                     segment = found
                     span = atomic.fit_typed(
@@ -297,10 +304,19 @@ class Verifier:
                     value = segment.text[entity.start : entity.end]
                     if normalize(value) in allowed_keys:
                         continue
-                    if stamped_today(segment) or _neutral_outside(
-                        segment, entity.start, entity.end, covered[segment.id]
-                    ):
+                    if stamped_today(segment):
                         continue
+                    overlap, parts = _outside_substitutes(
+                        segment.text, entity.start, entity.end, covered[segment.id]
+                    )
+                    if overlap and not parts:
+                        continue  # only substitutes, civilities and stop words
+                    if (
+                        not detector.deterministic
+                        and entity.entity_type in NAME_TYPES
+                        and not any(has_proper_name(p) for p in (parts if overlap else [value]))
+                    ):
+                        continue  # a model's « name » without any proper-name word
                     if keeps(entity.entity_type, value, self.config):
                         continue
                     kinds.append(segment.context.kind)
@@ -320,6 +336,7 @@ class Verifier:
                                 entity.entity_type == EntityType.PERSON
                                 and is_functional_name(value)
                             ),
+                            fragments=tuple(parts) if overlap else (),
                         )
                     )
         result.residues = neutral_places(result.residues, kinds)
@@ -594,35 +611,44 @@ def _name_like_word(word: str) -> bool:
     return not (word.isupper() and len(letters) <= 4)
 
 
-def _neutral_outside(
-    segment: Segment, start: int, end: int, spans: Sequence[tuple[int, int]]
-) -> bool:
-    """True if every part of ``[start, end)`` outside substitutes is insignificant."""
-    if not spans:
+#: Characters trimmed around a part of a detector hit lying outside substitutes.
+_PART_TRIM = " \t\r\n.,;:!?()[]{}<>\"'«»-–—/\\|_"
+
+
+def _outside_substitutes(
+    text: str, start: int, end: int, spans: Sequence[tuple[int, int]]
+) -> tuple[bool, list[str]]:
+    """Whether ``[start, end)`` overlaps substitutes, and its significant parts outside
+    them (« [PERSONNE_001] Sophie » → « Sophie »): pieces holding a word other than
+    punctuation, civilities, particles, stop words, role words or link schemes."""
+    inside = sorted((max(s, start), min(e, end)) for s, e in spans if s < end and e > start)
+    if not inside:
+        return False, []
+    gaps: list[tuple[int, int]] = []
+    cursor = start
+    for lo, hi in inside:
+        if lo > cursor:
+            gaps.append((cursor, lo))
+        cursor = max(cursor, hi)
+    if cursor < end:
+        gaps.append((cursor, end))
+    parts: list[str] = []
+    for lo, hi in gaps:
+        piece = text[lo:hi].strip(_PART_TRIM)
+        if piece and any(_significant(token) for token in piece.replace("_", " ").split()):
+            parts.append(piece)
+    return True, parts
+
+
+def _significant(token: str) -> bool:
+    word = token.strip(_PART_TRIM)
+    if not word or not any(c.isalnum() for c in word):
         return False
-    text = segment.text
-    mask = [False] * (end - start)
-    hit = False
-    for s, e in spans:
-        lo, hi = max(s, start), min(e, end)
-        if lo < hi:
-            hit = True
-            for i in range(lo, hi):
-                mask[i - start] = True
-    if not hit:
+    key = normalize(word)
+    if civility_of(word) is not None or key in PARTICLES or key in STOP_WORDS:
         return False
-    rest = "".join(" " if covered else text[start + i] for i, covered in enumerate(mask))
-    for token in rest.replace("_", " ").split():
-        word = token.strip(".,;:!?()[]{}<>\"'«»-–—/\\|")
-        if not word or not any(c.isalnum() for c in word):
-            continue
-        key = normalize(word)
-        if civility_of(word) is not None or key in PARTICLES or key in STOP_WORDS:
-            continue
-        if key in ROLE_WORDS or key in _LINK_SCHEMES:
-            continue  # « Service Client » around a substitute, ``mailto:`` before one
-        return False
-    return True
+    # « Service Client » around a substitute, ``mailto:`` before one
+    return key not in ROLE_WORDS and key not in _LINK_SCHEMES
 
 
 #: URL schemes glued to a substitute by a model span (``mailto:EMAIL_001@…``).

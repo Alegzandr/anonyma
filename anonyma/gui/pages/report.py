@@ -199,6 +199,8 @@ class ReportPage(QWidget):
     correct_requested = Signal()
     #: (top-level document id, residue location, residue value)
     residue_requested = Signal(str, str, str)
+    #: (top-level document id) — a file of the report was double-clicked.
+    document_requested = Signal(str)
 
     def __init__(self, controller: BatchController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -244,11 +246,11 @@ class ReportPage(QWidget):
 
         self.tabs = QTabWidget()
         self.files_table = _table(
-            ["Fichier", "Format", "Statut", "Occurrences", "Résidus", "À revoir"]
+            ["Fichier", "Format", "Statut", "Occurrences", "Résidus", "Résidus possibles"]
         )
         self.files_table.setItemDelegateForColumn(2, BadgeDelegate(self.files_table))
         fit_badge_column(self.files_table, 2, STATUS_LABELS.values())
-        self.files_table.doubleClicked.connect(lambda _i: self.open_selected_output())
+        self.files_table.doubleClicked.connect(lambda _i: self.show_selected_document())
         self.types_table = _table(["Type", "Code", "Occurrences"])
 
         quarantine_box = QWidget()
@@ -264,7 +266,7 @@ class ReportPage(QWidget):
         q_actions = QHBoxLayout()
         self.correct_button = primary_button("Corriger et réappliquer")
         self.correct_button.setToolTip(
-            "Revenir à la revue (masquer l'entité oubliée, ajouter une entité…), puis "
+            "Ouvrir l'aperçu (masquer l'entité oubliée, ajouter une entité…), puis "
             "remplacer les fichiers produits."
         )
         self.correct_button.clicked.connect(self.correct_requested.emit)
@@ -378,7 +380,7 @@ class ReportPage(QWidget):
                     str(f["statut"]),
                     str(f["entites"]),
                     _nonzero(f["residus"]),
-                    _nonzero(f["a_revoir"]),
+                    _nonzero(f["residus_possibles"]),
                 ]
                 for f in report.files
             ],
@@ -507,6 +509,13 @@ class ReportPage(QWidget):
         if result is None or not 0 <= row < len(result.results):
             return None
         return result.results[row].output_path
+
+    def show_selected_document(self) -> None:
+        """Open the preview of the selected file (its produced file once written)."""
+        result = self.controller.result
+        row = self.files_table.currentRow()
+        if result is not None and 0 <= row < len(result.results):
+            self.document_requested.emit(result.results[row].document_id)
 
     def open_selected_output(self) -> None:
         """Show the produced file in the file manager; a folder output is opened."""

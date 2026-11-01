@@ -15,7 +15,6 @@ from anonyma.gui.preview import (
     apply_with_spans,
     compute_effective,
     entity_rows,
-    pending_review,
     preview_segments,
     substitute_spans,
 )
@@ -84,7 +83,7 @@ def test_preview_matches_apply(tmp_path: Path, mode: ReplacementMode) -> None:
         assert states["Hélios"] is RowState.REJECTED
         assert {r.state for r in rows if r.manual} == {RowState.MANUAL}
         assert any(r.entity_type == "NOM_PROPRE" for r in rows)
-        assert pending_review(analysis, decisions) == []
+        assert not any(r.uncertain for r in rows)
     finally:
         pipeline.close(analysis)
 

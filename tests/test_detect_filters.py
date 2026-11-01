@@ -13,7 +13,6 @@ from anonyma.detectors._filters import (
     skip_segment,
     truncated_common_word,
 )
-from anonyma.detectors.paranoid import ParanoidDetector
 from anonyma.detectors.regex_fr import RegexDetector
 from anonyma.models import EntityType, Segment, SegmentContext, SegmentKind
 from tests.test_llm import SHORT_INPUTS
@@ -137,14 +136,6 @@ def test_weak_number_inside_confident_one_is_dropped() -> None:
     detector = RegexDetector(Config())
     hits = detector.detect([seg("Tél : +33 612 345 678")], "d")
     assert {e.entity_type for e in hits} == {"TELEPHONE"}
-
-
-def test_paranoid_reads_file_names_as_words() -> None:
-    detector = ParanoidDetector(Config(paranoid=True))
-    hits = detector.detect([seg("message-0001.eml", SegmentKind.FILENAME)], "d")
-    assert hits == []
-    named = detector.detect([seg("CV_Kervella.pdf", SegmentKind.FILENAME)], "d")
-    assert [e.value for e in named] == ["Kervella"]
 
 
 @pytest.mark.parametrize("text", ["Véhicule SA-231-RZ. Connexion", "Plaque QX-714-MM. Connexion"])

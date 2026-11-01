@@ -188,18 +188,11 @@ class OpaqueIdDetector(Detector):
     name = DETECTOR_NAME
     min_profile = Profile.LIGHT
 
-    @classmethod
-    def is_enabled(cls, config: Config) -> bool:
-        return config.mask_opaque_ids
-
     def __init__(self, config: Config) -> None:
         super().__init__(config)
-        self.active = config.mask_opaque_ids
         self.whitelist = IdWhitelist(config.opaque_id_whitelist or [])
 
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
-        if not self.active:
-            return []
         found: list[Entity] = []
         for segment in segments:
             text = segment.text

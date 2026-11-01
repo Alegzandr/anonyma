@@ -51,8 +51,13 @@ before you consider a change done. On Windows, keep pytest's base temp short
 - **Fail closed**: something that cannot be anonymised or verified is omitted and reported,
   never copied as is; a verified residue sends the file to `<output>_quarantaine/` (a sibling of the output folder). Containers must
   never embed original child bytes (`child_outputs[id].path is None` ⇒ omit).
-- **Recall over precision**: a single detection masks; uncertain entities are masked *and*
-  sent to review, never left visible.
+- **Recall over precision**: a single detection masks; uncertain entities are masked,
+  never left visible, and never handed to the user to decide. What the verification still
+  finds is masked by a corrective pass; « À revoir » is only for what nothing can fix
+  (OCR gap, omitted attachment, residue the corrective pass could not mask).
+- **Decide instead of asking**: no setting the user cannot judge. A choice the application
+  can make itself (profile, models, OCR, workers, thresholds, LibreOffice) is not a setting;
+  the GUI only exposes what depends on the user's needs (mode, regime, lists, organizations).
 - **Originals are read-only**; temp files only under `data/tmp/` via `paths`.
 - **Licensing**: the app is internal-use only (AGPL/GPL deps). Keep `pymupdf<2` and
   `opencv-python-headless`; reject non-commercial models or data. Regenerate `LICENSES.md`
@@ -66,7 +71,7 @@ before you consider a change done. On Windows, keep pytest's base temp short
 | `anonyma/models.py` | contracts: `Segment`, `Document`, `Entity`, `Extractor`, `Writer`, `Detector`… |
 | `anonyma/extractors/`, `anonyma/writers/`, `anonyma/detectors/` | plugins, auto-registered via `@register_*`; modules starting with `_` are helpers |
 | `anonyma/resolver.py`, `replacer.py`, `substitutes.py` | batch-wide clustering/propagation, substitution plan, realistic substitutes |
-| `anonyma/verifier.py` | re-reads outputs: certain residue → quarantine, statistical signal → « À revoir » |
+| `anonyma/verifier.py` | re-reads outputs; what it finds goes to the corrective pass of `Pipeline.apply`, then certain residue → quarantine, statistical signal → « À revoir » |
 | `anonyma/store.py` | encrypted mapping table (pseudonymisation) |
 | `anonyma/config.py`, `paths.py`, `netguard.py`, `logs.py` | settings, portable folders, network guard, value-free logging |
 | `anonyma/updater.py`, `gui/update.py` | update check against GitHub releases, verified download, self-replacing installer |

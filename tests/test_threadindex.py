@@ -83,14 +83,14 @@ def test_an_index_left_as_is_is_a_certain_residue() -> None:
     assert clean.clean
 
 
-def test_kept_identifiers_still_rebuild_indexes(tmp_path: Path, canary_config: Config) -> None:
-    """--conserver-identifiants keeps hexadecimal ids, but not the dates inside an index."""
+def test_indexes_rebuilt_in_every_mode(tmp_path: Path, canary_config: Config) -> None:
+    """Thread indexes are rebuilt (dates shifted or neutral), never kept as they are."""
     src = tmp_path / "in"
     src.mkdir()
     records = [{"conversationindex": PARENT_HEX}, {"conversationindex": CHILD_HEX}]
     (src / "page.json").write_text(json.dumps({"value": records}), encoding="utf-8")
     for mode in ReplacementMode:
-        config = dataclasses.replace(canary_config, mode=mode, mask_opaque_ids=False)
+        config = dataclasses.replace(canary_config, mode=mode)
         out = tmp_path / f"out-{mode.value}"
         [top] = Pipeline(config).run([src / "page.json"], out).results
         assert top.status is DocumentStatus.ANONYMIZED, [i.message for i in top.issues]

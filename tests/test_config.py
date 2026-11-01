@@ -27,9 +27,24 @@ def test_unknown_keys_ignored() -> None:
     assert Config.from_dict({"mode": "masquage", "futur": 1}).mode is ReplacementMode.BLACKOUT
 
 
-def test_invalid_threshold() -> None:
+def test_invalid_value() -> None:
     with pytest.raises(ValueError):
-        Config.from_dict({"min_score": 2})
+        Config.from_dict({"workers": -1})
+
+
+def test_settings_the_application_now_manages_are_ignored() -> None:
+    """A config.json written by an older version still loads: its removed settings
+    (review policy, thresholds, paranoid mode...) are dropped."""
+    old = {
+        "min_score": 2,
+        "review_threshold": 0.9,
+        "paranoid": True,
+        "review_policy": "x",
+        "detect_dates": False,
+        "mask_opaque_ids": False,
+        "tag_numbering": "aleatoire",
+    }
+    assert Config.from_dict(old) == Config()
 
 
 def test_business_list(tmp_path: Path) -> None:

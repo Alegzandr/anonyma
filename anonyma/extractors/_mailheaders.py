@@ -344,8 +344,7 @@ def thread_depth(headers: Iterable[tuple[str, str]]) -> int:
 
 def neutral_date(depth: int = 0) -> str:
     """``01 Mar 1970 00:MM:00 +0000``: ``depth`` minutes after a fixed neutral date
-    (March: « Jan », also a first name, is read as a proper noun by the paranoid
-    detector)."""
+    (March: « Jan » is also a first name)."""
     return f"01 Mar 1970 00:{max(0, min(depth, _MAX_DEPTH)):02d}:00 +0000"
 
 
@@ -392,8 +391,8 @@ def safe_thread_index(original: str, new: str) -> str | None:
 def exposed_text(name: str, text: str) -> str:
     """The part of header ``name`` (decoded ``text``) the extractors expose: a
     neutral date written by :func:`safe_date` holds no value and is left out (any
-    detector would read a date there: a birth date for GLiNER, a proper noun « Mar »
-    for the paranoid one), as is the neutral date closing a ``Received`` header."""
+    detector would read a date there, a birth date for GLiNER), as is the neutral
+    date closing a ``Received`` header."""
     lname = name.lower()
     if lname == THREAD_INDEX_HEADER:  # detected whole, rebuilt by the replacer
         return text.strip() if threadindex.decode(text) is not None else ""

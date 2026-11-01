@@ -42,18 +42,14 @@ INCOMPLETE_INTRO = (
 RESIDUE_INTRO = (
     "Résidu certain : le fichier est placé en quarantaine (dossier « …_quarantaine » à "
     "côté du dossier de sortie) et ne doit pas être diffusé. Résidu possible : signal "
-    "statistique (souvent une balise mal relue par l'OCR), le fichier est « À revoir » : "
+    "statistique que la seconde passe n'a pas pu masquer, le fichier est « À revoir » : "
     "vérifiez la zone indiquée avant diffusion."
-)
-REVIEW_INTRO = (
-    "Entités détectées avec une faible confiance : elles sont masquées, mais peuvent être "
-    "de fausses détections. Retrouvez-les dans le fichier produit grâce à leur remplacement."
 )
 
 _QUARANTINED = "en quarantaine (ne pas diffuser)"
 
 #: Version of the JSON vocabulary of ``run --json`` and of JSON reports.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: Outcome of a top-level file outside quarantine, by status. A RESIDUE file that is
 #: not in quarantine only holds possible residues: it is to be reviewed.
@@ -168,8 +164,8 @@ class BatchReport:
     #: and ``code`` the status code; the JSON export gives codes (:meth:`to_dict`).
     files: list[dict[str, Any]] = field(default_factory=list)
     residues: list[dict[str, str]] = field(default_factory=list)
-    #: Low-confidence entities awaiting review, by tag (never the original value).
-    review: list[dict[str, str]] = field(default_factory=list)
+    #: Occurrences masked by the corrective pass, after a first verification.
+    corrected: int = 0
     #: Items (any depth) that failed or hold an error: their path (« archive.zip ›
     #: membre.pdf »), French label, status code, messages and issue codes.
     failures: list[dict[str, Any]] = field(default_factory=list)
@@ -205,10 +201,7 @@ class BatchReport:
             report.file_statuses.append(top.status)
             report.file_placed.append(placed)
             report.omitted += omitted_count(top)
-            report.review += [
-                {"fichier": top.output_name, "type": t, "remplacement": substitute}
-                for t, substitute in top.review_items
-            ]
+            report.corrected += top.corrected_count
             for t, n in masked_counts(top).items():
                 report.entity_counts[t] = report.entity_counts.get(t, 0) + n
             for r, path in walk_paths(top):
@@ -342,7 +335,7 @@ class BatchReport:
             "quarantaine": self.quarantined,
             "fichiers_a_revoir": outcomes["a_revoir"],
             "fichiers_en_echec": outcomes["echec"],
-            "entites_a_revoir": len(self.review),
+            "masques_apres_verification": self.corrected,
             "residus_certains": certain,
             "residus_possibles": len(self.residues) - certain,
             "occurrences": sum(occurrences.values()),
@@ -370,7 +363,7 @@ class BatchReport:
                     "entites": entry["entites"],
                     "residus": entry["residus"],
                     "residus_possibles": entry.get("residus_possibles", 0),
-                    "a_revoir": entry.get("a_revoir", 0),
+                    "masques_apres_verification": entry.get("masques_apres_verification", 0),
                     "elements_omis": entry.get("elements_omis", 0),
                 }
             )
@@ -421,7 +414,6 @@ class BatchReport:
             "entites_par_type": counts["occurrences_par_type"],
             "fichiers": self.file_records(),
             "residus": self.residue_records(),
-            "a_revoir": self.review,
             "echecs": self.failure_records(),
             "verifications_incompletes": self.incomplete,
         }
@@ -491,13 +483,6 @@ class BatchReport:
                 f"| {c(detector_label(r['detecteur']))} | {c(r['certitude'])} |"
                 for r in self.residues
             ]
-        if self.review:
-            lines += ["", "## À revoir", "", typo(REVIEW_INTRO), ""]
-            lines += ["| Fichier | Type | Remplacé par |", "|---|---|---|"]
-            lines += [
-                f"| {c(r['fichier'])} | {c(type_label(r['type']))} | {c(r['remplacement'])} |"
-                for r in self.review
-            ]
         if self.incomplete:
             lines += ["", "## Vérification incomplète", "", typo(INCOMPLETE_INTRO), ""]
             lines += [f"- **{c(f['fichier'])}**{NBSP}: {_unread(f)}" for f in self.incomplete]
@@ -531,7 +516,7 @@ class BatchReport:
             f"<tr class={_status_class(str(f.get('code', '')))}><td>{e(f['fichier'])}</td>"
             f"<td>{e(f.get('format', ''))}</td><td class=st>{e(label)}</td>"
             f"<td class=n>{e(occurrences_cell)}</td><td class=n>{e(f['residus'])}</td>"
-            f"<td class=n>{e(f.get('a_revoir', 0))}</td></tr>"
+            f"<td class=n>{e(f.get('residus_possibles', 0))}</td></tr>"
             for f, label, occurrences_cell in self._file_rows()
         )
         entity_rows = "".join(
@@ -560,7 +545,7 @@ class BatchReport:
             _section("Statuts", ["Statut", "#Fichiers"], status_rows),
             _section(
                 "Fichiers",
-                ["Fichier", "Format", "Statut", "#Occurrences", "#Résidus", "#À revoir"],
+                ["Fichier", "Format", "Statut", "#Occurrences", "#Résidus", "#Possibles"],
                 file_rows,
             ),
             _section(
@@ -581,20 +566,6 @@ class BatchReport:
                     ["Fichier", "Emplacement", "Zone", "Type", "Origine", "Détecteur", "Certitude"],
                     rows,
                     intro=e(typo(RESIDUE_INTRO)),
-                )
-            )
-        if self.review:
-            rows = "".join(
-                f"<tr><td>{e(r['fichier'])}</td><td>{e(type_label(r['type']))}</td>"
-                f"<td><code>{e(r['remplacement'])}</code></td></tr>"
-                for r in self.review
-            )
-            parts.append(
-                _section(
-                    "À revoir",
-                    ["Fichier", "Type", "Remplacé par"],
-                    rows,
-                    intro=e(typo(REVIEW_INTRO)),
                 )
             )
         if self.incomplete:
@@ -764,6 +735,6 @@ def _file_entry(r: DocumentResult) -> dict[str, Any]:
         "entites": sum(masked_counts(r).values()),
         "residus": r.residue_count,
         "residus_possibles": r.possible_residue_count,
-        "a_revoir": r.review_count,
+        "masques_apres_verification": r.corrected_count,
         "elements_omis": omitted_count(r),
     }

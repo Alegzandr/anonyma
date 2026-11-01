@@ -40,13 +40,6 @@ def page_coverage(page: pymupdf.Page) -> float:
     return min(covered / area, 1.0)
 
 
-def has_drawings(page: pymupdf.Page) -> bool:
-    try:
-        return bool(page.get_drawings())
-    except Exception:  # broken content streams: assume yes (recall first)
-        return True
-
-
 def to_bbox(rect: pymupdf.Rect | tuple[float, float, float, float]) -> BBox:
     r = pymupdf.Rect(rect)
     return BBox(r.x0, r.y0, r.x1, r.y1)

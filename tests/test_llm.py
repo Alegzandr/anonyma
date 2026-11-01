@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 from anonyma import llm, paths, pipeline
-from anonyma.config import Config
+from anonyma.config import UNCERTAIN_SCORE, Config
 from anonyma.detectors import llm as llm_detector
 from anonyma.detectors.llm import LlmDetector, passages, plan, select_model
 from anonyma.models import Detector, Entity, Profile, Segment, SegmentContext, SegmentKind
@@ -417,8 +417,8 @@ def test_weak_indirect_identifiers_go_to_review(monkeypatch: pytest.MonkeyPatch)
     ]
     found, _ = _detect(monkeypatch, [segment], answer)
     scores = {e.value: e.score for e in found}
-    assert scores.pop("Le boucher du marché couvert") < Config().review_threshold
-    assert all(score >= Config().review_threshold for score in scores.values())
+    assert scores.pop("Le boucher du marché couvert") < UNCERTAIN_SCORE
+    assert all(score >= UNCERTAIN_SCORE for score in scores.values())
     assert len(scores) == 3
 
 

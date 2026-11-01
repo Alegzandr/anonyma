@@ -174,13 +174,6 @@ def test_qt_texts_in_french(qapp: Any) -> None:
     assert QCoreApplication.translate("QPlatformTheme", "Cancel") == "Annuler"
 
 
-def test_pending_review_question_agrees() -> None:
-    from anonyma.gui.pages.processing import pending_review_question
-
-    assert pending_review_question(1).startswith("1\u00a0entité incertaine n'a pas été revue.")
-    assert pending_review_question(3).startswith("3\u00a0entités incertaines n'ont pas été revues.")
-
-
 def test_status_badges_are_not_clipped(window: MainWindow) -> None:
     from PySide6.QtGui import QFontMetrics
 

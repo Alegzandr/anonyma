@@ -426,27 +426,17 @@ class OrganizationChoice(enum.StrEnum):
     BLACKLIST = "liste_noire"
 
 
-class NumberingChoice(enum.StrEnum):
-    SEQUENTIAL = "sequentiel"
-    RANDOM = "aleatoire"
-
-
 @dataclasses.dataclass(slots=True)
 class ProtectionOptions:
     """Options of the global fix (OCR, codes, invisible text, identifiers,
     organizations, names); None = keep the configuration value."""
 
     ocr: bool | None = None
-    ocr_pages: bool | None = None
-    barcodes: bool | None = None
-    remove_invisible: bool | None = None
-    opaque_ids: bool | None = None
     opaque_whitelist: Sequence[str] = ()
     organizations: OrganizationChoice | None = None
     organization_whitelist: Path | None = None
     organization_blacklist: Path | None = None
     neutral_names: bool | None = None
-    numbering: NumberingChoice | None = None
 
 
 def load_config(config_file: Path | None) -> Config:
@@ -530,10 +520,6 @@ def _read_whitelist(path: Path, what: str = "Liste blanche") -> list[str]:
 def _apply_protection(config: Config, options: ProtectionOptions) -> None:
     flags = {
         "ocr_enabled": options.ocr,
-        "ocr_full_pages": options.ocr_pages,
-        "decode_barcodes": options.barcodes,
-        "remove_invisible_text": options.remove_invisible,
-        "mask_opaque_ids": options.opaque_ids,
         "neutral_filenames": options.neutral_names,
     }
     for name, value in flags.items():
@@ -552,8 +538,6 @@ def _apply_protection(config: Config, options: ProtectionOptions) -> None:
             *config.organization_blacklist,
             *_read_whitelist(options.organization_blacklist, "Liste noire des organisations"),
         ]
-    if options.numbering is not None:
-        config.tag_numbering = options.numbering.value
 
 
 def apply_options(
@@ -562,7 +546,6 @@ def apply_options(
     profile: ProfileChoice | None = None,
     mode: ReplacementMode | None = None,
     regime: Regime | None = None,
-    paranoid: bool | None = None,
     whitelist: Path | None = None,
     business_lists: Sequence[Path] = (),
     workers: int | None = None,
@@ -576,8 +559,6 @@ def apply_options(
         config.mode = mode
     if regime is not None:
         config.regime = regime
-    if paranoid is not None:
-        config.paranoid = paranoid
     if whitelist is not None:
         config.whitelist = [*config.whitelist, *_read_whitelist(whitelist)]
     for csv_path in business_lists:
@@ -979,7 +960,6 @@ def _settings(config: Config) -> dict[str, str]:
         "Profil": label,
         "Mode": _short_label(MODE_LABELS.get(config.mode, config.mode.value)),
         "Régime": _short_label(REGIME_LABELS.get(config.regime, config.regime.value)),
-        "Mode paranoïaque": "oui" if config.paranoid else "non",
         "OCR": "oui" if config.ocr_enabled else "non",
         "Noms des fichiers": "neutres" if config.neutral_filenames else _done_word(config),
         "Organisations": config.organization_policy.replace("_", " "),
@@ -1005,7 +985,6 @@ def _parameters(config: Config) -> dict[str, Any]:
         "detecteurs": registry.active_detectors(config, chosen),
         "mode": config.mode.value,
         "regime": config.regime.value,
-        "paranoiaque": config.paranoid,
         "ocr": config.ocr_enabled,
         "noms_neutres": config.neutral_filenames,
         "organisations": config.organization_policy,
@@ -1109,15 +1088,6 @@ ProfileOpt = Annotated[
         rich_help_panel=PANEL_DETECTION,
     ),
 ]
-ParanoidOpt = Annotated[
-    bool | None,
-    typer.Option(
-        "--paranoiaque/--non-paranoiaque",
-        help="Masquer aussi tout nom propre et toute séquence suspecte.",
-        show_default=False,
-        rich_help_panel=PANEL_DETECTION,
-    ),
-]
 WhitelistOpt = Annotated[
     Path | None,
     typer.Option(
@@ -1134,15 +1104,6 @@ BusinessOpt = Annotated[
         "--liste-metier",
         help="CSV de valeurs à toujours masquer (valeur[,type]) ; répétable.",
         metavar="CSV",
-        show_default=False,
-        rich_help_panel=PANEL_DETECTION,
-    ),
-]
-OpaqueOpt = Annotated[
-    bool | None,
-    typer.Option(
-        "--masquer-identifiants/--conserver-identifiants",
-        help="Masquer les identifiants techniques (empreintes, UUID, références).",
         show_default=False,
         rich_help_panel=PANEL_DETECTION,
     ),
@@ -1192,50 +1153,12 @@ TableOpt = Annotated[
         rich_help_panel=PANEL_REPLACEMENT,
     ),
 ]
-NumberingOpt = Annotated[
-    NumberingChoice | None,
-    typer.Option(
-        "--numerotation",
-        help="Numérotation des balises : sequentiel ([PERSONNE_001]) ou aleatoire.",
-        metavar="TYPE",
-        case_sensitive=False,
-        show_default=False,
-        rich_help_panel=PANEL_REPLACEMENT,
-    ),
-]
 OcrOpt = Annotated[
     bool | None,
     typer.Option(
         "--ocr/--sans-ocr",
         help="Lire le texte des images et des pages numérisées (sans OCR, aucun fichier "
         "contenant des images n'est marqué anonymisé).",
-        show_default=False,
-        rich_help_panel=PANEL_IMAGES,
-    ),
-]
-OcrPagesOpt = Annotated[
-    bool | None,
-    typer.Option(
-        "--ocr-pages/--sans-ocr-pages",
-        help="PDF : lire aussi chaque page entière par OCR (tampons, texte vectorisé).",
-        show_default=False,
-        rich_help_panel=PANEL_IMAGES,
-    ),
-]
-BarcodesOpt = Annotated[
-    bool | None,
-    typer.Option(
-        "--codes-barres/--sans-codes-barres",
-        help="Décoder les QR codes et codes-barres (toujours masqués).",
-        show_default=False,
-        rich_help_panel=PANEL_IMAGES,
-    ),
-]
-InvisibleOpt = Annotated[
-    bool | None,
-    typer.Option(
-        "--supprimer-texte-invisible/--conserver-texte-invisible",
-        help="PDF : supprimer le texte invisible au lieu de seulement l'anonymiser.",
         show_default=False,
         rich_help_panel=PANEL_IMAGES,
     ),
@@ -1341,19 +1264,13 @@ def run(
     replace_previous: ReplaceOpt = False,
     neutral_names: NeutralNamesOpt = None,
     profile: ProfileOpt = None,
-    paranoid: ParanoidOpt = None,
     whitelist: WhitelistOpt = None,
     business_lists: BusinessOpt = None,
-    opaque_ids: OpaqueOpt = None,
     opaque_whitelist: OpaqueAllowOpt = None,
     mode: ModeOpt = None,
     regime: RegimeOpt = None,
     table: TableOpt = None,
-    numbering: NumberingOpt = None,
     ocr: OcrOpt = None,
-    ocr_pages: OcrPagesOpt = None,
-    barcodes: BarcodesOpt = None,
-    remove_invisible: InvisibleOpt = None,
     organizations: OrganizationsOpt = None,
     organization_whitelist: OrganizationWhitelistOpt = None,
     organization_blacklist: OrganizationBlacklistOpt = None,
@@ -1373,22 +1290,16 @@ def run(
         profile=profile,
         mode=mode,
         regime=regime,
-        paranoid=paranoid,
         whitelist=whitelist,
         business_lists=business_lists or (),
         workers=workers,
         protection=ProtectionOptions(
             ocr=ocr,
-            ocr_pages=ocr_pages,
-            barcodes=barcodes,
-            remove_invisible=remove_invisible,
-            opaque_ids=opaque_ids,
             opaque_whitelist=opaque_whitelist or (),
             organizations=organizations,
             organization_whitelist=organization_whitelist,
             organization_blacklist=organization_blacklist,
             neutral_names=neutral_names,
-            numbering=numbering,
         ),
     )
     _warn_profile(config)
@@ -1534,9 +1445,8 @@ def run_summary(
         "fichiers": counts["nombre_fichiers"],
         "elements": counts["nombre_elements"],
         **counts,
-        # Older names: a_revoir = entites_a_revoir, residus = certain + possible
-        # residues, echecs = items (any depth) listed among the failures.
-        "a_revoir": counts["entites_a_revoir"],
+        # Older names: residus = certain + possible residues, echecs = items (any
+        # depth) listed among the failures.
         "residus": counts["residus_certains"] + counts["residus_possibles"],
         "echecs": len(report.failures),
         "dossier_sortie": str(result.output_dir),
@@ -1640,14 +1550,10 @@ def analyse(
     as_json: AnalysisJsonOpt = False,
     quiet: QuietOpt = False,
     profile: ProfileOpt = None,
-    paranoid: ParanoidOpt = None,
     whitelist: WhitelistOpt = None,
     business_lists: BusinessOpt = None,
-    opaque_ids: OpaqueOpt = None,
     opaque_whitelist: OpaqueAllowOpt = None,
     ocr: OcrOpt = None,
-    ocr_pages: OcrPagesOpt = None,
-    barcodes: BarcodesOpt = None,
     organizations: OrganizationsOpt = None,
     organization_whitelist: OrganizationWhitelistOpt = None,
     organization_blacklist: OrganizationBlacklistOpt = None,
@@ -1661,15 +1567,11 @@ def analyse(
     config = apply_options(
         load_config(config_file),
         profile=profile,
-        paranoid=paranoid,
         whitelist=whitelist,
         business_lists=business_lists or (),
         workers=workers,
         protection=ProtectionOptions(
             ocr=ocr,
-            ocr_pages=ocr_pages,
-            barcodes=barcodes,
-            opaque_ids=opaque_ids,
             opaque_whitelist=opaque_whitelist or (),
             organizations=organizations,
             organization_whitelist=organization_whitelist,
@@ -1742,7 +1644,6 @@ def analysis_summary(analysis: BatchAnalysis) -> dict[str, Any]:
         "mentions_par_type": occurrences,
         "occurrences_par_type": dict(occurrences),
         "entites_distinctes_par_type": dict(sorted(distinct.items())),
-        "a_revoir": len(analysis.review_clusters()),
         # Items that could not be read (failed, unsupported, cancelled), any depth.
         "non_analyses": problems,
     }
@@ -1787,10 +1688,6 @@ def _print_analysis(summary: dict[str, Any]) -> None:
                 f"[yellow]•[/] {_markup_escape(item['fichier'])} : {_markup_escape(reasons)}",
                 soft_wrap=True,
             )
-    if summary["a_revoir"]:
-        n = summary["a_revoir"]
-        verb = "serait" if n < 2 else "seraient"
-        out.print(f"{plural(n, 'entité')} de faible confiance {verb} à revoir.")
 
 
 # ---------------------------------------------------------------------------

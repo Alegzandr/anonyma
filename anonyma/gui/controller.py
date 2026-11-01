@@ -27,7 +27,6 @@ from anonyma.gui.preview import (
     build_index,
     compute_effective,
     is_decided,
-    pending_review,
     same_value,
 )
 from anonyma.gui.tasks import Report, Task, TaskRunner
@@ -60,25 +59,6 @@ from anonyma.textutils import normalize
 log = get_logger("gui.controller")
 
 DEFAULT_STORE_NAME = "correspondances.db"
-
-#: Config.review_policy values -> French labels.
-REVIEW_POLICIES: dict[str, str] = {
-    "aucune": "Aucune",
-    "incertaines": "Entités incertaines",
-    "systematique": "Systématique",
-}
-#: What « Anonymiser » does under each policy (helper line and tooltip).
-REVIEW_POLICY_GLOSSES: dict[str, str] = {
-    "aucune": "« Anonymiser » écrit les fichiers sans s'arrêter à la revue.",
-    "incertaines": "« Anonymiser » s'arrête à la revue si des entités sont incertaines.",
-    "systematique": "« Anonymiser » s'arrête toujours à la revue avant d'écrire.",
-}
-DEFAULT_REVIEW_POLICY = "incertaines"
-
-
-def review_policy(config: Config) -> str:
-    policy = config.review_policy
-    return policy if policy in REVIEW_POLICIES else DEFAULT_REVIEW_POLICY
 
 
 class Phase(enum.StrEnum):
@@ -159,8 +139,6 @@ class BatchController(QObject):
     failed = Signal(str)
     #: Batch task cancelled by the user.
     cancelled = Signal()
-    #: The one-click flow stopped at review: (number of entities to look at).
-    review_required = Signal(int)
     #: (document id, Document | None, French error) — produced file re-extracted.
     output_extracted = Signal(str, object, str)
 
@@ -321,14 +299,6 @@ class BatchController(QObject):
     def store_path(self) -> Path:
         return default_store_path(self.context.config)
 
-    def review_policy(self) -> str:
-        return review_policy(self.context.config)
-
-    def pending_review_count(self) -> int:
-        if self.analysis is None:
-            return 0
-        return len(pending_review(self.analysis, self.decisions))
-
     def cluster_ids(self) -> list[str]:
         """Every entity of the review queue: detected clusters, then manual ones."""
         ids = list(self.index.order)
@@ -403,7 +373,7 @@ class BatchController(QObject):
 
     def _on_progress(self, payload: object) -> None:
         if isinstance(payload, LlmEstimate):
-            self.long_run.emit(payload.warning("choisissez le profil Standard dans les réglages"))
+            self.long_run.emit(payload.warning())
         if isinstance(payload, ProgressEvent):
             if payload.index is not None:
                 self.done_items.add(payload.index)
@@ -459,21 +429,11 @@ class BatchController(QObject):
                 self.cancelled.emit()
                 return
             if then_apply:
-                self._after_one_click_analysis(passphrase)
+                self.apply(passphrase=passphrase)
 
         task.succeeded.connect(done)
         task.start()
         return True
-
-    def _after_one_click_analysis(self, passphrase: str | None) -> None:
-        policy = self.review_policy()
-        pending = self.pending_review_count()
-        if policy == "systematique":
-            self.review_required.emit(len(self.index.order))
-        elif policy == "incertaines" and pending:
-            self.review_required.emit(pending)
-        else:
-            self.apply(passphrase=passphrase)
 
     def apply(
         self,
@@ -539,8 +499,8 @@ class BatchController(QObject):
         return True
 
     def run_all(self, passphrase: str | None = None) -> bool:
-        """One-click flow: analyze, then apply according to the review policy. A current
-        analysis that was never applied is reused instead of being recomputed."""
+        """One-click flow: analyze, then apply. A current analysis that was never applied
+        is reused instead of being recomputed."""
         if (
             not self.busy
             and self.analysis is not None
@@ -548,8 +508,7 @@ class BatchController(QObject):
             and not self.analysis_is_stale()
             and not any(d.status is DocumentStatus.CANCELLED for d in self.analysis.documents)
         ):
-            self._after_one_click_analysis(passphrase)
-            return True
+            return self.apply(passphrase=passphrase)
         return self.analyze(then_apply=True, passphrase=passphrase)
 
     # -- preview (background) ---------------------------------------------------------

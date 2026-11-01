@@ -16,15 +16,32 @@ Detector chain (registry.build_detectors, by profile) ──▶ Entity[]
    │  back in the main process, batch-wide
    ▼
 resolver.resolve ─▶ resolver.propagate ─▶ resolver.resolve  ──▶ EntityCluster{} (BatchAnalysis)
-   │  ── GUI review: ReviewDecisions (confirm / reject / retype / manual add) ──
+   │  ── optional GUI preview: ReviewDecisions (confirm / reject / retype / manual add) ──
    ▼
 Replacer.assign ──▶ SubstitutionTable (stable for the whole batch; MappingStore in pseudonymization)
    │  per top-level file, in a ProcessPoolExecutor
    ▼
 replacer.build_plan ─▶ Writer.write (children first, then container) ─▶ output file
    ▼
-extract_file(output) ─▶ Verifier.verify ─▶ status ANONYMIZED / NEEDS_REVIEW / RESIDUE / FAILED
+extract_file(output) ─▶ Verifier.verify
+   │  residues of the batch ─▶ Correction values ─▶ resolve_decisions(…, corrections)
+   │  ─▶ Replacer.assign(keep=first table) ─▶ files whose replacements changed rewritten
+   ▼
+status ANONYMIZED / NEEDS_REVIEW / RESIDUE / FAILED
 ```
+
+Nothing stops the batch for the user. Uncertain entities (score below
+`config.UNCERTAIN_SCORE`) are masked like the others; they are only shown as low
+confidence in the preview and not searched batch-wide as a lone common word.
+
+**Corrective pass** (`Pipeline._correct`): after the first write, every residue of a real
+entity type found by the verification (its parts outside substitutes, `Residue.fragments`)
+becomes a `Correction`, searched in the whole batch (in its own file for document-local
+types) like a manual addition, but with the policies and the whitelist applied. The
+replacer pins the substitutes already written (`assign(keep=...)`: same tags, same
+realistic values, same date offset; new clusters get unused tags), so only the files whose
+replacements or names change are deleted and rewritten, then verified again. What remains
+after that pass gives the statuses below.
 
 Public API (`anonyma/pipeline.py`): `Pipeline(config, store=None)`,
 `.analyze(inputs, progress, cancel) -> BatchAnalysis`,
@@ -127,7 +144,7 @@ accounts for into a certain `FICHIER_INCORPORE` residue.
 | certain residue | RESIDUE | `<output>_quarantaine/` |
 | output not re-extractable | FAILED | `<output>_quarantaine/` |
 | an image/page of the **output** could not be OCR'd (`VerificationResult.unread`, any `ocr` issue: OCR disabled, unavailable, failed) | NEEDS_REVIEW + `verify.incomplete` | `<output>_quarantaine/` (content never checked) |
-| possible residue, uncertain entities, an image/page of the **input** not OCR'd (`analyse.ocr_incomplete`), or embedded items omitted from the container (`container.incomplete`) | NEEDS_REVIEW | output folder |
+| possible residue left after the corrective pass, an image/page of the **input** not OCR'd (`analyse.ocr_incomplete`), or embedded items omitted from the container (`container.incomplete`) | NEEDS_REVIEW | output folder |
 | container whose every embedded item was omitted and with no text of its own (`container.empty`) | FAILED | nothing written |
 | none of the above | ANONYMIZED | output folder |
 

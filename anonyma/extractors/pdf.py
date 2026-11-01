@@ -7,9 +7,8 @@ Segments:
   boxes. Characters nobody can see (render mode 3, transparent, zero/tiny size,
   outside the page, white on white, hidden layer) go to separate HIDDEN
   segments: they are analysed (they often hold identifiers that propagate) and
-  the writer deletes them when ``config.remove_invisible_text``;
-* every page is rendered once (``config.ocr_full_pages``, scanned pages, vector
-  only pages) and OCR'd; OCR lines whose text is already known (text layer,
+  the writer deletes them;
+* every page is rendered once and OCR'd; OCR lines whose text is already known (text layer,
   OCR of the image they lie on) are dropped, so OCR segments only hold text
   that exists purely visually (images, vector glyphs, stamps, annotation and
   form appearances, fonts without Unicode mapping). QR codes / barcodes of the
@@ -47,7 +46,6 @@ from anonyma.extractors._pdf import (
     SCAN_COVERAGE,
     TEXT_FLAGS,
     exposed_strings,
-    has_drawings,
     object_sources,
     page_coverage,
     pixel_rect_to_page,
@@ -463,20 +461,13 @@ class PdfExtractor(Extractor):
         engine_loaded = False
         for page in doc:
             ctx.check_cancelled()
-            if config.ocr_full_pages and not engine_loaded:
+            if not engine_loaded:
                 engine, engine_loaded = ctx.ocr, True
-            render: Image.Image | None = None
-            zoom = 1.0
-            if config.decode_barcodes or (config.ocr_full_pages and engine is not None):
-                render, zoom = render_page(page)
+            # Every page is rendered: codes are decoded and the page is read by OCR
+            # (vector text, stamps, flattened fields, annotation appearances).
+            render, zoom = render_page(page)
             page_text = text_layer(page, render, zoom, hidden_layers)
             scanned = page_text.visible < MIN_TEXT_CHARS and page_coverage(page) >= SCAN_COVERAGE
-            vector_only = page_text.visible == 0 and has_drawings(page)
-            wants_ocr = config.ocr_full_pages or scanned or vector_only
-            if wants_ocr and not engine_loaded:
-                engine, engine_loaded = ctx.ocr, True
-            if wants_ocr and engine is not None and render is None:
-                render, zoom = render_page(page)
             segments.extend(page_text.segments)
             invisible[page.number] = page_text.invisible
 
@@ -508,35 +499,34 @@ class PdfExtractor(Extractor):
                         (t, image_box_to_page(b, info.size, matrix)) for t, b in info.codes
                     )
 
-            if wants_ocr and engine is not None and render is not None:
+            if engine is not None:
                 if not self._only_known_images(page, images):
                     lines = recognize(engine, render, document)
                     if lines is not None:
                         segments.extend(
                             page_ocr_segments(page, lines, zoom, page_text.chars, known_lines)
                         )
-            elif wants_ocr and scanned:
+            elif scanned:
                 missing_ocr.append(page.number + 1)
-            if render is not None:
-                for c_index, code in enumerate(decode_codes(render, config, document)):
-                    bbox = _page_box(page, code.bbox, zoom)
-                    if any(t == code.text and overlaps(b, bbox) for t, b in known_codes):
-                        continue
-                    segments.append(
-                        Segment(
-                            id=f"c{page.number}_{c_index}",
-                            text=code.text,
-                            locator=("code", page.number, c_index),
-                            context=SegmentContext(
-                                SegmentKind.BARCODE,
-                                label=f"{BARCODE_LABEL} page {page.number + 1}",
-                                page=page.number,
-                                bbox=bbox,
-                            ),
-                            char_boxes=(bbox,) * len(code.text),
-                        )
+            for c_index, code in enumerate(decode_codes(render, config, document)):
+                bbox = _page_box(page, code.bbox, zoom)
+                if any(t == code.text and overlaps(b, bbox) for t, b in known_codes):
+                    continue
+                segments.append(
+                    Segment(
+                        id=f"c{page.number}_{c_index}",
+                        text=code.text,
+                        locator=("code", page.number, c_index),
+                        context=SegmentContext(
+                            SegmentKind.BARCODE,
+                            label=f"{BARCODE_LABEL} page {page.number + 1}",
+                            page=page.number,
+                            bbox=bbox,
+                        ),
+                        char_boxes=(bbox,) * len(code.text),
                     )
-        if engine is None and (unverified or (config.ocr_full_pages and doc.page_count)):
+                )
+        if engine is None and (unverified or doc.page_count):
             # Pages not rendered for OCR, images not read: the output cannot be
             # fully verified (any ``ocr.*`` issue means "vérification incomplète").
             document.add_issue(

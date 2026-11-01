@@ -208,27 +208,8 @@ def test_model_only_lone_ordinary_word_does_not_spread() -> None:
 
 # -- references kept on purpose ----------------------------------------------------------
 
-KEEP = Config(mask_opaque_ids=False)
 
-
-@pytest.mark.parametrize(
-    ("text", "value", "kept"),
-    [
-        ("Facture_FAC-2026-743117.pdf", "FAC-2026-743117", True),
-        ("Facture_FAC-2026-743117.pdf", "FAC", True),
-        ("Facture FAC-2026-639133", "Facture FAC-2026-639133", True),
-        ("Devis_DEV-2026-6304.pdf", "DEV", True),
-        ("la facture FAC-2026-6391 de Paul", "FAC-2026-6391 de Paul", False),
-        ("mon numéro client HX-C-941260", "HX-C-941260", False),
-        ("Facture_PAUL-2026-1234.pdf", "PAUL", False),
-    ],
-)
-def test_kept_references(text: str, value: str, kept: bool) -> None:
-    start = text.index(value)
-    assert kept_reference(KEEP, IdWhitelist([]), text, start, start + len(value)) is kept
-
-
-def test_allowed_identifiers_whatever_the_option() -> None:
+def test_allowed_identifiers_are_kept() -> None:
     text = "ticket CAS-11478-QRV7QP"
     ids = IdWhitelist(["re:^CAS-"])
     assert kept_reference(Config(), ids, text, 7, len(text))
@@ -255,7 +236,7 @@ def test_team_words_around_a_substitute_are_no_residue() -> None:
 
 def test_kept_reference_is_no_residue() -> None:
     doc = _output("Pièce jointe : Facture_FAC-2026-743117.pdf", SegmentKind.BODY, "")
-    config = Config(mask_opaque_ids=False)
+    config = Config(opaque_id_whitelist=["re:^FAC-"])
     result = Verifier(config, [RegexDetector(config)]).verify(doc, [], set(), [])
     assert result.clean, [(r.reason, r.entity_type) for r in result.residues]
 

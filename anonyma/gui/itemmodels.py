@@ -148,7 +148,8 @@ class ClusterView:
     entity_type: str
     state: RowState
     decided: bool
-    needs_review: bool
+    #: Low-confidence entity, masked without a decision.
+    uncertain: bool
     occurrences: int
     documents: int
     max_score: float
@@ -183,7 +184,7 @@ SORTS = {
 STATE_FILTERS = {
     "": "Toutes les entités",
     "non_decidees": "Sans décision",
-    "a_revoir": "À revoir",
+    "incertaines": "Confiance faible",
     "decidees": "Avec décision",
     "validees": "Masquées",
     "rejetees": "Non masquées",
@@ -251,13 +252,13 @@ class ClusterTreeModel(QAbstractItemModel):
             entity_type=c.decisions.retyped_clusters.get(cid, cluster.entity_type),
             state=state,
             decided=is_decided(cid, c.analysis, c.decisions),
-            needs_review=state is RowState.REVIEW,
+            uncertain=state is RowState.AUTO and not manual and cluster.uncertain,
             occurrences=len(mentions),
             documents=len({e.document_id for e in mentions}),
             max_score=cluster.max_score,
             detectors=tuple(sorted(cluster.detectors)),
-            reason=flag_reason(cluster, c.analysis.config.review_threshold, manual),
-            detail="" if manual else score_detail(cluster, c.analysis.config.review_threshold),
+            reason=flag_reason(cluster, manual),
+            detail="" if manual else score_detail(cluster),
             manual=manual,
         )
         self._views[cid] = view
@@ -300,7 +301,7 @@ class ClusterTreeModel(QAbstractItemModel):
         state = self.state_filter
         if state == "non_decidees" and view.decided:
             return False
-        if state == "a_revoir" and not view.needs_review:
+        if state == "incertaines" and not view.uncertain:
             return False
         if state == "decidees" and not view.decided:
             return False
@@ -553,12 +554,6 @@ class ReviewItemDelegate(QStyledItemDelegate):
         top = QRectF(rect.x(), rect.y(), rect.width(), line)
         bottom = QRectF(rect.x(), rect.y() + line, rect.width(), line)
         if isinstance(view, ClusterView):
-            if view.needs_review:
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(t.warning))
-                painter.drawRoundedRect(
-                    QRectF(option.rect.x() + 1, rect.y(), 3, rect.height()), 1, 1
-                )
             bg, fg = theme.entity_colors(view.entity_type)
             x = _draw_runs(painter, top, [(view.canonical, bold, text, None)])
             pill = QRectF(x + 8, top.y() + 1, rect.right() - x - 8, top.height() - 2)

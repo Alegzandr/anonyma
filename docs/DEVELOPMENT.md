@@ -87,7 +87,9 @@ fails. A tag with a suffix (`v1.2.0-rc1`) is published as a pre-release.
   application to exit, swaps every top-level entry except `data/` and `models/` (previous
   ones kept as `*.old-maj` and restored on failure), then relaunches it. Keep the archive
   names and their single `Anonyma/` top folder stable: older versions rely on them.
-- **Two-level verification**: a recovered original value, or a reliable deterministic
+- **Two-level verification, then a corrective pass**: what the verification finds is
+  masked batch-wide and the affected files are rewritten with the same substitutes. What
+  remains then is graded: a recovered original value, or a reliable deterministic
   detector, quarantines the file; a signal from a statistical detector alone (GLiNER, LLM)
   marks it « À revoir », since these models react to the new context created by the tags.
 - **PST restored as a folder of eml**: no free tool rewrites a PST reliably.

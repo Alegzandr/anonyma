@@ -49,8 +49,7 @@ def _result(tmp_path: Path) -> BatchResult:
         DocumentStatus.ANONYMIZED,
         entity_counts={"EMAIL": 1},
         children=[child],
-        review_count=1,
-        review_items=[("NIR", "[NIR_001]")],
+        corrected_count=2,
     )
     return BatchResult(
         "20260101-000000-abcdef",
@@ -69,11 +68,11 @@ def test_from_result_counts(tmp_path: Path) -> None:
     # file was in quarantine); an embedded item is located in its container.
     assert [f["fichier"] for f in report.failures] == ["dossier/b.md › pj.txt"]
     assert report.residues[0]["type"] == "PERSONNE"
-    assert report.review == [
-        {"fichier": "dossier/b.md", "type": "NIR", "remplacement": "[NIR_001]"}
-    ]
-    assert "[NIR_001]" in report.to_markdown() and "[NIR_001]" in report.to_html()
-    assert report.to_dict()["a_revoir"] == report.review
+    assert report.corrected == 2
+    data = report.to_dict()
+    assert data["masques_apres_verification"] == 2
+    assert "a_revoir" not in data and "entites_a_revoir" not in data
+    assert [f["masques_apres_verification"] for f in data["fichiers"]] == [0, 2]
     assert report.quarantined  # the fixture's residue is certain
     report.residues[0]["certitude"] = "possible"
     assert not report.quarantined
@@ -250,7 +249,7 @@ def test_residues_are_located_and_labelled_in_french(tmp_path: Path) -> None:
 
 def test_json_report_uses_codes_and_shares_the_exit_code(tmp_path: Path) -> None:
     data = BatchReport.from_result(_result(tmp_path)).to_dict()
-    assert data["schema"] == 2
+    assert data["schema"] == 3
     assert data["verdict"] == "quarantaine" and data["code_sortie"] == 1
     assert [f["statut"] for f in data["fichiers"]] == ["residu", "anonymise"]
     assert [f["statut_libelle"] for f in data["fichiers"]] == ["Résidus", "Anonymisé"]

@@ -71,9 +71,7 @@ def recognize(engine: OcrEngine, image: Image.Image, document: Document) -> list
 
 
 def decode_codes(image: Image.Image, config: Config, document: Document) -> list[barcodes.Barcode]:
-    """QR codes / Data Matrix / barcodes of ``image`` when enabled."""
-    if not config.decode_barcodes:
-        return []
+    """QR codes / Data Matrix / barcodes of ``image``."""
     try:
         return barcodes.decode(image)
     except ImportError:

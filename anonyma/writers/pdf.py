@@ -767,15 +767,14 @@ class PdfWriter(Writer):
                         lines = line_boxes(seg, rep)
                     if lines:
                         page_work.regions.append(_Region(region_kind, lines, rep.substitute))
-        if ctx.config.remove_invisible_text:
-            invisible: dict[int, list[tuple[float, float, float, float]]] = document.properties.get(
-                "pdf_invisible", {}
-            )
-            for page_number, rects in invisible.items():
-                if rects:
-                    work.setdefault(int(page_number), _PageWork()).invisible.extend(
-                        pymupdf.Rect(r) for r in rects
-                    )
+        invisible: dict[int, list[tuple[float, float, float, float]]] = document.properties.get(
+            "pdf_invisible", {}
+        )
+        for page_number, rects in invisible.items():
+            if rects:
+                work.setdefault(int(page_number), _PageWork()).invisible.extend(
+                    pymupdf.Rect(r) for r in rects
+                )
         return work
 
     def _redact(

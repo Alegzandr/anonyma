@@ -135,6 +135,11 @@ class Replacer:
         self.store = store if config.regime is Regime.PSEUDONYMIZATION else None
         self._salt = secrets.token_bytes(32)
         self._secrets: dict[str, bytes] = {}
+        #: Date offset of the batch, drawn once: every assignment of this replacer
+        #: shifts dates alike.
+        self.batch_shift: int | None = None
+        #: Substitutes already written (``assign(keep=...)``): kept as they are.
+        self.pinned: dict[str, str] = {}
 
     def secret(self, name: str) -> bytes:
         """A batch key: kept in the mapping table in pseudonymization (the same from
@@ -173,12 +178,18 @@ class Replacer:
         clusters: Mapping[str, EntityCluster],
         entities: Sequence[Entity],
         documents: Sequence[Document] | None = None,
+        *,
+        keep: SubstitutionTable | None = None,
     ) -> SubstitutionTable:
         """Give every cluster a substitute, stable for the whole batch (and across
         batches through the store in pseudonymization).
 
         ``documents`` (top-level, in input order) fixes the order of first appearance
-        used by sequential tags; without it, the order of ``entities`` is used."""
+        used by sequential tags; without it, the order of ``entities`` is used.
+        ``keep``: a table this replacer made earlier for the same batch, whose files
+        are already written: its clusters keep their substitutes and new clusters
+        never reuse one (the corrective pass of the pipeline)."""
+        self.pinned = dict(keep.by_cluster) if keep is not None else {}
         table = SubstitutionTable(mode=self.config.mode)
         first_seen = appearance_order(entities, documents)
         last = (len(first_seen) + 1, 0, 0, 0)
@@ -197,7 +208,7 @@ class Replacer:
 
     def tag_allocator(self) -> TagAllocator:
         used = self.store.used_substitutes() if self.store else set()
-        return TagAllocator(self.config, self.store, used)
+        return TagAllocator(self.config, self.store, used | set(self.pinned.values()), self.pinned)
 
     def _tags(self, ordered: Sequence[EntityCluster], table: SubstitutionTable) -> None:
         tags = self.tag_allocator()
@@ -226,6 +237,8 @@ class Replacer:
         value (nor the other way round), and a stored code must still be a complete,
         valid substitute of the same length, or it would be completed with original
         characters. Such values are ignored and a new substitute is made."""
+        if cluster.id in self.pinned:
+            return self.pinned[cluster.id]
         if self.store is None:
             return None
         key = self.store_key(cluster)
@@ -322,14 +335,25 @@ class TagAllocator:
     the store or of the batch.
     """
 
-    def __init__(self, config: Config, store: MappingStore | None, used: Iterable[str]) -> None:
+    def __init__(
+        self,
+        config: Config,
+        store: MappingStore | None,
+        used: Iterable[str],
+        pinned: Mapping[str, str] | None = None,
+    ) -> None:
         self.store = store
-        self.random = config.tag_numbering == "aleatoire" or store is not None
+        self.random = store is not None
         self.used = set(used)
+        #: ``cluster id -> tag`` already written (:meth:`Replacer.assign`, ``keep``).
+        self.pinned = pinned or {}
         self.counters: dict[str, int] = {}
         self._rng = random.SystemRandom()
 
     def tag_for(self, cluster: EntityCluster) -> str:
+        pinned = self.pinned.get(cluster.id)
+        if pinned is not None and STORED_TAG.fullmatch(pinned.strip()):
+            return pinned
         key = Replacer.store_key(cluster)
         if self.store is not None:
             for lookup in (_mode_key(ReplacementMode.TAG, key), key):
@@ -407,6 +431,8 @@ class _Realistic:
                         if len(key) >= 3 and key not in PARTICLES and civility_of(token) is None:
                             self.forbidden_tokens.add(key)
         self.forbidden.discard("")
+        #: Substitutes kept from an earlier assignment, never given to another cluster.
+        self.pinned = {normalize(v): cid for cid, v in replacer.pinned.items()}
         self.shift = self._date_shift()
         self.birth_key = self._birth_key()
         self.tags = replacer.tag_allocator()
@@ -426,7 +452,8 @@ class _Realistic:
             return
         known = self.r.stored(cluster)
         generator = GENERATORS.get(cluster.entity_type)
-        if generator is None:
+        pinned_tag = cluster.id in self.r.pinned and STORED_TAG.fullmatch((known or "").strip())
+        if generator is None or pinned_tag:
             self._tag(cluster)
             return
         result: dict[str, str] | None = None
@@ -489,6 +516,8 @@ class _Realistic:
             key = normalize(substitute)
             if key in self.forbidden or key in self.used:
                 return False
+            if self.pinned.get(key, cluster.id) != cluster.id:
+                return False
             if checksums.compact(substitute).casefold() in self.forbidden:
                 return False
             # Parts too: « Renaud-sur-François », ``monique.girard@…``, ``@elodie_david``
@@ -503,14 +532,19 @@ class _Realistic:
         return True
 
     def _date_shift(self) -> int:
+        if self.r.batch_shift is not None:
+            return self.r.batch_shift
+        shift: int | None = None
         if self.store:
             known = self.store.lookup(PARAMETER_TYPE, DATE_SHIFT_KEY)
             if known and known.lstrip("-").isdigit():
-                return int(known)
-        rng = random.SystemRandom()
-        shift = rng.choice([-1, 1]) * rng.randint(*DATE_SHIFT_DAYS)
-        if self.store:
-            self.store.save(PARAMETER_TYPE, DATE_SHIFT_KEY, DATE_SHIFT_KEY, str(shift))
+                shift = int(known)
+        if shift is None:
+            rng = random.SystemRandom()
+            shift = rng.choice([-1, 1]) * rng.randint(*DATE_SHIFT_DAYS)
+            if self.store:
+                self.store.save(PARAMETER_TYPE, DATE_SHIFT_KEY, DATE_SHIFT_KEY, str(shift))
+        self.r.batch_shift = shift
         return shift
 
     def _birth_key(self) -> bytes:

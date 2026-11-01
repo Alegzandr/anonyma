@@ -38,7 +38,7 @@ def test_full_review_flow(
     c = window.controller
     assert c.analysis is not None
     assert len(c.analysis.documents) == 2
-    assert c.pending_review_count() == 1
+    assert len(c.analysis.uncertain_clusters()) == 1
     assert window.processing.model.rows[0].status == "Analysé"
 
     window.show_page("review")
@@ -52,9 +52,9 @@ def test_full_review_flow(
     )
     view = review.model.view(orsini)
     assert view is not None and "confiance faible" in view.reason
-    assert "0 / 3 décidées" in review.counter.text()
-    assert "1 à revoir" in review.counter.text()
-    assert window.nav.item(1).text() == "Revue (1)"
+    assert "3 entités" in review.counter.text().replace("\u00a0", " ")
+    assert "décision" not in review.counter.text()
+    assert window.nav.item(1).text() == "Aperçu"
     assert "Bérénice Lagarde" in review.original.toPlainText()
     preview = review.anonymized.toPlainText()
     assert "Bérénice" not in preview and "[PERSONNE_" in preview and "[PROJET_" in preview
@@ -65,8 +65,7 @@ def test_full_review_flow(
     review.reject_selected()
     review.select_cluster(orsini)
     review.confirm_selected()
-    assert c.pending_review_count() == 0
-    assert "2 / 3 décidées" in review.counter.text()
+    assert "2 décisions" in review.counter.text().replace("\u00a0", " ")
 
     # Add « Brest » from a text selection: propagated to the whole batch.
     review.select_document(c.analysis.documents[0].id)
@@ -137,7 +136,7 @@ def test_long_full_analysis_is_announced(
     assert not notice.isHidden()
     text = " ".join(notice.text().split())
     assert text.startswith("Profil Complet : environ 42 min estimées")
-    assert "profil Standard dans les réglages" in text
+    assert "réglages" not in text  # the profile is the application's choice
     assert window.controller.analysis is not None
 
 
@@ -199,14 +198,14 @@ def test_counter_next_undecided_bulk_and_search(
     qtbot.waitUntil(lambda: review.current_cluster_id() != first, timeout=TIMEOUT)
     second = review.current_cluster_id()
     assert not c.is_decided(second)
-    assert "1 / 2 décidées" in review.counter.text()
+    assert "1 décision" in review.counter.text().replace("\u00a0", " ")
 
     view = review.model.view(second)
     assert view is not None
     review.confirm_all_of_type()
     assert recorder.confirms and view.entity_type.capitalize()[:4] in recorder.confirms[-1]
     assert c.decided_counts() == (2, 2)
-    assert "2 / 2 décidées" in review.counter.text()
+    assert "2 décisions" in review.counter.text().replace("\u00a0", " ")
     review.confirm_all_remaining()
     assert "déjà une décision" in review.banner.text()
     review.next_undecided()
@@ -263,46 +262,23 @@ def test_learning_whitelist_and_always_mask_with_undo(
     assert {"value": "Brest", "type": "LIEU"} not in Config.load(path).always_mask
 
 
-@pytest.mark.parametrize("policy", ["aucune", "incertaines"])
-def test_review_policy(
+def test_one_click_writes_without_stopping_for_review(
     qtbot: Any,
     window: MainWindow,
     batch: Path,
     tmp_path: Path,
     low_score: None,
-    policy: str,
 ) -> None:
     prepare(qtbot, window, batch, tmp_path / "sortie")
-    window.processing.set_review_policy(policy)
-    assert window.context.config.review_policy == policy
-    assert Config.load(window.context.config_path).review_policy == policy
     c = window.controller
-    if policy == "aucune":
-        with qtbot.waitSignal(c.result_ready, timeout=TIMEOUT):
-            window.processing.run_button.click()
-        assert c.result is not None
-        # Written directly; the uncertain entity is masked and flagged « À revoir ».
-        assert DocumentStatus.NEEDS_REVIEW in {r.status for r in c.result.results}
-    else:
-        with qtbot.waitSignal(c.review_required, timeout=TIMEOUT):
-            window.processing.run_button.click()
-        assert c.result is None
-        assert window.current_page() == "review"
-        assert "incertaine" in window.processing.banner.text()
-
-
-def test_systematic_review_even_without_uncertainty(
-    qtbot: Any, window: MainWindow, batch: Path, tmp_path: Path
-) -> None:
-    prepare(qtbot, window, batch, tmp_path / "sortie")
-    window.processing.set_review_policy("systematique")
-    assert Config.load(window.context.config_path).review_policy == "systematique"
-    with qtbot.waitSignal(window.controller.review_required, timeout=TIMEOUT):
+    with qtbot.waitSignal(c.result_ready, timeout=TIMEOUT):
         window.processing.run_button.click()
-    assert window.controller.pending_review_count() == 0
-    assert window.controller.result is None
-    assert window.current_page() == "review"
-    assert "systématique" in window.processing.banner.text()
+    assert c.result is not None
+    # The uncertain entity is masked and the files are anonymized: nothing to review.
+    assert {r.status for r in c.result.results} == {DocumentStatus.ANONYMIZED}
+    for r in c.result.results:
+        assert r.output_path is not None
+        assert "Orsini" not in r.output_path.read_text(encoding="utf-8")
 
 
 def test_primary_button_applies_decisions_and_reanalysis_asks_first(

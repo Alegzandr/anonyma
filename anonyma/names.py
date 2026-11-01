@@ -335,6 +335,15 @@ def text_forms(person: PersonName) -> list[str]:
     return list(dict.fromkeys(forms))
 
 
+_NAME_WORD = re.compile(r"[^\W\d_]{2,}")
+
+
+def has_proper_name(value: str) -> bool:
+    """A capitalized word that is not a common French word (« Isère », « Sophie »):
+    « Né(e) le » read by OCR on a badge holds none."""
+    return any(w[0].isupper() and not is_common_word(w) for w in _NAME_WORD.findall(value))
+
+
 def needs_capital(word: str) -> bool:
     """Single words that are also common words only match when capitalized."""
     return " " not in word.strip() and is_common_word(word)

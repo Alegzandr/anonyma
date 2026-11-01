@@ -14,6 +14,19 @@ from anonyma.model_manager import ModelManager
 
 log = get_logger("gui.context")
 
+
+def managed(config: Config) -> Config:
+    """``config`` with the choices the application makes itself: the profile the
+    hardware and installed models allow, automatic workers, OCR and models. Older
+    versions showed them as settings; a value saved then must not linger unseen."""
+    config.profile = None
+    config.workers = 0
+    config.ocr_enabled = True
+    config.gliner_model = ""
+    config.llm_model = ""
+    return config
+
+
 #: Config fields that do not influence detection (changing them needs no new analysis).
 NON_DETECTION_FIELDS = frozenset({"ui", "mode", "regime", "store_path", "workers", "check_updates"})
 
@@ -50,7 +63,7 @@ class AppContext(QObject):
 
     def _load(self) -> Config:
         try:
-            return Config.load(self.config_path)
+            return managed(Config.load(self.config_path))
         except Exception as exc:  # corrupt file: start with defaults, keep the file
             log.warning("config unreadable, defaults used: %s", type(exc).__name__)
             self.load_error = (

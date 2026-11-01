@@ -19,7 +19,11 @@ from anonyma.models import EntityType, ExpansionBudget, Profile, Regime, Replace
 from anonyma.textutils import normalize
 
 ORGANIZATION_POLICIES = ("toutes", "sauf_liste_blanche", "liste_noire")
-TAG_NUMBERINGS = ("sequentiel", "aleatoire")
+#: Model detections scored below this are discarded.
+MIN_SCORE = 0.25
+#: Entities scored below this are uncertain: masked all the same, shown as low
+#: confidence, and not searched through the batch as a lone common word.
+UNCERTAIN_SCORE = 0.6
 
 
 @dataclass(slots=True)
@@ -48,12 +52,6 @@ class Config:
     mode: ReplacementMode = ReplacementMode.TAG
     regime: Regime = Regime.ANONYMIZATION
 
-    #: ML detections scored below this are discarded.
-    min_score: float = 0.25
-    #: Masked entities scored below this are sent to review.
-    review_threshold: float = 0.6
-
-    paranoid: bool = False
     #: Values never masked (compared after normalisation).
     whitelist: list[str] = field(default_factory=list)
     #: Values always masked: ``{"value": ..., "type": ...}`` pairs.
@@ -71,7 +69,6 @@ class Config:
     workers: int = 0
 
     ocr_enabled: bool = True
-    use_libreoffice: bool = True
     libreoffice_path: str = ""
 
     #: Encrypted mapping store (pseudonymization regime).
@@ -82,17 +79,12 @@ class Config:
     ui: dict[str, Any] = field(default_factory=dict)
     #: Seconds allowed for one LibreOffice conversion (legacy doc/xls/ppt).
     libreoffice_timeout: float = 180.0
-    #: When the one-click flow stops for review: "aucune" (write directly),
-    #: "incertaines" (only when uncertain entities await review) or "systematique".
-    review_policy: str = "incertaines"
     #: Ask GitHub for a newer release at GUI startup (portable build only): the one
     #: automatic network access of the application, see ``anonyma/updater.py``.
     check_updates: bool = True
 
     # -- detection ---------------------------------------------------------------
-    #: Mask every complete date as DATE (dates of birth are always masked).
-    detect_dates: bool = True
-    #: GLiNER span threshold (lower = more recall, more review).
+    #: GLiNER span threshold (lower = more recall).
     gliner_threshold: float = 0.3
     #: Intra-op threads of one GLiNER instance (0 = CPU count / worker processes).
     gliner_threads: int = 0
@@ -100,18 +92,7 @@ class Config:
     #: indirect-identifier cues (much slower).
     llm_all_segments: bool = False
 
-    # -- hidden content, identifiers and names ------------------------------------
-    #: PDF: render every page and OCR it (vector text, stamps, flattened fields,
-    #: annotation appearances), deduplicated against the text layer.
-    ocr_full_pages: bool = True
-    #: Decode QR codes, Data Matrix and barcodes (zxing-cpp); the code is always
-    #: masked and its decoded content goes through detection.
-    decode_barcodes: bool = True
-    #: PDF: delete invisible text (render mode 3, white, off-page, size 0) instead
-    #: of only anonymizing it.
-    remove_invisible_text: bool = True
-    #: Mask high-entropy opaque identifiers (hex >= 16, base64, UUID, mixed tokens).
-    mask_opaque_ids: bool = True
+    # -- identifiers and names -----------------------------------------------------
     #: Opaque identifiers never masked (exact values or regexes prefixed ``re:``).
     opaque_id_whitelist: list[str] = field(default_factory=list)
     #: Organizations: "toutes" (mask all), "sauf_liste_blanche" (mask all except the
@@ -125,9 +106,6 @@ class Config:
     #: Output names ``document_0001.pdf``... (mapping kept in the encrypted store
     #: in pseudonymization) instead of anonymized original names.
     neutral_filenames: bool = False
-    #: Tag numbering: "sequentiel" ([PERSONNE_001], per batch and per type) or
-    #: "aleatoire" (short random ids, e.g. [PERSONNE_K7Q2]).
-    tag_numbering: str = "sequentiel"
 
     # -- derived helpers ---------------------------------------------------
 
@@ -185,14 +163,10 @@ class Config:
         return config
 
     def validate(self) -> None:
-        if not 0.0 <= self.min_score <= 1.0 or not 0.0 <= self.review_threshold <= 1.0:
-            raise ValueError("Les seuils doivent être compris entre 0 et 1.")
         if self.workers < 0:
             raise ValueError("Le nombre de processus ne peut pas être négatif.")
         if self.organization_policy not in ORGANIZATION_POLICIES:
             raise ValueError("Politique des organisations inconnue.")
-        if self.tag_numbering not in TAG_NUMBERINGS:
-            raise ValueError("Numérotation des balises inconnue.")
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:

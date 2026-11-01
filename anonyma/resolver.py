@@ -37,7 +37,7 @@ from functools import lru_cache
 
 from anonyma import checksums
 from anonyma.atomic import AtomicIndex
-from anonyma.config import Config
+from anonyma.config import UNCERTAIN_SCORE, Config
 from anonyma.data import first_name, is_common_word
 from anonyma.detectors._custom import NOT_LONE_GIVEN
 from anonyma.detectors.opaque import IdWhitelist
@@ -487,8 +487,8 @@ def resolve(
 
     _link_emails(clusters)
     for cluster in clusters.values():
-        cluster.needs_review = (
-            cluster.max_score < config.review_threshold and cluster.review is ReviewStatus.AUTO
+        cluster.uncertain = (
+            cluster.max_score < UNCERTAIN_SCORE and cluster.review is ReviewStatus.AUTO
         )
     return kept, clusters
 
@@ -773,7 +773,7 @@ def link_by_place(
                 target = next(iter(local))
                 break
             if len(local) > 1:
-                break  # ambiguous here: left to the detectors and the review
+                break  # ambiguous here: left to the detectors and the verification
         if target is None:
             continue
         moved.add(partial.id)
@@ -853,7 +853,7 @@ def searched_variant(cluster: EntityCluster, variant: str) -> bool:
         return True
     if normalize(variant) in _CALENDAR_WORDS:
         return False
-    if cluster.needs_review or not _reliable_cluster(cluster):
+    if cluster.uncertain or not _reliable_cluster(cluster):
         return False
     person = parse_person(cluster.canonical) if cluster.entity_type == EntityType.PERSON else None
     if person is not None and person.is_full:
@@ -949,7 +949,7 @@ def _person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
             person.surname
             and len(normalize(surname)) >= MIN_PROPAGATION_LENGTH
             and normalize(surname) not in _CALENDAR_WORDS
-            and not (cluster.needs_review and _lone_common(surname))
+            and not (cluster.uncertain and _lone_common(surname))
         ):
             yield surname, bool(needs_capital(surname))
 
@@ -982,6 +982,9 @@ def _distinctive_given(person: PersonName) -> Iterator[str]:
         yield given
 
 
+_TRAILING_DIGITS = re.compile(r"\d+$")
+
+
 def _email_person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
     """``jean.dupont@`` -> ``Jean Dupont``, ``Dupont Jean``, ``Dupont`` (unknown
     person): (form, needs capital).
@@ -989,12 +992,15 @@ def _email_person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
     A known given name tells the order. Otherwise two words that are neither common
     words nor generic parts (``zephyrin.quintavalle@``) are still a name when they
     are written as one, capitalized, in the text (« Zéphyrin Quintavalle
-    <zephyrin.quintavalle@…> »): the address is the evidence."""
+    <zephyrin.quintavalle@…> »): the address is the evidence.
+
+    A number glued to a part (``jean1.dupont@``, ``jean.dupont2@``: homonyms of a
+    school or company directory) is not part of the name."""
     local = cluster.canonical.strip("<> ").split("@")[0]
     if generic_local(local):
         return
     for sep in (".", "_", "-"):
-        parts = [p for p in local.split(sep) if p]
+        parts = [_TRAILING_DIGITS.sub("", p) for p in local.split(sep) if p]
         if len(parts) != 2:
             continue
         given, surname = parts

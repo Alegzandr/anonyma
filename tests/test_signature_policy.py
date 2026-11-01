@@ -99,13 +99,13 @@ def test_no_person_without_a_name(text: str) -> None:
         ("eulalie QUINTAVALLE\n14:22:05 UTC", "14:22:05 UTC"),
     ],
 )  # fmt: skip
-def test_signature_timestamps_masked_even_without_detect_dates(text: str, expected: str) -> None:
-    detector = RegexDetector(Config(detect_dates=False))
+def test_signature_timestamps_masked(text: str, expected: str) -> None:
+    detector = RegexDetector(Config())
     assert expected in found(detector, text, EntityType.DATE)
 
 
 def test_timestamp_cue_on_the_previous_ocr_line() -> None:
-    detector = RegexDetector(Config(detect_dates=False))
+    detector = RegexDetector(Config())
     lines = [
         seg("Signé électroniquement le", SegmentKind.OCR, "a"),
         seg("31/10/2026 14:22", SegmentKind.OCR, "b"),
@@ -114,14 +114,13 @@ def test_timestamp_cue_on_the_previous_ocr_line() -> None:
     assert values == ["31/10/2026 14:22"]
 
 
-def test_ordinary_dates_and_times_follow_detect_dates() -> None:
+def test_ordinary_dates_and_times_are_masked() -> None:
     text = "Le comité se réunira le 12 mars 2026 à 14 h 30 en salle Bleue."
-    assert found(RegexDetector(Config(detect_dates=False)), text, EntityType.DATE) == []
     assert found(RegexDetector(Config()), text, EntityType.DATE) == ["12 mars 2026 à 14 h 30"]
     # A time alone is never an ordinary date.
     assert found(RegexDetector(Config()), "Rendez-vous à 14:30 en salle.", EntityType.DATE) == []
     # Signature segments: every date is a signing time.
-    detector = RegexDetector(Config(detect_dates=False))
+    detector = RegexDetector(Config())
     assert found(detector, "2026-10-31 14:22:05", EntityType.DATE, kind=SegmentKind.SIGNATURE)
 
 
@@ -177,7 +176,6 @@ def test_opaque_detector_rules_and_whitelist() -> None:
         "3f2b8c1e-4d5a-4b6c-9e7f-0a1b2c3d4e5f",
         "3A 5F 9C 01 22 B4 7E 88 90 AB",
     ]
-    assert found(OpaqueIdDetector(Config(mask_opaque_ids=False)), text, EntityType.OPAQUE_ID) == []
     # Signature and barcode segments are read too.
     for kind in (SegmentKind.SIGNATURE, SegmentKind.BARCODE):
         assert found(OpaqueIdDetector(Config()), f"ref={HEX_REF}", EntityType.OPAQUE_ID, kind=kind)
@@ -364,14 +362,7 @@ def test_sequential_tags_follow_input_order_not_entity_order() -> None:
         assert tags == {CANARY_PERSON: "[PERSONNE_001]", "Eulalie Vermandois": "[PERSONNE_002]"}
 
 
-def test_random_tags_and_pseudonymization_never_count() -> None:
-    config = Config(tag_numbering="aleatoire")
-    kept, clusters = _clusters([CANARY_PERSON, "Eulalie Vermandois"], config)
-    table = Replacer(config).assign(clusters, kept)
-    tags = {table.substitute_for(e) for e in kept}
-    assert len(tags) == 2
-    assert all(re.fullmatch(r"\[PERSONNE_[A-HJ-KM-NP-Z2-9]{4}\]", t) for t in tags)
-    assert all(any(c.isdigit() for c in t) for t in tags)
+def test_pseudonymization_tags_never_count() -> None:
     # Pseudonymization: a known value keeps its tag, a new one never reveals the size.
     store = InMemoryMappingStore()
     pseudo = Config(regime=Regime.PSEUDONYMIZATION, mode=ReplacementMode.TAG)

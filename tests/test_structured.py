@@ -50,8 +50,9 @@ GUID = "34be8221-5b2a-4e8a-b93c-e8b15d765216"
 
 @pytest.fixture
 def config(canary_config: Config) -> Config:
-    """The consultant's run: identifiers kept (``--conserver-identifiants``)."""
-    return replace(canary_config, mask_opaque_ids=False)
+    """The consultant's run: GUIDs kept (``--identifiant-autorise``)."""
+    guid = r"re:^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"
+    return replace(canary_config, opaque_id_whitelist=[guid])
 
 
 def _png() -> bytes:

@@ -1,4 +1,4 @@
-"""« Revue » page: cluster-centric review queue and side-by-side view.
+"""« Aperçu » page: what is masked, entity by entity, with the side-by-side view.
 
 One row per entity (all its occurrences share one decision); rows expand to the
 occurrences, each with a context snippet. The right-hand side shows the selected
@@ -67,7 +67,6 @@ from anonyma.gui.preview import (
     clean_selection,
     entity_rows,
     known_types,
-    pending_review,
     preview_segments,
     substitute_spans,
 )
@@ -114,7 +113,6 @@ APPLY_LABEL = "Appliquer les décisions"
 
 class ReviewPage(QWidget):
     apply_requested = Signal()
-    pending_changed = Signal(int)
 
     def __init__(self, controller: BatchController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -138,10 +136,10 @@ class ReviewPage(QWidget):
         outer.setContentsMargins(24, 20, 24, 16)
         outer.setSpacing(10)
         head = QHBoxLayout()
-        title = page_header("Revue")
+        title = page_header("Aperçu")
         title.setToolTip(
-            "Une ligne par entité : une décision vaut pour toutes ses occurrences, dans tout "
-            "le lot. La relecture reste facultative."
+            "Ce qui est masqué, une ligne par entité. Rien n'est à faire ici ; une décision "
+            "vaut pour toutes les occurrences, dans tout le lot."
         )
         head.addWidget(title, 1)
         self.counter = QLabel("")
@@ -151,7 +149,8 @@ class ReviewPage(QWidget):
         self.next_undecided_button = KeyButton("Suivante non décidée", "Maj+N")
         self.next_undecided_button.setToolTip("Aller à la prochaine entité sans décision")
         self.next_undecided_button.clicked.connect(self.next_undecided)
-        head.addWidget(self.next_undecided_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        # Nothing awaits a decision: the shortcut stays, the button is not shown.
+        self.next_undecided_button.hide()
         self.apply_button = primary_button(APPLY_LABEL, "check")
         self.apply_button.setToolTip("Écrire les fichiers anonymisés (Ctrl+Entrée)")
         self.apply_button.clicked.connect(self.apply_requested.emit)
@@ -164,7 +163,7 @@ class ReviewPage(QWidget):
         outer.addWidget(self.stack, 1)
         self.empty = EmptyState(
             "Aucune analyse",
-            "Lancez une analyse depuis « Traitement » pour revoir les entités détectées.",
+            "Lancez une analyse depuis « Traitement » pour voir ce qui sera masqué.",
         )
         self.stack.addWidget(self.empty)
         content = QWidget()
@@ -531,8 +530,6 @@ class ReviewPage(QWidget):
         if analysis is None:
             return
         effective = c.effective()
-        pending = {cl.id for cl in pending_review(analysis, c.decisions)}
-        review_docs = {e.document_id for cid in pending for e in c.index.by_cluster.get(cid, [])}
         for item in self._iter_items():
             doc_id = str(item.data(0, Qt.ItemDataRole.UserRole))
             doc = self._docs.get(doc_id)
@@ -545,9 +542,7 @@ class ReviewPage(QWidget):
             )
             item.setText(1, str(count))
             result = c.result_for(doc_id)
-            if doc_id in review_docs and (result is None or c.decisions_since_apply()):
-                text, level = "À revoir", "warning"
-            elif result is not None:
+            if result is not None:
                 text, level = (
                     status_label(result.status),
                     STATUS_LEVELS.get(result.status, "neutral"),
@@ -1004,15 +999,13 @@ class ReviewPage(QWidget):
             if not rejected:
                 fill = QColor(accent)
                 fill.setAlphaF(0.22)
-            pen = QColor(t.warning) if r.state is RowState.REVIEW else accent
-            if rejected:
-                pen = QColor(t.muted)
+            pen = QColor(t.muted) if rejected else accent
             boxes.append(
                 Box(
                     rect,
                     pen,
                     fill,
-                    dashed=rejected or r.state is RowState.REVIEW,
+                    dashed=rejected,
                     key=r.key,
                     tooltip=row_tooltip(r),
                 )
@@ -1494,17 +1487,14 @@ class ReviewPage(QWidget):
     def _update_counter(self) -> None:
         c = self.controller
         t = theme.tokens()
-        pending = c.pending_review_count()
         if c.analysis is None:
             self.counter.setText("")
-        else:
-            decided, total = c.decided_counts()
-            colour = t.success if decided == total else t.warning if pending else t.muted
-            text = f"<b style='color:{colour}'>{decided} / {total} décidées</b>"
-            if pending:
-                text += f" · <span style='color:{t.warning}'>{pending} à revoir</span>"
-            self.counter.setText(text)
-        self.pending_changed.emit(pending)
+            return
+        decided, total = c.decided_counts()
+        text = f"<span style='color:{t.muted}'>{plural(total, 'entité')}</span>"
+        if decided:
+            text += f" · <span style='color:{t.muted}'>{plural(decided, 'décision')}</span>"
+        self.counter.setText(text)
 
     def _update_banner(self) -> None:
         c = self.controller

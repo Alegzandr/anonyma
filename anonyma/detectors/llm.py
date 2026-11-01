@@ -47,7 +47,7 @@ from anonyma.textutils import normalize
 log = get_logger("detectors.llm")
 
 SCORE = 0.75
-#: Below ``Config.review_threshold`` (0.6): masked and sent to review.
+#: Below ``UNCERTAIN_SCORE`` (0.6): masked, shown as low confidence.
 REVIEW_SCORE = 0.5
 #: Segments with fewer letters carry nothing the model can add to the rule-based
 #: detectors (dates, numbers, « Ok »), and only invite it to make something up.

@@ -46,7 +46,7 @@ from anonyma.models import (
     Segment,
     SegmentKind,
 )
-from anonyma.names import given_like, is_functional_name
+from anonyma.names import is_functional_name
 from anonyma.registry import register_detector
 from anonyma.textutils import normalize
 
@@ -78,44 +78,18 @@ _DISPLAY_NAME = regex.compile(
 _ANGLE = regex.compile(r"<[^<>\s]+>")
 #: A whole e-mail address (same shape as the ``email`` rule).
 _EMAIL_ONLY = regex.compile(r"[\w.%+\-']{1,64}@(?:[\w\-]+\.)+[A-Za-z]{2,24}")
-#: Keywords before a reference that names a business document or case, not a person:
-#: kept with ``--conserver-identifiants`` (``Config.mask_opaque_ids`` off) when the
-#: value is reference-shaped. Customer, member, patient, employee, insurance policy
-#: and identity document numbers stay masked: they designate someone.
+#: Keywords that may sit next to a kept reference (« Facture FAC-2026-639133 »).
 BUSINESS_REFERENCE_KEYWORDS = frozenset(
     {"facture", "commande", "devis", "ticket", "dossier", "affaire", "reference", "ref",
      "contrat", "sinistre", "rg"}
 )  # fmt: skip
-_REFERENCE_KEYWORD = regex.compile(
-    r"(?<![a-z0-9])(?P<kw>dossier|affaire|reference|ref|rg|ticket|contrat|police|sinistre"
-    r"|client|adherent|matricule|passeport|passport|cni|carte d'identite|permis"
-    r"|titre de sejour|facture|commande|devis|patient|ipp|nda)"
-    r"(?:[ \t_]+(?:de|du|n[°o]|numero|:|#)\.?)*[ \t_]*(?:n[°ºo]\.?|numero|:|#)?[ \t_]*$"
-)
-#: Letters first, then groups of letters and digits (``FAC-2026-166002``,
-#: ``CAS-11478-QRV7QP``, ``CTR-4297539``), in capitals.
-_REFERENCE_SHAPE = regex.compile(r"^(?P<prefix>[A-Z]{1,4})(?:[\-/_.]?[A-Z0-9]+)+$")
 #: The reference-shaped run around a span (``FAC-2026-743117`` in a file name).
 _REFERENCE_RUN = regex.compile(r"[A-Za-z0-9][A-Za-z0-9\-/.]*[A-Za-z0-9]")
 
 
-def business_reference(text: str, start: int, end: int) -> bool:
-    """``text[start:end]`` is an invoice, order, quote, ticket, case or contract
-    reference introduced by its keyword (« facture FAC-2026-166002 »)."""
-    value = text[start:end]
-    shape = _REFERENCE_SHAPE.match(value)
-    if shape is None or sum(c.isdigit() for c in value) < 4:
-        return False
-    if len(shape.group("prefix")) == 4 and given_like(shape.group("prefix")):
-        return False  # « PAUL-2026-0042 »: a name, not a document prefix
-    m = _REFERENCE_KEYWORD.search(normalize(text[max(0, start - 40) : start]))
-    return m is not None and m.group("kw") in BUSINESS_REFERENCE_KEYWORDS
-
-
 def kept_reference(config: Config, ids: IdWhitelist, text: str, start: int, end: int) -> bool:
-    """Whether a mention of any detector lies in a reference the user keeps: one
-    allowed by ``--identifiant-autorise``, or a business reference with
-    ``--conserver-identifiants`` (« Facture_FAC-2026-743117.pdf »). Besides the
+    """Whether a mention of any detector lies in a reference the user keeps, one
+    allowed by ``--identifiant-autorise`` (« Facture_FAC-2026-743117.pdf »). Besides the
     reference the mention may only hold its keyword (« Facture FAC-2026-639133 »): a
     name next to it is still masked."""
     covered = [False] * (end - start)
@@ -128,10 +102,7 @@ def kept_reference(config: Config, ids: IdWhitelist, text: str, start: int, end:
         if ext is not None:
             run_end = m.start() + ext.start()  # « FAC-2026-743117.pdf »
         value = text[m.start() : run_end]
-        kept = ids.allows(value) or (
-            not config.mask_opaque_ids and business_reference(text, m.start(), run_end)
-        )
-        if not kept:
+        if not ids.allows(value):
             continue
         found = True
         for k in range(max(start, m.start()), min(end, m.end())):
@@ -348,9 +319,6 @@ class RegexDetector(Detector):
             PlaceRecognizer(),
         ]
         self.dob_context = _context_regex(DOB_CONTEXT)
-        self.detect_dates = config.detect_dates
-        #: ``--conserver-identifiants``: business references stay readable.
-        self.keep_references = not config.mask_opaque_ids
         self.id_whitelist = IdWhitelist(config.opaque_id_whitelist or [])
 
     # -- per segment ---------------------------------------------------------
@@ -485,10 +453,7 @@ class RegexDetector(Detector):
             # context is an address: the ``email`` rule masks it, with the substitute
             # the same address gets everywhere else in the batch.
             return None
-        if rule.name == "numero_dossier_contexte" and (
-            self.id_whitelist.allows(text[start:end])
-            or (self.keep_references and business_reference(text, start, end))
-        ):
+        if rule.name == "numero_dossier_contexte" and (self.id_whitelist.allows(text[start:end])):
             return None
         if rule.name == "identifiant_chemin_windows" and " " in text[start:end].strip():
             # A profile folder with spaces is the display name of its owner.
@@ -619,7 +584,7 @@ class RegexDetector(Detector):
                 continue
             if signature or _signature_context(text, start, end, previous, persons):
                 out.append((entity_type, start, end, max(_score, 0.8), attrs))
-            elif self.detect_dates and not time_only:
+            elif not time_only:
                 out.append(item)
         return out
 
@@ -754,4 +719,4 @@ def _shadowed(
     )
 
 
-__all__ = ["DETECTOR_NAME", "RegexDetector", "business_reference", "kept_reference"]
+__all__ = ["DETECTOR_NAME", "RegexDetector", "kept_reference"]

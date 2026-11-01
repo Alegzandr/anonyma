@@ -16,6 +16,7 @@ import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 
+from anonyma.config import UNCERTAIN_SCORE
 from anonyma.frenchtext import plural
 from anonyma.gui.labels import detector_label
 from anonyma.models import (
@@ -38,7 +39,6 @@ MentionKey = tuple[str, str, int, int]
 
 class RowState(enum.StrEnum):
     AUTO = "auto"
-    REVIEW = "a_revoir"
     CONFIRMED = "valide"
     REJECTED = "rejete"
     MENTION_REJECTED = "occurrence_rejetee"
@@ -49,7 +49,6 @@ class RowState(enum.StrEnum):
 #: without a decision): the review list shows no badge for it.
 STATE_LABELS: dict[RowState, str] = {
     RowState.AUTO: "Détectée",
-    RowState.REVIEW: "À revoir",
     RowState.CONFIRMED: "Masquée",
     RowState.REJECTED: "Non masquée",
     RowState.MENTION_REJECTED: "Occurrence non masquée",
@@ -58,7 +57,6 @@ STATE_LABELS: dict[RowState, str] = {
 
 STATE_LEVELS: dict[RowState, str] = {
     RowState.AUTO: "info",
-    RowState.REVIEW: "warning",
     RowState.CONFIRMED: "success",
     RowState.REJECTED: "neutral",
     RowState.MENTION_REJECTED: "neutral",
@@ -122,8 +120,8 @@ class EntityRow:
     entity_type: str  # after retyping
     state: RowState
     cluster_id: str
-    #: Cluster flagged for review by the analysis and not decided yet.
-    needs_review: bool
+    #: Low-confidence cluster (masked all the same), not confirmed by the user.
+    uncertain: bool
     manual: bool = False
 
     @property
@@ -141,7 +139,7 @@ def cluster_state(cluster_id: str, analysis: BatchAnalysis, decisions: ReviewDec
         return RowState.MANUAL
     if cluster.review is ReviewStatus.MANUAL:
         return RowState.MANUAL
-    return RowState.REVIEW if cluster.needs_review else RowState.AUTO
+    return RowState.AUTO
 
 
 def entity_rows(
@@ -165,6 +163,7 @@ def entity_rows(
         cid = e.cluster_id or ""
         known.add(e.key)
         state = cluster_state(cid, analysis, decisions)
+        cluster = analysis.clusters.get(cid)
         if e.key in decisions.rejected_mentions and state is not RowState.REJECTED:
             state = RowState.MENTION_REJECTED
         rows.append(
@@ -173,7 +172,7 @@ def entity_rows(
                 entity_type=decisions.retyped_clusters.get(cid, e.entity_type),
                 state=state,
                 cluster_id=cid,
-                needs_review=state is RowState.REVIEW,
+                uncertain=state is RowState.AUTO and cluster is not None and cluster.uncertain,
             )
         )
     extra: Sequence[Entity] = []
@@ -192,18 +191,12 @@ def entity_rows(
                 entity_type=e.entity_type,
                 state=RowState.MANUAL,
                 cluster_id=e.cluster_id or "",
-                needs_review=False,
+                uncertain=False,
                 manual=True,
             )
         )
     rows.sort(key=lambda r: (r.entity.document_id, r.entity.segment_id, r.entity.start))
     return rows
-
-
-def pending_review(analysis: BatchAnalysis, decisions: ReviewDecisions) -> list[EntityCluster]:
-    """Clusters the analysis sent to review that the user has not decided yet."""
-    decided = decisions.confirmed_clusters | decisions.rejected_clusters
-    return [c for c in analysis.review_clusters() if c.id not in decided]
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +324,7 @@ def build_index(analysis: BatchAnalysis) -> ReviewIndex:
     index.order = sorted(
         (cid for cid in analysis.clusters if cid in index.by_cluster),
         key=lambda cid: (
-            not analysis.clusters[cid].needs_review,
+            not analysis.clusters[cid].uncertain,
             analysis.clusters[cid].max_score,
             normalize(analysis.clusters[cid].canonical),
         ),
@@ -358,28 +351,28 @@ def _num(value: float) -> str:
 HIGH_CONFIDENCE = 0.85
 
 
-def confidence_label(score: float, needs_review: bool) -> str:
+def confidence_label(score: float, uncertain: bool) -> str:
     """Plain-French reading of a detection score."""
-    if needs_review:
+    if uncertain:
         return "confiance faible"
     return "confiance élevée" if score >= HIGH_CONFIDENCE else "confiance moyenne"
 
 
-def flag_reason(cluster: EntityCluster, threshold: float, manual: bool = False) -> str:
-    """Why the entity is masked / sent to review (French, value-free): confidence and
-    which detectors found it, in words."""
+def flag_reason(cluster: EntityCluster, manual: bool = False) -> str:
+    """Why the entity is masked (French, value-free): confidence and which detectors
+    found it, in words."""
     if manual or cluster.review is ReviewStatus.MANUAL:
         return "ajout manuel"
     detectors = sorted(cluster.detectors - {"propagation"}) or sorted(cluster.detectors)
     who = ", ".join(detector_label(d) for d in detectors)
-    if detectors == ["listes_metier"] and not cluster.needs_review:
+    if detectors == ["listes_metier"] and not cluster.uncertain:
         return "liste métier ou valeur à toujours masquer"
-    return f"{confidence_label(cluster.max_score, cluster.needs_review)} · {who}"
+    return f"{confidence_label(cluster.max_score, cluster.uncertain)} · {who}"
 
 
-def score_detail(cluster: EntityCluster, threshold: float) -> str:
+def score_detail(cluster: EntityCluster) -> str:
     """Numbers behind ``flag_reason`` (tooltip)."""
-    return f"Score {_num(cluster.max_score)}, seuil de revue {_num(threshold)}"
+    return f"Score {_num(cluster.max_score)}, confiance faible sous {_num(UNCERTAIN_SCORE)}"
 
 
 def occurrences_label(occurrences: int, documents: int) -> str:

@@ -1,6 +1,6 @@
 """Batch orchestration: extract -> detect -> resolve/propagate -> replace -> write -> verify.
 
-Two-phase API so that the GUI can insert a review step:
+Two-phase API so that the GUI can show what will be masked before writing:
 
     pipeline = Pipeline(config)
     analysis = pipeline.analyze(paths)            # extraction + detection + resolution
@@ -14,6 +14,7 @@ propagation, substitute assignment) run in the calling process.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import math
 import multiprocessing
@@ -35,7 +36,7 @@ from typing import Any
 from anonyma import outputs as output_record
 from anonyma import paths, registry
 from anonyma.atomic import AtomicIndex
-from anonyma.config import Config
+from anonyma.config import MIN_SCORE, Config
 from anonyma.detectors.opaque import IdWhitelist
 from anonyma.detectors.regex_fr import kept_reference
 from anonyma.errors import failure_reason
@@ -75,10 +76,13 @@ from anonyma.models import (
     apply_replacements,
     new_id,
 )
+from anonyma.names import has_proper_name, needs_capital
 from anonyma.policy import apply_policies
+from anonyma.rawscan import EMBEDDED_TYPE
 from anonyma.replacer import BLACKOUT_CHAR, Replacer, SubstitutionTable, build_plan
 from anonyma.resolver import (
     DOCUMENT_LOCAL_TYPES,
+    NAME_TYPES,
     PROPAGATION_DETECTOR,
     TYPE_PRIORITY,
     cluster_forms,
@@ -90,7 +94,7 @@ from anonyma.resolver import (
 from anonyma.structure import PROPERTY as STRUCTURE
 from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import find_all, normalize, safe_filename, safe_suffix
-from anonyma.verifier import Verifier, is_ocr_issue, spaced_name
+from anonyma.verifier import FILENAME_TYPE, Verifier, is_ocr_issue, spaced_name
 from anonyma.writers.zip import write_zip
 
 log = get_logger("pipeline")
@@ -110,10 +114,10 @@ INCOMPLETE_CONTAINER_CODE = "container.incomplete"
 EMPTY_CONTAINER_CODE = "container.empty"
 #: Issue of a verified output in which residues were found (quarantined).
 RESIDUE_ISSUE = "verify.residue"
-#: Issue of a verified output holding uncertain entities, masked and to confirm.
-REVIEW_ISSUE = "review.uncertain"
-#: Zones (segment labels) named at most in a review issue, and their length.
-REVIEW_ZONES, REVIEW_ZONE_LENGTH = 3, 60
+#: Issue of an output rewritten by the corrective pass (informative).
+CORRECTED_ISSUE = "verify.corrected"
+#: Detector name of the values masked by the corrective pass.
+CORRECTION_DETECTOR = "verification"
 EMPTY_CONTAINER = (
     "Aucun élément de ce fichier n'a pu être anonymisé (illisible, chiffré ou non pris en "
     "charge) : fichier non produit."
@@ -187,8 +191,8 @@ class BatchAnalysis:
                 return doc
         raise KeyError(document_id)
 
-    def review_clusters(self) -> list[EntityCluster]:
-        return [c for c in self.clusters.values() if c.needs_review]
+    def uncertain_clusters(self) -> list[EntityCluster]:
+        return [c for c in self.clusters.values() if c.uncertain]
 
 
 @dataclass(slots=True)
@@ -635,10 +639,10 @@ def detect_tree(
     detectors = early + late
     hook = _item_progress
     atomic = AtomicIndex()
-    # References the user keeps (« --conserver-identifiants », « --identifiant-autorise »)
+    # References the user keeps (« --identifiant-autorise »)
     # stay whole whatever detector reads a name or a number inside them.
     ids = IdWhitelist(config.opaque_id_whitelist or [])
-    keeping = bool(ids) or not config.mask_opaque_ids
+    keeping = bool(ids)
     for doc in root.walk():
         view, texts = _detection_view(doc)
         first = len(entities)
@@ -668,7 +672,7 @@ def detect_tree(
                 text = texts.get(e.segment_id)
                 if text is None or not 0 <= e.start < e.end <= len(text):
                     continue
-                if e.score < config.min_score:
+                if e.score < MIN_SCORE:
                     continue
                 # No detector may cut a GUID, a hash or a token (:mod:`anonyma.atomic`).
                 span = atomic.fit_typed(text, e.start, e.end, e.entity_type)
@@ -1061,7 +1065,6 @@ class _WriteJob:
     table: SubstitutionTable
     sensitive: list[tuple[str, str]]
     allowed: list[str]
-    review_clusters: set[str]
     config: Config
     output_dir: Path
     work_dir: Path
@@ -1278,42 +1281,6 @@ def _write_crashed(job: _WriteJob) -> DocumentResult:
     )
 
 
-def review_issue(job: _WriteJob, review_ids: set[str | None], tree_ids: set[str]) -> Issue:
-    """Why a file is « À revoir »: how many uncertain entities, of which types, in which
-    zones (segment labels, as in the residue reports): never a value."""
-    from anonyma.gui.labels import entity_type_label
-
-    segments = {(d.id, s.id): s for d in job.document.walk() for s in d.segments}
-    types: dict[str, set[str | None]] = {}
-    zones: list[str] = []
-    for e in job.entities:
-        if e.document_id not in tree_ids or e.cluster_id not in review_ids:
-            continue
-        types.setdefault(e.entity_type, set()).add(e.cluster_id)
-        segment = segments.get((e.document_id, e.segment_id))
-        label = " ".join((segment.context.label if segment else "").split())[:REVIEW_ZONE_LENGTH]
-        if label and label not in zones:
-            zones.append(label)
-    count = len(review_ids)
-    kinds = ", ".join(
-        f"{entity_type_label(t)} ×{len(c)}" if len(c) > 1 else entity_type_label(t)
-        for t, c in sorted(types.items(), key=lambda item: (-len(item[1]), item[0]))
-    )
-    what = plural(count, "entité incertaine", "entités incertaines")
-    masked = "masquée" if count < 2 else "masquées"
-    where = ""
-    if zones:
-        shown = ", ".join(f"« {z} »" for z in zones[:REVIEW_ZONES])
-        more = f" et {len(zones) - REVIEW_ZONES} autre(s)" if len(zones) > REVIEW_ZONES else ""
-        where = f" ; zones : {shown}{more}"
-    return Issue(
-        Severity.WARNING,
-        REVIEW_ISSUE,
-        f"{what} ({kinds}) {masked} par précaution : à confirmer ou rejeter dans la revue "
-        f"avant diffusion{where}.",
-    )
-
-
 def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[DocumentStatus, Path]:
     """Verify ``written`` and fill ``result`` (counters, issues). Returns the status of
     the tree and the folder the output belongs in: the output folder, or the
@@ -1323,20 +1290,6 @@ def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[Docu
     result.residue_count = len(verification.certain_residues)
     result.possible_residue_count = len(verification.possible_residues)
     result.issues.extend(verification.issues)
-    tree_ids = {d.id for d in job.document.walk()}
-    review_ids = {
-        e.cluster_id for e in job.entities if e.document_id in tree_ids
-    } & job.review_clusters
-    result.review_count = len(review_ids)
-    review_types = {e.cluster_id: e.entity_type for e in job.entities if e.cluster_id in review_ids}
-    blackout = job.table.mode is ReplacementMode.BLACKOUT
-    result.review_items = sorted(
-        (review_types[c], "" if blackout else job.table.by_cluster.get(c, ""))
-        for c in review_ids
-        if c is not None
-    )
-    if review_ids:
-        result.issues.append(review_issue(job, review_ids, tree_ids))
     quarantine = quarantine_dir(job.output_dir)
     if not verification.clean:
         if verification.verified:
@@ -1388,7 +1341,7 @@ def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[Docu
             )
         )
         return DocumentStatus.NEEDS_REVIEW, quarantine
-    needs_review = result.review_count or result.possible_residue_count or gaps
+    needs_review = result.possible_residue_count or gaps
     status = DocumentStatus.NEEDS_REVIEW if needs_review else DocumentStatus.ANONYMIZED
     return status, job.output_dir
 
@@ -1467,8 +1420,9 @@ class LlmEstimate:
         """Worth a warning: even the repetition-adjusted figure exceeds the limit."""
         return self.minutes > LLM_WARNING_MINUTES
 
-    def warning(self, switch: str) -> str:
-        """The estimate in French, with ``switch`` (how to choose Standard here)."""
+    def warning(self, switch: str | None = None) -> str:
+        """The estimate in French, with ``switch`` (how to choose Standard here, when
+        the user can)."""
         noun = "passage" if self.calls < 2 else "passages"
         bound = ""
         if not self.exact and self.max_minutes > self.minutes * 1.25:
@@ -1476,11 +1430,13 @@ class LlmEstimate:
         sample = (
             "" if self.exact else f", d'après {self.sampled_files} fichiers sur {self.total_files}"
         )
-        return (
+        text = (
             f"profil Complet : environ {_duration(self.minutes)} estimées{bound} pour le "
-            f"modèle de langue local ({grouped(self.calls)}{NBSP}{noun} à analyser{sample}). "
-            f"Le profil Standard traite ce lot en quelques minutes : {switch}."
+            f"modèle de langue local ({grouped(self.calls)}{NBSP}{noun} à analyser{sample})."
         )
+        if switch:
+            text += f" Le profil Standard traite ce lot en quelques minutes : {switch}."
+        return text
 
     def line(self) -> str:
         """« Modèle de langue : 254 passages à analyser, environ 17 min »."""
@@ -1912,23 +1868,55 @@ class Pipeline:
         validate_output_dir([*analysis.inputs, *sources], output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        resolved = resolve_decisions(analysis, decisions)
+        replacer = Replacer(self.config, self.store)
+        plan = self._plan(analysis, decisions, output_dir, replacer)
+        results = self._write(plan, range(len(plan.jobs)), progress, cancel)
+        if not (cancel and cancel.cancelled):
+            corrections = correction_values(analysis, results)
+            if corrections:
+                results = self._correct(
+                    analysis, decisions, output_dir, replacer, plan, results, corrections, progress
+                )
+        # What this batch wrote, so that a later run can replace it (``--remplacer``).
+        output_record.record(output_dir, [r.output_path for r in results if r.output_path])
+        return BatchResult(
+            analysis.batch_id,
+            output_dir,
+            results,
+            analysis.started_at,
+            regime=self.config.regime,
+        )
+
+    def _plan(
+        self,
+        analysis: BatchAnalysis,
+        decisions: ReviewDecisions,
+        output_dir: Path,
+        replacer: Replacer,
+        corrections: Sequence[Correction] = (),
+        keep: SubstitutionTable | None = None,
+    ) -> _WritePlan:
+        """The write job of every top-level file, with ``decisions`` and ``corrections``
+        applied; ``keep``: substitutes already written (see :meth:`Replacer.assign`)."""
+        resolved = resolve_decisions(analysis, decisions, corrections)
         entities, active = resolved.entities, resolved.clusters
-        table = Replacer(self.config, self.store).assign(active, entities, analysis.documents)
+        table = replacer.assign(active, entities, analysis.documents, keep=keep)
         if self.store is not None and self.config.regime is Regime.PSEUDONYMIZATION:
             store_surfaces(self.store, entities, table)
         local = {cid for cid, c in active.items() if c.entity_type in DOCUMENT_LOCAL_TYPES}
+        # A value only the corrective pass found is a statistical guess: masked wherever
+        # it was found, never an original value whose forms make a certain residue.
+        guessed = {cid for cid, c in active.items() if c.detectors <= _CORRECTION_ONLY}
         batch_wide = sorted(
             {
                 (v, c.entity_type)
                 for cid, c in active.items()
-                if cid not in local
+                if cid not in local and cid not in guessed
                 for v in c.variants
                 if searched_variant(c, v)  # a word masked where found only: not a value
             }
         )
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)
-        review = {cid for cid, c in active.items() if c.needs_review}
         structure = frozenset(
             name
             for root in analysis.documents
@@ -1947,55 +1935,112 @@ class Pipeline:
         by_document: dict[str, list[tuple[int, Entity]]] = {}
         for rank, e in enumerate(entities):
             by_document.setdefault(e.document_id, []).append((rank, e))
-        jobs: list[tuple[Any, ...]] = []
+        jobs: list[_WriteJob] = []
         for doc in analysis.documents:
             ranked = [item for d in doc.walk() for item in by_document.get(d.id, ())]
             ranked.sort(key=lambda item: item[0])
             doc_entities = [e for _, e in ranked]
             # Document-local values (job titles) are only searched in their own file.
-            here = {e.cluster_id for e in doc_entities if e.cluster_id in local}
+            here = {e.cluster_id for e in doc_entities if e.cluster_id in local} - guessed
             sensitive = batch_wide + sorted(
                 {(v, active[cid].entity_type) for cid in here for v in active[cid].variants}
             )
             jobs.append(
-                (
-                    _WriteJob(
-                        document=doc,
-                        entities=doc_entities,
-                        table=table,
-                        sensitive=sensitive,
-                        allowed=allowed,
-                        review_clusters=review,
-                        config=self.config,
-                        output_dir=output_dir,
-                        work_dir=analysis.work_dir / f"w-{new_id()[:8]}",
-                        names=original_names(doc),
-                        structure=structure,
-                        output_names={d.id: names[d.id] for d in doc.walk() if d.id in names},
-                    ),
+                _WriteJob(
+                    document=doc,
+                    entities=doc_entities,
+                    table=table,
+                    sensitive=sensitive,
+                    allowed=allowed,
+                    config=self.config,
+                    output_dir=output_dir,
+                    work_dir=analysis.work_dir / f"w-{new_id()[:8]}",
+                    names=original_names(doc),
+                    structure=structure,
+                    output_names={d.id: names[d.id] for d in doc.walk() if d.id in names},
                 )
             )
-        sizes = [_size(job[0].document.source) for job in jobs]
+        return _WritePlan(jobs, table)
+
+    def _write(
+        self,
+        plan: _WritePlan,
+        indices: Sequence[int],
+        progress: ProgressCallback | None,
+        cancel: CancelToken | None,
+    ) -> list[DocumentResult]:
+        """Write and verify the jobs ``indices`` of ``plan``; progress events keep the
+        index of each document in the batch."""
+        order = list(indices)
+        jobs: list[tuple[Any, ...]] = [(plan.jobs[i],) for i in order]
+        forward = progress
+        if progress is not None and order != list(range(len(plan.jobs))):
+            report = progress
+
+            def forward_event(event: ProgressEvent) -> None:
+                index = None if event.index is None else order[event.index]
+                report(replace(event, index=index))
+
+            forward = forward_event
+        sizes = [_size(job.document.source) for (job,) in jobs]
         outputs = self._map(
-            _write_and_verify, jobs, "ecriture", progress, cancel, _write_crashed, sizes
+            _write_and_verify, jobs, "ecriture", forward, cancel, _write_crashed, sizes
         )
         results: list[DocumentResult] = []
-        for job, out in zip(jobs, outputs, strict=True):
-            doc = job[0].document
+        for (job,), out in zip(jobs, outputs, strict=True):
+            doc = job.document
             results.append(
                 out
                 if out is not None
                 else DocumentResult(doc.id, "", doc.format, doc.format, DocumentStatus.CANCELLED)
             )
-        # What this batch wrote, so that a later run can replace it (``--remplacer``).
-        output_record.record(output_dir, [r.output_path for r in results if r.output_path])
-        return BatchResult(
-            analysis.batch_id,
-            output_dir,
-            results,
-            analysis.started_at,
-            regime=self.config.regime,
-        )
+        return results
+
+    def _correct(
+        self,
+        analysis: BatchAnalysis,
+        decisions: ReviewDecisions,
+        output_dir: Path,
+        replacer: Replacer,
+        plan: _WritePlan,
+        results: list[DocumentResult],
+        corrections: Sequence[Correction],
+        progress: ProgressCallback | None,
+    ) -> list[DocumentResult]:
+        """Corrective pass: mask what the verification still found, rewrite the files
+        whose replacements change and keep the others as written. Substitutes already
+        written stay the same, so the batch remains consistent."""
+        second = self._plan(analysis, decisions, output_dir, replacer, corrections, plan.table)
+        changed = [
+            i
+            for i, (before, after) in enumerate(zip(plan.jobs, second.jobs, strict=True))
+            if results[i].status is not DocumentStatus.CANCELLED
+            and _signature(before) != _signature(after)
+        ]
+        if not changed:
+            return results
+        if progress:
+            count = plural(len(changed), "fichier complété", "fichiers complétés")
+            note = f"{count} après vérification : nouvelle écriture."
+            progress(ProgressEvent("ecriture", 0, len(changed), note=note))
+        for i in changed:
+            _discard(results[i], output_dir)
+        merged = list(results)
+        rewritten = self._write(second, changed, progress, None)
+        for i, result in zip(changed, rewritten, strict=True):
+            added = len(_spans(second.jobs[i]) - _spans(plan.jobs[i]))
+            result.corrected_count = added
+            if added and result.output_path is not None:
+                what = plural(
+                    added,
+                    "occurrence supplémentaire masquée",
+                    "occurrences supplémentaires masquées",
+                )
+                result.issues.append(
+                    Issue(Severity.INFO, CORRECTED_ISSUE, f"{what} après vérification.")
+                )
+            merged[i] = result
+        return merged
 
     def run(
         self,
@@ -2017,6 +2062,132 @@ class Pipeline:
         # rest, since nobody claims the folder any more.
         if not paths.remove_tree(analysis.work_dir):
             log.warning("batch temporary folder not fully removed; removed at next start")
+
+
+@dataclass(slots=True)
+class _WritePlan:
+    jobs: list[_WriteJob]
+    table: SubstitutionTable
+
+
+@dataclass(frozen=True, slots=True)
+class Correction:
+    """A value the verification found in an output, masked by the corrective pass:
+    in the whole batch, or only in the tree of ``scope`` (document-local types)."""
+
+    value: str = field(repr=False)
+    entity_type: str
+    #: Top-level document whose tree alone is searched; None: the whole batch.
+    scope: str | None = None
+
+
+#: Score of the values masked by the corrective pass (statistical hits, mostly).
+CORRECTION_SCORE = 0.5
+
+
+def correction_values(
+    analysis: BatchAnalysis, results: Sequence[DocumentResult]
+) -> list[Correction]:
+    """What the verification of ``results`` found that a new detection can mask: every
+    residue of a value type, custom ones included (original file names and embedded files are not
+    values of a text), as its parts outside substitutes. A person, organization or
+    place must hold a proper-name word: « Né(e) le » read by OCR on a badge is no name."""
+    found: dict[tuple[str, str, str | None], Correction] = {}
+    for doc, result in zip(analysis.documents, results, strict=True):
+        if result.verification is None:
+            continue
+        for residue in result.verification.residues:
+            if residue.entity_type in _NOT_VALUES:
+                continue
+            scope = doc.id if residue.entity_type in DOCUMENT_LOCAL_TYPES else None
+            for part in residue.fragments or (residue.value,):
+                value = part.strip()
+                if len(normalize(value)) < MIN_CORRECTION_LENGTH:
+                    continue
+                if residue.entity_type in NAME_TYPES and not has_proper_name(value):
+                    continue
+                key = (normalize(value), residue.entity_type, scope)
+                found.setdefault(key, Correction(value, residue.entity_type, scope))
+    return list(found.values())
+
+
+#: Residue types that are no value of a text: original file names (the names are
+#: rebuilt from the entities) and unverified embedded files.
+_NOT_VALUES = frozenset({FILENAME_TYPE, EMBEDDED_TYPE})
+#: Corrections shorter than this (normalized) are not searched.
+MIN_CORRECTION_LENGTH = 3
+
+#: Detectors of the clusters made by the corrective pass alone.
+_CORRECTION_ONLY = frozenset({CORRECTION_DETECTOR, PROPAGATION_DETECTOR})
+
+
+def correction_entities(analysis: BatchAnalysis, corrections: Sequence[Correction]) -> list[Entity]:
+    """Every occurrence of the corrected values: in the batch, or in their scope. A
+    value read as a proper name (capitalized, or a common word) is only found
+    capitalized, so that « Rose » never masks « rose »."""
+    found: list[Entity] = []
+    for correction in corrections:
+        capital = needs_capital(correction.value)
+        for root in [d for d in analysis.documents if correction.scope in (None, d.id)]:
+            for doc in root.walk():
+                segments = (
+                    doc.segments
+                    if doc.status is DocumentStatus.EXTRACTED
+                    else [s for s in doc.segments if s.id == FILENAME_SEGMENT_ID]
+                )
+                for seg in segments:
+                    for start, end in find_all(seg.text, correction.value):
+                        if capital and not seg.text[start:end][:1].isupper():
+                            continue
+                        found.append(
+                            Entity(
+                                entity_type=correction.entity_type,
+                                value=seg.text[start:end],
+                                document_id=doc.id,
+                                segment_id=seg.id,
+                                start=start,
+                                end=end,
+                                score=CORRECTION_SCORE,
+                                detector=CORRECTION_DETECTOR,
+                            )
+                        )
+    return found
+
+
+def _spans(job: _WriteJob) -> set[tuple[str, str, int, int]]:
+    return {(e.document_id, e.segment_id, e.start, e.end) for e in job.entities}
+
+
+def _signature(job: _WriteJob) -> tuple[object, ...]:
+    """What a job writes: each replaced span with its substitute, and the names."""
+    replaced = sorted(
+        (e.document_id, e.segment_id, e.start, e.end, job.table.substitute_for(e))
+        for e in job.entities
+        if e.cluster_id is not None
+    )
+    return (tuple(replaced), tuple(sorted(job.output_names.items())))
+
+
+def _discard(result: DocumentResult, output_dir: Path) -> None:
+    """Remove what ``result`` placed (output or quarantine) before it is rewritten,
+    and the folders this leaves empty."""
+    path = result.output_path
+    if path is None:
+        return
+    _remove_output(path)
+    stops = {Path(output_dir), quarantine_dir(output_dir)}
+    parent = path.parent
+    while parent not in stops and parent != parent.parent:
+        try:
+            parent.rmdir()  # only when empty
+        except OSError:
+            break
+        parent = parent.parent
+    quarantine = quarantine_dir(output_dir)
+    with contextlib.suppress(OSError):
+        if quarantine.is_dir() and not any(quarantine.iterdir()):
+            quarantine.rmdir()
+    result.output_path = None
 
 
 def display_names(analysis: BatchAnalysis, separator: str = " › ") -> dict[str, str]:
@@ -2056,8 +2227,13 @@ def display_names(analysis: BatchAnalysis, separator: str = " › ") -> dict[str
     return paths
 
 
-def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> ResolvedDecisions:
-    """Apply review decisions to an analysis without touching it.
+def resolve_decisions(
+    analysis: BatchAnalysis,
+    decisions: ReviewDecisions,
+    corrections: Sequence[Correction] = (),
+) -> ResolvedDecisions:
+    """Apply review decisions to an analysis without touching it, and the values the
+    corrective pass masks (``corrections``).
 
     Pure (no store, no I/O): the GUI uses it for previews, ``apply`` for output.
     """
@@ -2084,15 +2260,16 @@ def resolve_decisions(analysis: BatchAnalysis, decisions: ReviewDecisions) -> Re
         for e in analysis.entities
         if e.cluster_id not in rejected
     ]
-    if decisions.manual:
+    if decisions.manual or corrections:
         manual = manual_entities(analysis, decisions)
+        manual += correction_entities(analysis, corrections)
         entities, clusters = resolve([*entities, *manual], config, clusters)
         extra = propagate(analysis.documents, clusters, entities, config)
         extra += propagate_names(analysis.documents, clusters, [*entities, *extra])
         entities, clusters = resolve([*entities, *extra], config, clusters)
     for cid in decisions.confirmed_clusters:
         if cid in clusters:
-            clusters[cid].needs_review = False
+            clusters[cid].uncertain = False
 
     active = {cid: c for cid, c in clusters.items() if cid not in rejected}
     # Filter single-mention rejections last so propagation cannot bring them back.
