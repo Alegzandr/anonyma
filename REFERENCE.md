@@ -84,23 +84,24 @@ passe en local : aucune donnée ne quitte le poste.
   positif, ou de toujours masquer un ajout (modification annulable). Raccourcis, affichés
   sur les boutons : N / P naviguer, Maj+N suivante non décidée, V masquer, R ne pas
   masquer, O ne pas masquer l'occurrence, T changer le type, U retirer la décision,
-  A ajouter, Ctrl+Entrée appliquer les décisions. Partout : Ctrl+1 à Ctrl+5 changent de
-  page (Traitement, Aperçu, Rapport, Modèles, Réglages), Ctrl+O ajoute des fichiers.
+  A ajouter, Ctrl+Entrée appliquer les décisions. Partout : Ctrl+1 à Ctrl+4 changent de
+  page (Traitement, Aperçu, Rapport, Réglages), Ctrl+O ajoute des fichiers.
 - **Rapport** : verdict du lot, exportable en JSON, Markdown ou HTML. Les fichiers en
   quarantaine (dossier `<sortie>_quarantaine`, à côté du dossier de sortie) sont expliqués et ne doivent pas être diffusés. Chaque
   résidu s'ouvre à son emplacement dans le fichier produit, un double-clic sur un fichier
   ouvre son aperçu, et « Corriger et réappliquer » ramène à l'aperçu puis remplace les
   fichiers produits précédemment.
-- **Modèles** : état de l'installation automatique des modèles de ce poste, et matériel
-  détecté. Anonyma choisit seul le profil de détection (selon le matériel et les modèles
-  installés), les modèles, l'OCR, le nombre de processus et LibreOffice. Sans
-  connexions automatiques (Réglages), « Installer maintenant » ; sans réseau,
-  « Importer depuis un dossier… » (le dossier `models` d'un autre poste, par exemple).
 - **Réglages** : seulement ce qui dépend de vos besoins, enregistré dans
   `data/config.json`, en onglets : Remplacement (mode, régime, noms neutres, table de
   correspondance), Listes (valeurs à ne jamais masquer, valeurs à toujours masquer, listes
   métier), Organisations, Avancé (libellés GLiNER, numéros de dossier internes) et
-  Application (thème, mises à jour, proxy). Anonyma s'y souvient aussi du dernier dossier de
+  Application (thème, mises à jour, proxy). Ce dernier onglet montre aussi, sans rien
+  à choisir, la section « Modèles d'IA » : le profil de détection retenu et le matériel
+  sur lequel il se fonde, puis l'état de l'installation automatique des modèles de ce
+  poste. Anonyma choisit seul le profil (selon le matériel et les modèles installés),
+  les modèles, l'OCR, le nombre de processus et LibreOffice. Mises à jour au démarrage
+  décochées, « Installer maintenant » ; sans réseau, « Importer depuis un dossier… » (le
+  dossier `models` d'un autre poste, par exemple). Anonyma s'y souvient aussi du dernier dossier de
   sortie et du dernier dossier parcouru par chaque sélecteur.
 - **Mises à jour** : au démarrage, la version portable demande à GitHub si une version
   plus récente est publiée et la propose. Si vous acceptez, elle télécharge l'archive de
@@ -414,7 +415,7 @@ interrompu (coupure, Ctrl+C) reprend là où il s'était arrêté. Il passe par 
 du système ou celui des réglages (voir **Proxy**, plus haut).
 
 **Machine sans accès à Internet.** Le plus simple : copiez le dossier `models` d'un
-poste où Anonyma les a installés, puis « Importer depuis un dossier… » (page Modèles)
+poste où Anonyma les a installés, puis « Importer depuis un dossier… » (Réglages, onglet Application)
 ou `anonyma-cli modeles installer <dossier>`. Sinon, téléchargez les fichiers du dépôt
 Hugging Face sur une autre machine (à la révision indiquée par `modeles liste`),
 copiez-les puis :

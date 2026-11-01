@@ -1,4 +1,4 @@
-"""Main window: side navigation and the five pages."""
+"""Main window: side navigation and the four pages."""
 
 from __future__ import annotations
 
@@ -24,7 +24,6 @@ from anonyma.frenchtext import typo
 from anonyma.gui import dialogs, icons, theme
 from anonyma.gui.context import AppContext
 from anonyma.gui.controller import BatchController, Phase
-from anonyma.gui.pages.models import ModelsPage
 from anonyma.gui.pages.processing import ProcessingPage
 from anonyma.gui.pages.report import ReportPage
 from anonyma.gui.pages.review import ReviewPage
@@ -42,10 +41,9 @@ PAGES = (
     ("processing", "Traitement", "process"),
     ("review", "Aperçu", "review"),
     ("report", "Rapport", "report"),
-    ("models", "Modèles", "models"),
     ("settings", "Réglages", "settings"),
 )
-_GAP_BEFORE = "models"
+_GAP_BEFORE = "settings"
 _GAP = 16
 _GAP_ROLE = Qt.ItemDataRole.UserRole + 1
 
@@ -117,14 +115,12 @@ class MainWindow(QMainWindow):
 
         self.processing = ProcessingPage(self.controller)
         self.review = ReviewPage(self.controller)
-        self.models = ModelsPage(self.context)
         self.settings = SettingsPage(self.context)
         self.report = ReportPage(self.controller)
         self.pages: dict[str, QWidget] = {
             "processing": self.processing,
             "review": self.review,
             "report": self.report,
-            "models": self.models,
             "settings": self.settings,
         }
         for number, (key, label, _icon) in enumerate(PAGES, start=1):
@@ -301,10 +297,10 @@ class MainWindow(QMainWindow):
         ):
             event.ignore()
             return
-        self.models.cancel_download()
+        self.settings.models.cancel_download()
         self.updates.shutdown()
         self.controller.shutdown()
-        self.models.runner.wait_all(10_000)
+        self.settings.models.runner.wait_all(10_000)
         try:
             self._save_geometry()
         except Exception as exc:

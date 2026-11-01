@@ -1,10 +1,11 @@
-"""« Modèles » page: what the application installed for this machine, and how far it got.
+"""« Modèles d'IA » section of the « Réglages » page: what the application installed for
+this machine, and how far it got.
 
 Nothing to choose here: ``model_setup`` decides which models this computer needs from
 its hardware, downloads them at startup (when automatic connections are allowed),
 replaces those an update of Anonyma made obsolete and removes the ones no longer
-used. The page shows that state; its only actions are retrying, installing on demand
-when automatic connections are off, and an offline import from a folder.
+used. The section shows that state; its only actions are retrying, installing on
+demand when automatic connections are off, and an offline import from a folder.
 """
 
 from __future__ import annotations
@@ -17,8 +18,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -30,7 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from anonyma import hardware, model_setup
-from anonyma.frenchtext import typo
+from anonyma.frenchtext import plural, typo
 from anonyma.gui import dialogs
 from anonyma.gui.context import AppContext
 from anonyma.gui.labels import PROFILE_SHORT, format_bytes
@@ -42,18 +41,18 @@ from anonyma.gui.widgets import (
     button,
     left_header,
     muted,
-    page_header,
     primary_button,
+    section_title,
 )
 from anonyma.model_catalog import ModelKind, ModelSpec
 from anonyma.models import Profile
 
-KIND_LABELS = {
+MODEL_KIND_LABELS = {
     ModelKind.GLINER: "Reconnaissance des noms",
     ModelKind.LLM: "Modèle de langue",
     ModelKind.OCR: "Lecture des images",
 }
-COLUMNS = ("Modèle", "Rôle", "Taille", "État")
+COLUMNS = ("Modèle", "Rôle", "État")
 
 #: ONNX Runtime execution providers -> French label.
 PROVIDER_LABELS = {
@@ -69,15 +68,27 @@ PROVIDER_LABELS = {
 
 def providers_label(providers: tuple[str, ...] | list[str]) -> str:
     labels = [PROVIDER_LABELS.get(p, p.replace("ExecutionProvider", "")) for p in providers]
-    text = ", ".join(labels) or "processeur"
-    return text[0].upper() + text[1:]
+    return ", ".join(labels) or "processeur"
+
+
+def machine_label(info: hardware.HardwareInfo) -> str:
+    """One French sentence on what the choice of models is based on."""
+    parts = [f"{format_bytes(info.ram_bytes)} de mémoire vive"] if info.ram_bytes else []
+    parts.append(plural(info.cpu_count, "processeur"))
+    if info.gpu_name:
+        gpu = f"carte graphique {info.gpu_name}"
+        if info.vram_bytes:
+            gpu += f" ({format_bytes(info.vram_bytes)})"
+        parts.append(gpu)
+    parts.append(f"calcul sur {providers_label(info.providers)}")
+    return "Choisie selon ce poste : " + ", ".join(parts) + "."
 
 
 def spec_size(spec: ModelSpec) -> int:
     return sum(f.size for f in spec.files)
 
 
-class ModelsPage(QWidget):
+class ModelsSection(QWidget):
     #: Emitted when the installed models changed (the next batch detects more).
     models_changed = Signal()
 
@@ -97,25 +108,30 @@ class ModelsPage(QWidget):
         self._last_errors: list[str] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
-        layout.addWidget(page_header("Modèles"))
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(section_title("Modèles d'IA"))
         self.banner = Banner()
         layout.addWidget(self.banner)
+        self.profile_label = QLabel("Détection : …")
+        self.profile_label.setObjectName("DetectionProfile")
+        layout.addWidget(self.profile_label)
+        self.machine = muted("")
+        self.machine.setObjectName("MachineInfo")
+        layout.addWidget(self.machine)
 
-        state_box = QGroupBox("Installation")
-        state_layout = QVBoxLayout(state_box)
         self.headline = QLabel("Vérification des modèles…")
         self.headline.setObjectName("ModelsHeadline")
         self.headline.setWordWrap(True)
-        state_layout.addWidget(self.headline)
+        layout.addSpacing(6)
+        layout.addWidget(self.headline)
         self.detail = muted("")
-        state_layout.addWidget(self.detail)
+        layout.addWidget(self.detail)
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
         self.progress.setTextVisible(False)
         self.progress.hide()
-        state_layout.addWidget(self.progress)
+        layout.addWidget(self.progress)
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
         self.install_button = primary_button("Installer maintenant", "download")
@@ -130,13 +146,10 @@ class ModelsPage(QWidget):
         self.import_button.clicked.connect(self.import_folder)
         actions.addWidget(self.install_button)
         actions.addWidget(self.cancel_button)
-        actions.addStretch(1)
         actions.addWidget(self.import_button)
-        state_layout.addLayout(actions)
-        layout.addWidget(state_box)
+        actions.addStretch(1)
+        layout.addLayout(actions)
 
-        list_box = QGroupBox("Modèles de ce poste")
-        list_layout = QVBoxLayout(list_box)
         self.table = QTableWidget(0, len(COLUMNS))
         self.table.setObjectName("ModelTable")
         self.table.setHorizontalHeaderLabels(list(COLUMNS))
@@ -146,39 +159,24 @@ class ModelsPage(QWidget):
         self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(True)
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left_header(self.table)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((1, 200), (2, 90), (3, 190)):
+        for col, width in ((1, 200), (2, 190)):
             self.table.setColumnWidth(col, width)
-        self.table.setItemDelegateForColumn(3, BadgeDelegate(self.table))
-        list_layout.addWidget(self.table, 1)
-        list_layout.addWidget(
+        self.table.setItemDelegateForColumn(2, BadgeDelegate(self.table))
+        self.table.hide()
+        layout.addWidget(self.table)
+        layout.addWidget(
             muted(
-                "Anonyma choisit les modèles selon la mémoire et le processeur de ce poste, "
-                "les télécharge au démarrage depuis Hugging Face (licence et intégrité "
-                "vérifiées), remplace ceux qu'une mise à jour rend périmés et supprime "
-                "ceux qui ne servent plus. Les documents, eux, ne quittent jamais le poste."
+                "Anonyma les télécharge au démarrage depuis Hugging Face (licence et "
+                "intégrité vérifiées), remplace ceux qu'une mise à jour rend périmés et "
+                "supprime ceux qui ne servent plus. Les documents, eux, ne quittent jamais "
+                "le poste."
             )
         )
-        layout.addWidget(list_box)
-
-        hw_box = QGroupBox("Ce poste")
-        self.hw_form = QFormLayout(hw_box)
-        self.hw_labels: dict[str, QLabel] = {}
-        for key, label in (
-            ("ram", "Mémoire vive"),
-            ("cpu", "Processeurs"),
-            ("gpu", "Carte graphique"),
-            ("providers", "Accélération"),
-            ("profile", "Détection"),
-        ):
-            value = QLabel("…")
-            value.setWordWrap(True)
-            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            self.hw_labels[key] = value
-            self.hw_form.addRow(label, value)
-        layout.addWidget(hw_box)
-        layout.addStretch(1)
+        # Turning automatic connections on or off changes what the section says.
+        context.config_changed.connect(self._update_actions)
         self._update_actions()
 
     # -- lifecycle -------------------------------------------------------------------
@@ -232,32 +230,23 @@ class ModelsPage(QWidget):
     def _show(self, value: object) -> None:
         assert isinstance(value, tuple)
         self.info, self.setup, self.profile = value
-        self._show_hardware()
+        self._show_machine()
         self._show_models()
         self._update_actions()
 
-    def _show_hardware(self) -> None:
-        info = self.info
-        if info is None:
-            return
-        self.hw_labels["ram"].setText(
-            format_bytes(info.ram_bytes) if info.ram_bytes else "Inconnue"
-        )
-        self.hw_labels["cpu"].setText(str(info.cpu_count))
-        gpu = info.gpu_name or "Aucune détectée"
-        if info.vram_bytes:
-            gpu += f" ({format_bytes(info.vram_bytes)})"
-        self.hw_labels["gpu"].setText(gpu)
-        self.hw_labels["providers"].setText(providers_label(info.providers))
+    def _show_machine(self) -> None:
         if self.profile is not None:
-            self.hw_labels["profile"].setText(PROFILE_SHORT.get(self.profile, str(self.profile)))
+            profile = PROFILE_SHORT.get(self.profile, str(self.profile))
+            self.profile_label.setText(typo(f"Détection : {profile}"))
+        if self.info is not None:
+            self.machine.setText(typo(machine_label(self.info)))
 
     def _show_models(self) -> None:
         setup = self.setup
         if setup is None:
             return
         todo = {spec.id for spec in setup.install}
-        rows: list[tuple[str, str, str, str, str]] = []
+        rows: list[tuple[str, str, str, str]] = []
         for spec in setup.wanted:
             text, level = self._states.get(spec.id) or (
                 ("À installer", "warning") if spec.id in todo else ("Installé", "success")
@@ -265,25 +254,25 @@ class ModelsPage(QWidget):
             rows.append(
                 (
                     spec.title or spec.id,
-                    KIND_LABELS.get(spec.kind, str(spec.kind)),
-                    format_bytes(spec_size(spec)),
+                    MODEL_KIND_LABELS.get(spec.kind, str(spec.kind)),
                     text,
                     level,
                 )
             )
         for name in setup.obsolete:
-            rows.append((name, "Ne sert plus", "—", "Sera supprimé", "neutral"))
+            rows.append((name, "Ne sert plus", "Sera supprimé", "neutral"))
         self.table.setRowCount(len(rows))
         for row, cells in enumerate(rows):
-            for col, cell in enumerate(cells[:4]):
+            for col, cell in enumerate(cells[:3]):
                 item = QTableWidgetItem(cell)
-                if col == 3 and cells[4]:
-                    item.setData(BADGE_ROLE, cells[4])
+                if col == 2 and cells[3]:
+                    item.setData(BADGE_ROLE, cells[3])
                 self.table.setItem(row, col, item)
         self.table.resizeRowsToContents()
         height = self.table.horizontalHeader().height() + 2 * self.table.frameWidth()
         height += sum(self.table.rowHeight(r) for r in range(self.table.rowCount()))
         self.table.setFixedHeight(height)
+        self.table.setVisible(bool(rows))
 
     def _update_actions(self) -> None:
         setup = self.setup
@@ -310,9 +299,9 @@ class ModelsPage(QWidget):
             elif not self.context.config.check_updates:
                 self.detail.setText(
                     typo(
-                        "Les connexions automatiques sont désactivées dans les Réglages : "
-                        "installez-les maintenant, ou importez-les depuis un dossier sans "
-                        "réseau. En attendant, la détection fonctionne avec ce qui est installé."
+                        "Les mises à jour au démarrage sont désactivées : installez-les "
+                        "maintenant, ou importez-les depuis un dossier sans réseau. En "
+                        "attendant, la détection fonctionne avec ce qui est installé."
                     )
                 )
             else:
@@ -363,7 +352,7 @@ class ModelsPage(QWidget):
             _kind, self.info, self.setup, self.profile = payload
             setup = self.setup
             assert isinstance(setup, model_setup.SetupPlan)
-            self._show_hardware()
+            self._show_machine()
             if setup.install and self._task is not None:
                 self.headline.setText(typo("Installation des modèles de ce poste…"))
                 self.detail.setText(

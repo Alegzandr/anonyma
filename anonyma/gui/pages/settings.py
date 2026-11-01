@@ -1,7 +1,8 @@
 """« Réglages » page: the choices only the user can make (replacement, lists,
 organizations, internal patterns, appearance), saved to ``data/config.json``. Everything
 else (profile, models, OCR, workers, LibreOffice, thresholds) is decided by the
-application."""
+application; the « Application » tab only shows the models it installed for this
+machine (``ModelsSection``)."""
 
 from __future__ import annotations
 
@@ -45,6 +46,7 @@ from anonyma.gui.labels import (
     REGIME_GLOSSES,
     REGIME_LABELS,
 )
+from anonyma.gui.models_section import ModelsSection
 from anonyma.gui.widgets import (
     Banner,
     button,
@@ -327,7 +329,7 @@ class SettingsPage(QWidget):
         av.addStretch(1)
 
         # Application ------------------------------------------------------------------------
-        f, _box = self._tab("Application")
+        f, app_body = self._tab("Application")
         self.theme = QComboBox()
         for key, label in theme.THEMES.items():
             self.theme.addItem(label, key)
@@ -358,6 +360,12 @@ class SettingsPage(QWidget):
             "À remplir seulement si les mises à jour ou les téléchargements échouent sur "
             "un poste d'entreprise.",
         )
+        # What the application installed for this machine (decided, not a setting).
+        self.models = ModelsSection(context)
+        column = app_body.layout()
+        assert isinstance(column, QVBoxLayout)
+        column.insertSpacing(column.count() - 1, 22)
+        column.insertWidget(column.count() - 1, self.models)
 
         buttons = QHBoxLayout()
         self.dirty_label = muted("")

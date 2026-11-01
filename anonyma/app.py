@@ -66,22 +66,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     logs.setup_logging()
     _configure_qt()
 
+    # Only what the splash needs comes before it: the main window's imports (pipeline,
+    # detectors, pages) and construction are slow, slower still on a cold start.
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
 
-    from anonyma import updater
-
-    update_state = None
-    if updater.can_self_update():
-        update_state = updater.take_state()  # outcome of the last installation
-        if update_state is None or not update_state.running:
-            updater.cleanup()  # leftovers of a previous update
-
-    from anonyma.gui import dialogs, errors, icons, theme
+    from anonyma.gui import errors, icons, theme
     from anonyma.gui.context import AppContext
-    from anonyma.gui.main_window import MainWindow
+    from anonyma.gui.splash import LOADING, OPENING, show_splash
 
-    app = QApplication(list(argv) if argv is not None else sys.argv)
+    existing = QApplication.instance()  # the tests' own application
+    if isinstance(existing, QApplication):
+        app = existing
+    else:
+        app = QApplication(list(argv) if argv is not None else sys.argv)
     app.setApplicationName("Anonyma")
     app.setApplicationDisplayName("Anonyma")
     app.setWindowIcon(icons.app_icon())
@@ -101,13 +99,31 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     app.styleHints().colorSchemeChanged.connect(system_scheme_changed)
 
-    window = MainWindow(context)
-    window.show()
+    splash = show_splash()
+    try:
+        from anonyma import updater
+
+        update_state = None
+        if updater.can_self_update():
+            update_state = updater.take_state()  # outcome of the last installation
+            if update_state is None or not update_state.running:
+                updater.cleanup()  # leftovers of a previous update
+
+        splash.set_status(LOADING)
+        from anonyma.gui import dialogs
+        from anonyma.gui.main_window import MainWindow
+
+        splash.set_status(OPENING)
+        window = MainWindow(context)
+        window.show()
+    finally:
+        # Never left above a dialog: an error dialog or the startup ones below.
+        splash.close()
     if context.load_error:
         dialogs.warning(window, context.load_error)
     window.updates.report_previous(update_state)
     QTimer.singleShot(1500, window.updates.check_on_startup)
-    QTimer.singleShot(2000, window.models.start_automatic)
+    QTimer.singleShot(2000, window.settings.models.start_automatic)
     return app.exec()
 
 

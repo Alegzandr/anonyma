@@ -180,7 +180,7 @@ def window(qtbot: Any, context: AppContext, recorder: DialogRecorder) -> Iterato
     qtbot.addWidget(win)
     yield win
     win.controller.shutdown(10_000)
-    win.models.runner.wait_all(10_000)
+    win.settings.models.runner.wait_all(10_000)
 
 
 # ---------------------------------------------------------------------------

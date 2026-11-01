@@ -102,9 +102,9 @@ plus il est lent.
 
 Anonyma choisit le profil selon votre machine et installe seul les modèles d'IA qui
 lui conviennent, en arrière-plan au démarrage : rien à choisir. Après une mise à jour,
-il remplace les modèles périmés et supprime ceux qui ne servent plus. La page
-**Modèles** montre où en est l'installation. Le profil Complet n'est pas disponible
-dans la version portable : il y fonctionne comme Standard.
+il remplace les modèles périmés et supprime ceux qui ne servent plus. L'onglet
+**Application** des Réglages montre où en est l'installation. Le profil Complet n'est
+pas disponible dans la version portable : il y fonctionne comme Standard.
 
 **Remplacement** : comment les données sont remplacées.
 - **Réaliste** (par défaut) : `Jean Dupont` devient un autre nom vraisemblable, les
@@ -144,7 +144,7 @@ votre entreprise…) et les valeurs à toujours masquer (vos clients, vos projet
   votre machine (Hugging Face) et les mises à jour (recherche, puis téléchargement si
   vous acceptez). Elles n'envoient aucune donnée, et vous pouvez les couper dans les
   Réglages : les modèles s'installent alors à votre demande, ou depuis un dossier sans
-  réseau (page **Modèles**).
+  réseau (Réglages, onglet **Application**).
 - Les originaux ne sont jamais modifiés.
 - Les journaux et les rapports ne contiennent aucune donnée d'origine.
 

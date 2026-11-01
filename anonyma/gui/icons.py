@@ -21,8 +21,6 @@ _PATHS: dict[str, str] = {
     "process": '<path d="M4 6h10M4 12h7M4 18h10"/><path d="M16 9l5 3-5 3z" fill="{c}"/>',
     "review": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>'
     '<path d="M6 9h3M6 13h3M15 9h3M15 13h3"/>',
-    "models": '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12'
-    'L4 7.5"/>',
     "settings": '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/>'
     '<circle cx="10" cy="17" r="2"/>',
     "report": '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 17v-3M12 17v-6M15 '

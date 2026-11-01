@@ -24,6 +24,21 @@ def test_window_construction(window: MainWindow) -> None:
         assert window.stack.currentWidget() is window.pages[key]
 
 
+def test_navigation_order_shortcuts_and_gap(window: MainWindow) -> None:
+    """Four pages; Ctrl+4 reaches « Réglages », the only page below the gap."""
+    from anonyma.gui.main_window import _GAP_ROLE
+
+    keys = [window.nav.item(r).data(Qt.ItemDataRole.UserRole) for r in range(window.nav.count())]
+    assert keys == ["processing", "review", "report", "settings"]
+    assert [window.nav.item(r).data(_GAP_ROLE) for r in range(len(keys))] == [
+        False,
+        False,
+        False,
+        True,
+    ]
+    assert window.nav.item(3).toolTip() == "Réglages (Ctrl+4)"
+
+
 def test_themes_apply(window: MainWindow) -> None:
     for mode in ("sombre", "systeme", "clair"):
         tokens = theme.apply_theme(mode)
@@ -231,7 +246,7 @@ def test_output_folder_and_browse_start_are_remembered(
     assert second.processing.output_edit.text() == str(out.resolve())
     assert second.controller.output_dir == out.resolve()
     second.controller.shutdown(10_000)
-    second.models.runner.wait_all(10_000)
+    second.settings.models.runner.wait_all(10_000)
 
 
 def test_missing_remembered_output_is_not_restored(
@@ -245,7 +260,7 @@ def test_missing_remembered_output_is_not_restored(
     assert win.processing.output_edit.text() == ""
     assert win.controller.output_dir is None
     win.controller.shutdown(10_000)
-    win.models.runner.wait_all(10_000)
+    win.settings.models.runner.wait_all(10_000)
 
 
 def test_update_offer_skip_and_install(

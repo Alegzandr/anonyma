@@ -67,7 +67,8 @@ through a file the tool silently skipped.
 - Input: files or folders dropped in; output: a separate folder (originals are never
   modified). Archives, mailboxes and attachments are processed recursively.
 - Workflow in the GUI: **Traitement** → **Rapport**, "Anonymiser" never pauses; plus an
-  **Aperçu** to consult (double-click a file), **Modèles** and **Réglages**.
+  **Aperçu** to consult (double-click a file) and **Réglages** (whose Application tab
+  also shows the state of the automatic model setup).
 - The preview is consultative and entity-centric ("Bérénice Lagarde — PERSONNE — 14
   occurrences dans 6 fichiers"), with side-by-side context (text, rendered PDF/image with
   boxed zones) and keyboard shortcuts (N / P, Maj+N, V, R, T, A). Corrections there are

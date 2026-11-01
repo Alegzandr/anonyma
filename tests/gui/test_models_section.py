@@ -10,7 +10,7 @@ from anonyma import hardware, model_setup
 from anonyma.config import Config
 from anonyma.gui.context import AppContext
 from anonyma.gui.main_window import MainWindow
-from anonyma.gui.pages.models import ModelsPage
+from anonyma.gui.models_section import ModelsSection
 from anonyma.model_catalog import ModelKind, ModelSpec
 from anonyma.model_manager import LicenseRefusedError, ModelManager
 from tests.gui.conftest import DialogRecorder, FakeModelManager, make_spec
@@ -34,8 +34,8 @@ def specs(monkeypatch: pytest.MonkeyPatch) -> list[ModelSpec]:
     return wanted
 
 
-def _page(qtbot: Any, manager: ModelManager, *, automatic: bool = True) -> ModelsPage:
-    page = ModelsPage(AppContext(Config(check_updates=automatic), model_manager=manager))
+def _page(qtbot: Any, manager: ModelManager, *, automatic: bool = True) -> ModelsSection:
+    page = ModelsSection(AppContext(Config(check_updates=automatic), model_manager=manager))
 
     def settle(_widget: object) -> None:
         # Closes over ``page`` on purpose: pytest-qt keeps widgets by weak reference, so
@@ -48,7 +48,7 @@ def _page(qtbot: Any, manager: ModelManager, *, automatic: bool = True) -> Model
     return page
 
 
-def _idle(qtbot: Any, page: ModelsPage) -> None:
+def _idle(qtbot: Any, page: ModelsSection) -> None:
     qtbot.waitUntil(lambda: not page.busy(), timeout=TIMEOUT)
 
 
@@ -59,11 +59,13 @@ def test_state_and_hardware_without_installing(
     page = _page(qtbot, manager)
     page.show()
     _idle(qtbot, page)
-    assert page.hw_labels["ram"].text() == "16,0 Go"
-    assert "Carte de test" in page.hw_labels["gpu"].text()
-    assert page.hw_labels["providers"].text() == "DirectML (GPU), processeur"
+    machine = page.machine.text()
+    assert "16,0 Go de mémoire vive" in machine
+    assert "Carte de test (4,0 Go)" in machine
+    assert "DirectML (GPU), processeur" in machine
+    assert page.profile_label.text().startswith("Détection")
     assert page.table.rowCount() == 2
-    assert page.table.item(0, 3).text() == "À installer"
+    assert page.table.item(0, 2).text() == "À installer"
     assert "à télécharger" in page.headline.text()
     assert manager.calls == []  # showing the page never downloads
 
@@ -83,7 +85,7 @@ def test_automatic_install_and_cleanup(
     assert ("remove", "ancien-modele") in manager.calls
     assert not recorder.confirms  # nothing asked
     assert "à jour" in page.headline.text()
-    assert {page.table.item(r, 3).text() for r in range(page.table.rowCount())} == {"Installé"}
+    assert {page.table.item(r, 2).text() for r in range(page.table.rowCount())} == {"Installé"}
     assert changed
 
 
@@ -96,7 +98,7 @@ def test_automatic_connections_off_waits_for_the_user(
     page.start_automatic()
     _idle(qtbot, page)
     assert manager.calls == []
-    assert "Réglages" in page.detail.text()
+    assert "désactivées" in page.detail.text()
     assert page.install_button.isVisibleTo(page)
     page.install_button.click()
     _idle(qtbot, page)
@@ -144,11 +146,18 @@ def test_offline_import(
     assert "importés" in page.banner.text()
 
 
-def test_models_page_in_window(window: MainWindow, qtbot: Any) -> None:
+def test_models_section_in_settings(window: MainWindow, qtbot: Any) -> None:
+    """The models live in « Réglages », tab « Application »: no page of their own."""
+    assert "models" not in window.pages
     window.show()
-    window.show_page("models")
-    qtbot.waitUntil(lambda: window.models.setup is not None, timeout=TIMEOUT)
-    window.models.runner.wait_all(TIMEOUT)
+    window.show_page("settings")
+    page = window.settings
+    tabs = [page.tabs.tabText(i) for i in range(page.tabs.count())]
+    page.tabs.setCurrentIndex(tabs.index("Application"))
+    section = page.models
+    assert section.isVisibleTo(window)
+    qtbot.waitUntil(lambda: section.setup is not None, timeout=TIMEOUT)
+    section.runner.wait_all(TIMEOUT)
 
 
 def test_sidebar_reaches_the_bottom(window: MainWindow) -> None:
