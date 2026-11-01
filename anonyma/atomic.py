@@ -11,7 +11,10 @@ checked centrally, for every detector, propagation and the verifier alike:
   e-mail address or a URL around it) is kept;
 * a span lying inside a token is dropped;
 * a span overlapping a token and text outside it is trimmed to the outside part
-  (recall: ``Jean Dupont`` before an identifier stays masked).
+  (recall: ``Jean Dupont`` before an identifier stays masked);
+* a span made of tokens only is an identifier or nothing: kept as a technical
+  identifier, an address, a URL or a message id, never as a person, a street
+  address or a user name (a model reading a GUID as « 116 avenue de Germain »).
 
 Tokens are the opaque identifiers of :func:`anonyma.detectors.opaque.opaque_spans`
 (UUIDs, hexadecimal runs, fingerprints, base64 and generated tokens).
@@ -22,6 +25,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from anonyma.detectors.opaque import opaque_spans
+from anonyma.models import EntityType
 
 #: Texts shorter than this hold no token (the shortest rule needs 10 characters).
 _MIN_TEXT = 10
@@ -70,6 +74,29 @@ def trimmed(
     return lo, hi
 
 
+#: Types a span made of atomic tokens only may have (and the custom ones).
+TOKEN_TYPES = frozenset(
+    {
+        EntityType.OPAQUE_ID,
+        EntityType.URL,
+        EntityType.EMAIL,
+        EntityType.MESSAGE_ID,
+        EntityType.BARCODE,
+    }
+)
+_BUILTIN_TYPES = frozenset(t.value for t in EntityType)
+
+
+def only_tokens(text: str, start: int, end: int, tokens: Sequence[tuple[int, int]]) -> bool:
+    """Every letter and digit of ``text[start:end]`` lies in a token."""
+    if not tokens:
+        return False
+    for i in range(start, end):
+        if text[i].isalnum() and not any(s <= i < e for s, e in tokens):
+            return False
+    return True
+
+
 class AtomicIndex:
     """Atomic tokens of segment texts, computed once per text."""
 
@@ -90,5 +117,17 @@ class AtomicIndex:
             return start, end
         return trimmed(text, start, end, tokens)
 
+    def fit_typed(
+        self, text: str, start: int, end: int, entity_type: str
+    ) -> tuple[int, int] | None:
+        """:meth:`fit`, and None for a span of tokens only typed as anything but an
+        identifier (:data:`TOKEN_TYPES`, custom types)."""
+        span = self.fit(text, start, end)
+        if span is None or entity_type in TOKEN_TYPES or entity_type not in _BUILTIN_TYPES:
+            return span
+        if only_tokens(text, span[0], span[1], self.tokens(text)):
+            return None
+        return span
 
-__all__ = ["AtomicIndex", "atomic_spans", "trim_span", "trimmed"]
+
+__all__ = ["TOKEN_TYPES", "AtomicIndex", "atomic_spans", "only_tokens", "trim_span", "trimmed"]
