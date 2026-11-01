@@ -182,13 +182,20 @@ _PLAIN = frozenset(" '’,.;:!?()-\n\u00a0")
 _NOISE = regex.compile(r"\S+@\S+|\w+://\S+|www\.\S+")
 
 
+def _sentence_start(text: str, start: int) -> bool:
+    """Capitalized because a sentence starts there (« (Berlin office » does not)."""
+    before = text[:start].rstrip(" \t\u00a0\u202f")
+    return not before or before[-1] in ".!?…:\n\r•-–—"
+
+
 def is_prose(text: str) -> bool:
     text = _NOISE.sub(" ", text)  # addresses and links are no words
     words = _WORDS.findall(text)
     lower = sum(1 for w in words if w[0].islower())
     if len(words) < PROSE_WORDS or lower < 3 or lower < PROSE_LOWER * len(words):
         return False
-    plain = sum(1 for c in text if c.isalpha() or c in _PLAIN)
+    # Numbers are part of prose (« le 12 mars », « au +49 30 901820 »).
+    plain = sum(1 for c in text if c.isalnum() or c in _PLAIN)
     return plain >= PROSE_PLAIN * len(text)
 
 
@@ -262,7 +269,7 @@ class LlmDetector(Detector):
         if key in self.lexicon or key in FUNCTION_WORDS:
             return False
         shouted = word.isupper() and len(word) > 2
-        if not shouted and not mid_sentence(passage.text, match.start()):
+        if not shouted and _sentence_start(passage.text, match.start()):
             return False
         spans = list(llm.locate(passage.segment.text, word))
         return not spans or any(
@@ -272,19 +279,38 @@ class LlmDetector(Detector):
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
         return self.detect_after(segments, document_id, ())
 
-    def detect_after(
-        self, segments: Sequence[Segment], document_id: str, prior: Sequence[Entity]
-    ) -> list[Entity]:
+    def _todo(self, segments: Sequence[Segment], prior: Sequence[Entity]) -> list[Passage]:
         covered: dict[str, list[tuple[int, int]]] = {}
         for e in prior:
             covered.setdefault(e.segment_id, []).append((e.start, e.end))
-        todo = [
+        return [
             p
             for i, s in enumerate(segments)
             if not skip_segment(s)
             for p in passages(s, i)
             if self.wanted(p, covered.get(s.id, ()))
         ]
+
+    def pending(
+        self, segments: Sequence[Segment], prior: Sequence[Entity], seen: set[str]
+    ) -> list[Passage]:
+        """Passages :meth:`detect_after` will send to the model for ``segments``: gated
+        with the other detectors' entities (``prior``), minus those already analysed
+        in this process or in ``seen`` (keys, updated). The exact workload, without
+        loading the model."""
+        selected = select_model(self.config)
+        memo = _memo(memo_key(selected[1])) if selected is not None else Memo()
+        out: list[Passage] = []
+        for p in self._todo(segments, prior):
+            if p.key not in seen and p.key not in memo:
+                seen.add(p.key)
+                out.append(p)
+        return out
+
+    def detect_after(
+        self, segments: Sequence[Segment], document_id: str, prior: Sequence[Entity]
+    ) -> list[Entity]:
+        todo = self._todo(segments, prior)
         if not todo:
             return []
         runner = self._runner()
@@ -402,20 +428,36 @@ def _throughput_path() -> Path:
     return paths.data_dir() / THROUGHPUT_FILE
 
 
+#: Calls the saved throughput is averaged over (older runs fade out beyond).
+THROUGHPUT_WINDOW = 2000
+#: Calls measured before the saved throughput replaces :data:`DEFAULT_CALL_SECONDS`.
+THROUGHPUT_MIN_CALLS = 50
+_recorded: dict[int, tuple[int, float]] = {}
+
+
 def record_throughput(runner: llm.LlmRunner) -> None:
-    """Remember this process's measured seconds per call for later estimates (best
-    effort: counts only)."""
-    if not runner.measured_calls:
+    """Add this process's new measured calls to the saved average seconds per call,
+    over the last :data:`THROUGHPUT_WINDOW` calls of every run (best effort: counts
+    only). One small or unusual run does not set the next estimate on its own."""
+    done_calls, done_seconds = _recorded.get(id(runner), (0, 0.0))
+    calls = runner.measured_calls - done_calls
+    seconds = runner.measured_seconds - done_seconds
+    if calls <= 0:
         return
+    _recorded[id(runner)] = (runner.measured_calls, runner.measured_seconds)
     path = _throughput_path()
     try:
         data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         if not isinstance(data, dict):
             data = {}
-        data[runner.key] = {
-            "appels": runner.measured_calls,
-            "secondes": round(runner.measured_seconds, 3),
-        }
+        old = data.get(runner.key)
+        if isinstance(old, dict):
+            calls += int(old.get("appels", 0))
+            seconds += float(old.get("secondes", 0.0))
+        if calls > THROUGHPUT_WINDOW:
+            seconds *= THROUGHPUT_WINDOW / calls
+            calls = THROUGHPUT_WINDOW
+        data[runner.key] = {"appels": calls, "secondes": round(seconds, 3)}
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=1), encoding="utf-8")
     except (OSError, ValueError):
@@ -428,14 +470,19 @@ def call_seconds(config: Config) -> float:
     selected = select_model(config)
     if selected is None:
         return DEFAULT_CALL_SECONDS
-    key = f"{selected[1].name}:v{llm.PROMPT_VERSION}"
+    key = memo_key(selected[1])
     try:
         data = json.loads(_throughput_path().read_text(encoding="utf-8"))
         item = data[key]
         calls, seconds = int(item["appels"]), float(item["secondes"])
     except (OSError, ValueError, KeyError, TypeError):
         return DEFAULT_CALL_SECONDS
-    return seconds / calls if calls >= 20 else DEFAULT_CALL_SECONDS
+    return seconds / calls if calls >= THROUGHPUT_MIN_CALLS else DEFAULT_CALL_SECONDS
+
+
+def memo_key(model: Path) -> str:
+    """:attr:`anonyma.llm.LlmRunner.key` of a model file, without loading it."""
+    return f"{model.name}:v{llm.PROMPT_VERSION}"
 
 
 def estimated_calls(todo: Sequence[Passage]) -> int:
@@ -591,6 +638,7 @@ __all__ = [
     "estimated_calls",
     "forget",
     "is_prose",
+    "memo_key",
     "passages",
     "plan",
     "record_throughput",

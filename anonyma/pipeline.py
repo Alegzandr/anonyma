@@ -15,6 +15,7 @@ propagation, substitute assignment) run in the calling process.
 from __future__ import annotations
 
 import io
+import math
 import os
 import re
 import shutil
@@ -141,6 +142,8 @@ class ProgressEvent:
     item_done: int = 0
     item_total: int = 0
     item_step: str = ""
+    #: A French line to show once (the language model's exact workload, FULL).
+    note: str = ""
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
@@ -627,17 +630,7 @@ def detect_tree(
     ids = IdWhitelist(config.opaque_id_whitelist or [])
     keeping = bool(ids) or not config.mask_opaque_ids
     for doc in root.walk():
-        # Unreadable items still get their name analysed: it shows up in reports.
-        segments = (
-            doc.segments
-            if doc.status is DocumentStatus.EXTRACTED
-            else [s for s in doc.segments if s.id == FILENAME_SEGMENT_ID]
-        )
-        texts = {s.id: s.text for s in segments}
-        # Detectors read file names with their separators as spaces
-        # (``Contrat_jean_DUPONT.pdf`` -> ``Contrat jean DUPONT pdf``); offsets and
-        # values still refer to the real name.
-        view = [_name_view(s) if s.id == FILENAME_SEGMENT_ID else s for s in segments]
+        view, texts = _detection_view(doc)
         first = len(entities)
         known = [e for e in prior if e.document_id == doc.id]
         for detector in detectors:
@@ -679,6 +672,21 @@ def detect_tree(
                 entities.append(e)
             detector.on_progress = None
     return entities
+
+
+def _detection_view(doc: Document) -> tuple[list[Segment], dict[str, str]]:
+    """The segments detectors read and their texts by id. Unreadable items still get
+    their name analysed: it shows up in reports. File names are read with their
+    separators as spaces (``Contrat_jean_DUPONT.pdf`` -> ``Contrat jean DUPONT pdf``);
+    offsets and values still refer to the real name."""
+    segments = (
+        doc.segments
+        if doc.status is DocumentStatus.EXTRACTED
+        else [s for s in doc.segments if s.id == FILENAME_SEGMENT_ID]
+    )
+    texts = {s.id: s.text for s in segments}
+    view = [_name_view(s) if s.id == FILENAME_SEGMENT_ID else s for s in segments]
+    return view, texts
 
 
 def _detector_label(name: str) -> str:
@@ -1417,40 +1425,88 @@ LLM_STAGE = "langue"
 #: Beyond this, a FULL run is announced as long (CLI warning, GUI notice).
 LLM_WARNING_MINUTES = 15.0
 #: Files read (at most) and seconds of extraction spent to estimate a FULL run.
+ESTIMATE_MIN_BETA = 0.3
 ESTIMATE_SAMPLE_FILES = 12
 ESTIMATE_SAMPLE_SECONDS = 20.0
 
 
 @dataclass(frozen=True, slots=True)
 class LlmEstimate:
-    """Expected language-model work of a FULL run (:meth:`Pipeline.estimate_llm`)."""
+    """Expected language-model work of a FULL run: before it starts, from a sample
+    (:meth:`Pipeline.estimate_llm`), or exactly once the other detectors are done
+    (:attr:`Pipeline.llm_workload`, ``sampled_files == total_files``)."""
 
+    #: Most likely duration: unique paragraphs extrapolated as they grew in the sample
+    #: (a paragraph repeated from file to file is analysed once).
     minutes: float
-    #: Model calls expected (paragraphs pooled into windows), extrapolated.
+    #: Model calls (paragraphs pooled into windows) for ``minutes``.
     calls: int
     sampled_files: int
     total_files: int
+    #: Upper bound: unique paragraphs extrapolated linearly by size, as if no file
+    #: repeated another (the sample cannot see every repetition).
+    max_minutes: float = 0.0
+    max_calls: int = 0
+
+    @property
+    def exact(self) -> bool:
+        return self.sampled_files >= self.total_files
 
     @property
     def long(self) -> bool:
+        """Worth a warning: even the repetition-adjusted figure exceeds the limit."""
         return self.minutes > LLM_WARNING_MINUTES
 
     def warning(self, switch: str) -> str:
         """The estimate in French, with ``switch`` (how to choose Standard here)."""
-        total = max(1, round(self.minutes))
-        hours, rest = divmod(total, 60)
-        duration = f"{hours} h {rest:02d} min" if hours else f"{rest} min"
+        noun = "passage" if self.calls < 2 else "passages"
+        bound = ""
+        if not self.exact and self.max_minutes > self.minutes * 1.25:
+            bound = f" (au plus environ {_duration(self.max_minutes)})"
         sample = (
-            ""
-            if self.sampled_files >= self.total_files
-            else f", d'après {self.sampled_files} fichiers sur {self.total_files}"
+            "" if self.exact else f", d'après {self.sampled_files} fichiers sur {self.total_files}"
         )
+        return (
+            f"profil Complet : environ {_duration(self.minutes)} estimées{bound} pour le "
+            f"modèle de langue local ({grouped(self.calls)}{NBSP}{noun} à analyser{sample}). "
+            f"Le profil Standard traite ce lot en quelques minutes : {switch}."
+        )
+
+    def line(self) -> str:
+        """« Modèle de langue : 254 passages à analyser, environ 17 min »."""
         noun = "passage" if self.calls < 2 else "passages"
         return (
-            f"profil Complet : environ {duration} estimées pour le modèle de langue local "
-            f"({grouped(self.calls)}{NBSP}{noun} à analyser{sample}). Le profil Standard "
-            f"traite ce lot en quelques minutes : {switch}."
+            f"Modèle de langue : {grouped(self.calls)}{NBSP}{noun} à analyser, environ "
+            f"{_duration(self.minutes)}"
         )
+
+
+def _duration(minutes: float) -> str:
+    """« 25 min », « 2 h 10 min »."""
+    total = max(1, round(minutes))
+    hours, rest = divmod(total, 60)
+    return f"{hours} h {rest:02d} min" if hours else f"{rest} min"
+
+
+def extrapolate(
+    growth: Sequence[tuple[int, int]], calls: int, total_bytes: int
+) -> tuple[float, float]:
+    """``(probable, upper)`` model calls for the whole batch from the sample's
+    ``growth``: cumulative ``(bytes read, unique paragraphs)`` after each sampled file,
+    and ``calls`` for its unique paragraphs. Upper bound: linear in size. Probable:
+    unique paragraphs growing as they did in the sample, ``U ∝ bytes ** beta`` (beta
+    from its first and last points, between :data:`ESTIMATE_MIN_BETA` and 1; the
+    minimum when the sample shows no growth curve)."""
+    sampled_bytes, unique = growth[-1] if growth else (0, 0)
+    if not growth or sampled_bytes >= total_bytes or not unique:
+        return float(calls), float(calls)
+    scale = total_bytes / max(1, sampled_bytes)
+    beta = ESTIMATE_MIN_BETA
+    first_bytes, first_unique = growth[0]
+    if len(growth) > 1 and first_unique and sampled_bytes > first_bytes:
+        beta = math.log(unique / first_unique) / math.log(sampled_bytes / first_bytes)
+        beta = min(1.0, max(ESTIMATE_MIN_BETA, beta))
+    return calls * scale**beta, calls * scale
 
 
 def _size(path: Path) -> int:
@@ -1470,6 +1526,9 @@ class Pipeline:
         #: Profile the installed models actually serve (``complet`` without its
         #: language model runs as ``standard``): it sizes the worker pool.
         self.detection_profile = registry.usable_profile(self.config, profile)
+        #: The language model's exact workload of the last analysis (FULL), computed
+        #: before its stage starts.
+        self.llm_workload: LlmEstimate | None = None
 
     def estimate_llm(
         self, inputs: Sequence[Path], *, sample_seconds: float = ESTIMATE_SAMPLE_SECONDS
@@ -1495,6 +1554,7 @@ class Pipeline:
         order = [*range(0, len(files), step), *(i for i in range(len(files)) if i % step)]
         seen: set[str] = set()
         todo: list[Any] = []
+        growth: list[tuple[int, int]] = []
         sampled = sampled_bytes = 0
         started = time.monotonic()
         work_dir = paths.tmp_dir() / f"estimation-{new_id()[:8]}"
@@ -1508,12 +1568,21 @@ class Pipeline:
                     todo += llm_detector.workload(item.segments, seen)
                 sampled += 1
                 sampled_bytes += sizes[i]
+                growth.append((sampled_bytes, len(seen)))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
-        scale = total / max(1, sampled_bytes) if sampled < len(files) else 1.0
-        calls = round(llm_module.estimated_calls(todo) * scale)
-        minutes = calls * llm_module.call_seconds(self.config) / 60
-        return LlmEstimate(minutes, calls, sampled, len(files))
+        if sampled >= len(files):
+            growth = []  # everything read: no extrapolation
+        probable, upper = extrapolate(growth, llm_module.estimated_calls(todo), total)
+        seconds = llm_module.call_seconds(self.config)
+        return LlmEstimate(
+            probable * seconds / 60,
+            round(probable),
+            sampled,
+            len(files),
+            upper * seconds / 60,
+            round(upper),
+        )
 
     # -- execution helpers --------------------------------------------------
 
@@ -1761,13 +1830,15 @@ class Pipeline:
         global _item_progress
         total = len(outputs)
         done = 0
+        self.llm_workload = self._exact_workload(outputs)
 
         def item(done_: int, total_: int, step: str) -> None:
             if progress is not None:
                 progress(ProgressEvent(LLM_STAGE, done, total, None, done_, total_, step))
 
         if progress:
-            progress(ProgressEvent(LLM_STAGE, 0, total))
+            note = self.llm_workload.line() if self.llm_workload is not None else ""
+            progress(ProgressEvent(LLM_STAGE, 0, total, note=note))
         for index, out in enumerate(outputs):
             if cancel and cancel.cancelled:
                 break
@@ -1781,6 +1852,28 @@ class Pipeline:
             done += 1
             if progress:
                 progress(ProgressEvent(LLM_STAGE, done, total, index=index))
+
+    def _exact_workload(self, outputs: list[Any | None]) -> LlmEstimate | None:
+        """What the language model will read, now that the other detectors are done:
+        gated paragraphs not covered by them, each once for the batch."""
+        llm_detector = next((d for d in detectors_for(self.config) if d.uses_prior), None)
+        if llm_detector is None or not hasattr(llm_detector, "pending"):
+            return None
+        from anonyma.detectors import llm as llm_module
+
+        seen: set[str] = set()
+        todo: list[Any] = []
+        for out in outputs:
+            if out is None:
+                continue
+            root, found = out
+            for doc in root.walk():
+                view, _ = _detection_view(doc)
+                prior = [e for e in found if e.document_id == doc.id]
+                todo += llm_detector.pending(view, prior, seen)
+        calls = llm_module.estimated_calls(todo)
+        minutes = calls * llm_module.call_seconds(self.config) / 60
+        return LlmEstimate(minutes, calls, len(outputs), len(outputs), minutes, calls)
 
     def apply(
         self,

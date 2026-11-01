@@ -1102,6 +1102,18 @@ def test_heartbeat_lines_are_plain_and_rate_limited() -> None:
     ]
 
 
+def test_heartbeat_prints_the_language_model_workload_once() -> None:
+    from anonyma.pipeline import ProgressEvent
+
+    now = [0.0]
+    lines: list[str] = []
+    beat = cli.Heartbeat(lines.append, interval=10.0, clock=lambda: now[0])
+    now[0] = 65.0
+    note = "Modèle de langue : 254 passages à analyser, environ 17 min"
+    beat.update(ProgressEvent("langue", 0, 205, note=note))
+    assert lines == [f"{note} (1 min 05 s)", "Modèle de langue : 0/205 fichiers… (1 min 05 s)"]
+
+
 def test_heartbeat_shows_progress_inside_a_long_file() -> None:
     """One long file (the language model on a big export): the heartbeat says where it
     is inside the file, in counts only, and forgets it once the file is done."""

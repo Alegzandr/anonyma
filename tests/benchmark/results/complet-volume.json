@@ -1,0 +1,6795 @@
+{
+ "name": "complet-volume",
+ "profiles": {
+  "complet": {
+   "seconds": 442.0375561999972,
+   "statuses": {
+    "01_txt_lettre": [
+     "anonymise"
+    ],
+    "02_csv_clients": [
+     "anonymise"
+    ],
+    "03_json_crm": [
+     "anonymise"
+    ],
+    "04_xml_sinistre": [
+     "a_revoir"
+    ],
+    "05_html_equipe": [
+     "a_revoir"
+    ],
+    "06_eml_fil": [
+     "a_revoir"
+    ],
+    "07_eml_encode": [
+     "anonymise"
+    ],
+    "08_mbox_boite": [
+     "anonymise"
+    ],
+    "09_msg_outlook": [
+     "anonymise"
+    ],
+    "10_docx_audit": [
+     "a_revoir"
+    ],
+    "11_xlsx_registre": [
+     "anonymise"
+    ],
+    "12_pptx_projet": [
+     "a_revoir"
+    ],
+    "13_odt_compte_rendu": [
+     "anonymise"
+    ],
+    "14_ods_planning": [
+     "anonymise"
+    ],
+    "15_rtf_attestation": [
+     "anonymise"
+    ],
+    "16_pdf_releve": [
+     "a_revoir"
+    ],
+    "17_pdf_numerise": [
+     "anonymise"
+    ],
+    "18_png_capture": [
+     "anonymise"
+    ],
+    "19_jpg_badge": [
+     "a_revoir"
+    ],
+    "20_zip_dossier": [
+     "anonymise"
+    ],
+    "21_7z_sauvegarde": [
+     "a_revoir"
+    ],
+    "22_dossiers_nommes": [
+     "a_revoir",
+     "anonymise"
+    ],
+    "23_txt_temoins": [
+     "a_revoir"
+    ],
+    "24_txt_anglais": [
+     "anonymise"
+    ],
+    "25_pdf_signe": [
+     "anonymise"
+    ]
+   },
+   "docs": [
+    {
+     "slug": "01_txt_lettre",
+     "format": "txt",
+     "outputs": [
+      [
+       "lettre_reclamation.txt",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "01-001",
+       "type": "ORGANISATION",
+       "direct": false,
+       "value": "Transports Valmont SAS",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-002",
+       "type": "SIREN",
+       "direct": false,
+       "value": "536180334",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-003",
+       "type": "SIRET",
+       "direct": false,
+       "value": "53618033413415",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-004",
+       "type": "TVA",
+       "direct": false,
+       "value": "FR05536180334",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-005",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Hélène Garnier",
+       "where": [
+        "corps, signature"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-006",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "12 rue des Glycines, 44000 Nantes",
+       "where": [
+        "en-tête (sur trois lignes)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-007",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "Bât. C, appartement 34",
+       "where": [
+        "en-tête"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-008",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639982061",
+       "where": [
+        "en-tête, post-scriptum"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-009",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639981234",
+       "where": [
+        "en-tête"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-010",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "helene.garnier@exemple.test",
+       "where": [
+        "en-tête"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-011",
+       "type": "NUMERO_DOSSIER",
+       "direct": false,
+       "value": "SIN-2024-008812",
+       "where": [
+        "objet"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-012",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1979-02-14",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-013",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Rennes",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-014",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Nantes",
+       "where": [
+        "date"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-015",
+       "type": "NIR",
+       "direct": true,
+       "value": "279024446193392",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-016",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "directrice administrative et financière",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-017",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7621831283103568831598365",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-018",
+       "type": "CARTE",
+       "direct": true,
+       "value": "4970778289906207",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-019",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "JB-158-ZD",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-020",
+       "type": "IP",
+       "direct": true,
+       "value": "192.0.2.188",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-021",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "hgarnier",
+       "where": [
+        "corps, URL"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-022",
+       "type": "URL",
+       "direct": false,
+       "value": "https://www.transports-valmont.example/suivi?client=hgarnier",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-023",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Benoît Lefebvre",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-024",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639984353",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-025",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "benoit.lefebvre@exemple.test",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "01-026",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7685952778000487894129335",
+       "where": [
+        "post-scriptum"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 27,
+      "vrais": 26,
+      "faux": 1,
+      "faux_dates": 1,
+      "faux_exemples": [
+       "4 mars 2026"
+      ]
+     },
+     "keep_total": 2,
+     "keep_ok": 2,
+     "keep_lost": []
+    },
+    {
+     "slug": "02_csv_clients",
+     "format": "csv",
+     "outputs": [
+      [
+       "clients.csv",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "02-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Éloïse Ravier",
+       "where": [
+        "ligne 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-002",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1958-09-02",
+       "where": [
+        "ligne 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-003",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "eloise.ravier@exemple.test",
+       "where": [
+        "ligne 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-004",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639980726",
+       "where": [
+        "ligne 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-005",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7667404759089541723112639",
+       "where": [
+        "ligne 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-006",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "98 rue des Tilleuls-Argentés, 72000 Le Mans",
+       "where": [
+        "ligne 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-007",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Le Mans",
+       "where": [
+        "ligne 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-008",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "VF-208-CD",
+       "where": [
+        "ligne 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-009",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Bastien Tessier",
+       "where": [
+        "ligne 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-010",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1975-03-10",
+       "where": [
+        "ligne 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-011",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "bastien.tessier@exemple.test",
+       "where": [
+        "ligne 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-012",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639983589",
+       "where": [
+        "ligne 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-013",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7661574610181435949692323",
+       "where": [
+        "ligne 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-014",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "28 allée des Sorbiers, 17000 La Rochelle",
+       "where": [
+        "ligne 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-015",
+       "type": "LIEU",
+       "direct": false,
+       "value": "La Rochelle",
+       "where": [
+        "ligne 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-016",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "JG-390-QD",
+       "where": [
+        "ligne 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-017",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Margaux Lebrun",
+       "where": [
+        "ligne 3"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-018",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1956-02-05",
+       "where": [
+        "ligne 3"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-019",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "margaux.lebrun@exemple.test",
+       "where": [
+        "ligne 3"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-020",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639981871",
+       "where": [
+        "ligne 3"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-021",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7646582336560570485616579",
+       "where": [
+        "ligne 3"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-022",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "9 rue du Pont-Levis, 56100 Lorient",
+       "where": [
+        "ligne 3"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-023",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Lorient",
+       "where": [
+        "ligne 3"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-024",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "EB-609-YP",
+       "where": [
+        "ligne 3"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-025",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Thibault Charpentier",
+       "where": [
+        "ligne 4"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-026",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1951-07-01",
+       "where": [
+        "ligne 4"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-027",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "thibault.charpentier@exemple.test",
+       "where": [
+        "ligne 4"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-028",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639981165",
+       "where": [
+        "ligne 4"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-029",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7663662185709049044217354",
+       "where": [
+        "ligne 4"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-030",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "115 avenue des Acacias, 64000 Pau",
+       "where": [
+        "ligne 4"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-031",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Pau",
+       "where": [
+        "ligne 4"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-032",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "XH-643-YW",
+       "where": [
+        "ligne 4"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-033",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Léonie Guillot",
+       "where": [
+        "ligne 5"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-034",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1975-09-12",
+       "where": [
+        "ligne 5"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-035",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "leonie.guillot@exemple.test",
+       "where": [
+        "ligne 5"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-036",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639984800",
+       "where": [
+        "ligne 5"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-037",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7619631901405427723107028",
+       "where": [
+        "ligne 5"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-038",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "16 impasse des Ajoncs, 66000 Perpignan",
+       "where": [
+        "ligne 5"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-039",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Perpignan",
+       "where": [
+        "ligne 5"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-040",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "TA-466-DY",
+       "where": [
+        "ligne 5"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-041",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Corentin Poirier",
+       "where": [
+        "ligne 6"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-042",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1969-09-14",
+       "where": [
+        "ligne 6"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-043",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "corentin.poirier@exemple.test",
+       "where": [
+        "ligne 6"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-044",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639982070",
+       "where": [
+        "ligne 6"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-045",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7601661181926675888847967",
+       "where": [
+        "ligne 6"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-046",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "17 rue de la Forge-Neuve, 68100 Mulhouse",
+       "where": [
+        "ligne 6"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-047",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Mulhouse",
+       "where": [
+        "ligne 6"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-048",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "QZ-738-VR",
+       "where": [
+        "ligne 6"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-049",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Apolline Barbier",
+       "where": [
+        "ligne 7"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-050",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1985-09-01",
+       "where": [
+        "ligne 7"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-051",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "apolline.barbier@exemple.test",
+       "where": [
+        "ligne 7"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-052",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639982946",
+       "where": [
+        "ligne 7"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-053",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7609657682624235143226130",
+       "where": [
+        "ligne 7"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-054",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "25 chemin du Bois-Joli, 03100 Montluçon",
+       "where": [
+        "ligne 7"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-055",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Montluçon",
+       "where": [
+        "ligne 7"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-056",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "BN-435-DP",
+       "where": [
+        "ligne 7"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-057",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Maxence Leclerc",
+       "where": [
+        "ligne 8"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-058",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1999-01-10",
+       "where": [
+        "ligne 8"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-059",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "maxence.leclerc@exemple.test",
+       "where": [
+        "ligne 8"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-060",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639985508",
+       "where": [
+        "ligne 8"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-061",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7612998920352637355040901",
+       "where": [
+        "ligne 8"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-062",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "83 rue des Halles-Basses, 41000 Blois",
+       "where": [
+        "ligne 8"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-063",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Blois",
+       "where": [
+        "ligne 8"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-064",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "KM-325-BS",
+       "where": [
+        "ligne 8"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-065",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Clémence Hamelin",
+       "where": [
+        "ligne 9"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-066",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1979-05-07",
+       "where": [
+        "ligne 9"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-067",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "clemence.hamelin@exemple.test",
+       "where": [
+        "ligne 9"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-068",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639989348",
+       "where": [
+        "ligne 9"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-069",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7637831748521431842211370",
+       "where": [
+        "ligne 9"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-070",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "63 place de la Halle-aux-Grains, 62000 Arras",
+       "where": [
+        "ligne 9"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-071",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Arras",
+       "where": [
+        "ligne 9"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-072",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "QE-244-CM",
+       "where": [
+        "ligne 9"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-073",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Hugo Joubert",
+       "where": [
+        "ligne 10"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-074",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1953-05-14",
+       "where": [
+        "ligne 10"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-075",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "hugo.joubert@exemple.test",
+       "where": [
+        "ligne 10"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-076",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639982915",
+       "where": [
+        "ligne 10"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-077",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7676830162674521404592170",
+       "where": [
+        "ligne 10"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-078",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "75 rue des Lavandières, 16000 Angoulême",
+       "where": [
+        "ligne 10"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-079",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Angoulême",
+       "where": [
+        "ligne 10"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-080",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "HE-460-BH",
+       "where": [
+        "ligne 10"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-081",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Jeanne Royer",
+       "where": [
+        "ligne 11"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-082",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1967-10-14",
+       "where": [
+        "ligne 11"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-083",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "jeanne.royer@exemple.test",
+       "where": [
+        "ligne 11"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-084",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639987664",
+       "where": [
+        "ligne 11"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-085",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7697836437037575871881551",
+       "where": [
+        "ligne 11"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-086",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "114 boulevard des Platanes, 71100 Chalon-sur-Saône",
+       "where": [
+        "ligne 11"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-087",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Chalon-sur-Saône",
+       "where": [
+        "ligne 11"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-088",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "AG-846-MT",
+       "where": [
+        "ligne 11"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-089",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Valentin Lemaire",
+       "where": [
+        "ligne 12"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-090",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1984-02-14",
+       "where": [
+        "ligne 12"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-091",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "valentin.lemaire@exemple.test",
+       "where": [
+        "ligne 12"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-092",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639981472",
+       "where": [
+        "ligne 12"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-093",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7671641130216729155719955",
+       "where": [
+        "ligne 12"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-094",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "12 rue Saint-Roch-des-Champs, 18000 Bourges",
+       "where": [
+        "ligne 12"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-095",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Bourges",
+       "where": [
+        "ligne 12"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "02-096",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "NV-565-DM",
+       "where": [
+        "ligne 12"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 32,
+      "vrais": 32,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 4,
+     "keep_ok": 4,
+     "keep_lost": []
+    },
+    {
+     "slug": "03_json_crm",
+     "format": "json",
+     "outputs": [
+      [
+       "crm_export.json",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "03-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Jean-Baptiste Kowalczyk",
+       "where": [
+        "valeur, clé"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-002",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "jbkowal88",
+       "where": [
+        "valeur login"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-003",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "jb.kowalczyk@exemple.test",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-004",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639984155",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-005",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1988-07-23",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-006",
+       "type": "IP",
+       "direct": true,
+       "value": "192.0.2.240",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-007",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7639222612779401990820835",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-008",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "27 rue Jules-Ferry-Prolongée, 57000 Metz",
+       "where": [
+        "objet adresse"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-009",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "Résidence Les Mésanges",
+       "where": [
+        "objet adresse"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-010",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Metz",
+       "where": [
+        "objet adresse"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-011",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "GE-319-LQ",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-012",
+       "type": "NIR",
+       "direct": true,
+       "value": "188075703030092",
+       "where": [
+        "valeur sous clé nominative"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-013",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Thi Lan Nguyen",
+       "where": [
+        "valeur, note échappée \\u"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-014",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "tnguyen",
+       "where": [
+        "valeur login"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-015",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "tl.nguyen@exemple.test",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-016",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639984697",
+       "where": [
+        "nombre JSON"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-017",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1981-10-12",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-018",
+       "type": "CARTE",
+       "direct": true,
+       "value": "4970126776498843",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-019",
+       "type": "IP",
+       "direct": true,
+       "value": "2001:db8::4a:1f",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "03-020",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "pharmacienne",
+       "where": [
+        "valeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 22,
+      "vrais": 21,
+      "faux": 1,
+      "faux_dates": 1,
+      "faux_exemples": [
+       "2026 02 01"
+      ]
+     },
+     "keep_total": 1,
+     "keep_ok": 1,
+     "keep_lost": []
+    },
+    {
+     "slug": "04_xml_sinistre",
+     "format": "xml",
+     "outputs": [
+      [
+       "declaration_sinistre.xml",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "04-001",
+       "type": "ORGANISATION",
+       "direct": false,
+       "value": "Assurances Bellerive",
+       "where": [
+        "élément assureur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-002",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Maëlle Le Goff",
+       "where": [
+        "commentaire, attributs, instruction de traitement"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": true
+      },
+      {
+       "id": "04-003",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "mlegoff",
+       "where": [
+        "commentaire XML"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-004",
+       "type": "NUMERO_DOSSIER",
+       "direct": false,
+       "value": "RG 23/04567",
+       "where": [
+        "attribut"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-005",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1992-03-05",
+       "where": [
+        "élément"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-006",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "9 venelle de Kerbriant, 29200 Brest",
+       "where": [
+        "élément (saut de ligne)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-007",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639980805",
+       "where": [
+        "élément"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-008",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "maelle.legoff@exemple.test",
+       "where": [
+        "élément"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-009",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Jean-Baptiste Kowalczyk",
+       "where": [
+        "attribut, CDATA"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-010",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "GE-319-LQ",
+       "where": [
+        "attribut"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "04-011",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Brest",
+       "where": [
+        "élément"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 3,
+      "vrais": 2,
+      "faux": 1,
+      "faux_dates": 0,
+      "faux_exemples": [
+       "le boucher du marche couvert"
+      ]
+     },
+     "keep_total": 1,
+     "keep_ok": 0,
+     "keep_lost": [
+      "Le boucher du marché couvert propose désormais des produits bio."
+     ]
+    },
+    {
+     "slug": "05_html_equipe",
+     "format": "html",
+     "outputs": [
+      [
+       "equipe.html",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "05-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Claire Martin",
+       "where": [
+        "title, meta, alt, title, gras coupé, nom de fichier image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-002",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "claire.martin@exemple.test",
+       "where": [
+        "attribut data, mailto encodé %40"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-003",
+       "type": "URL",
+       "direct": false,
+       "value": "https://intranet.exemple.test/equipe/claire-martin",
+       "where": [
+        "href"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-004",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "responsable communication",
+       "where": [
+        "texte, attribut title"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-005",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "3 allée des Peupliers, 69003 Lyon",
+       "where": [
+        "balise address avec <br>"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-006",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Lyon",
+       "where": [
+        "balise address"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-007",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Julien Petit",
+       "where": [
+        "JSON-LD, texte, title"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-008",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "jpetit",
+       "where": [
+        "commentaire HTML"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-009",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1975-09-30",
+       "where": [
+        "texte"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-010",
+       "type": "URL",
+       "direct": false,
+       "value": "https://reseau.example/in/julien-petit-1975",
+       "where": [
+        "href et texte"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-011",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639988945",
+       "where": [
+        "JSON-LD, href tel:, texte"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "05-012",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "chef de projet",
+       "where": [
+        "texte"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 10,
+      "vrais": 10,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 2,
+     "keep_ok": 2,
+     "keep_lost": []
+    },
+    {
+     "slug": "06_eml_fil",
+     "format": "eml",
+     "outputs": [
+      [
+       "fil_discussion.eml",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "06-001",
+       "type": "ORGANISATION",
+       "direct": false,
+       "value": "Transports Valmont SAS",
+       "where": [
+        "signature"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-002",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Sophie Boucher",
+       "where": [
+        "From, Return-Path, signature texte et HTML, alt/title, URL, docx joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": true
+      },
+      {
+       "id": "06-003",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "sophie.boucher@exemple.test",
+       "where": [
+        "From, Return-Path"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-004",
+       "type": "IP",
+       "direct": true,
+       "value": "192.0.2.81",
+       "where": [
+        "en-tête Received"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-005",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "sboucher",
+       "where": [
+        "en-tête Received (nom d'hôte)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-006",
+       "type": "URL",
+       "direct": false,
+       "value": "https://intranet.exemple.test/annuaire/sophie.boucher",
+       "where": [
+        "signature, href"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-007",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "responsable RH",
+       "where": [
+        "signature"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-008",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639985559",
+       "where": [
+        "signature texte/HTML, image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-009",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33199002781",
+       "where": [
+        "signature"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-010",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Rémi Fontaine",
+       "where": [
+        "To, citation niveau 1"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-011",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "remi.fontaine@exemple.test",
+       "where": [
+        "To, Received, citation"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-012",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Jean-Baptiste Kowalczyk",
+       "where": [
+        "Cc, objet, citations niveaux 1-3, pièces jointes, noms de fichiers"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-013",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "J.-B. K.",
+       "where": [
+        "signature citée niveau 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-014",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "jb.kowalczyk@exemple.test",
+       "where": [
+        "Cc, citations"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-015",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7639222612779401990820835",
+       "where": [
+        "corps, citation niveau 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-016",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1988-07-23",
+       "where": [
+        "corps, docx joint, message joint niveau 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-017",
+       "type": "NIR",
+       "direct": true,
+       "value": "188075703030092",
+       "where": [
+        "citation niveau 2, docx joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-018",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639984155",
+       "where": [
+        "citation niveau 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-019",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "GE-319-LQ",
+       "where": [
+        "citation niveau 3, pdf joint, objet du message joint niveau 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-020",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "27 rue Jules-Ferry-Prolongée, 57000 Metz",
+       "where": [
+        "docx joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-021",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "Résidence Les Mésanges",
+       "where": [
+        "docx joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-022",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Inès Benali",
+       "where": [
+        "citation niveau 3 (transfert), pdf joint, message joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": true
+      },
+      {
+       "id": "06-023",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "ines.benali@exemple.test",
+       "where": [
+        "citation transfert, message joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-024",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639986593",
+       "where": [
+        "message joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-025",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Wed, 04 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-026",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Wed, 4 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Received"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-027",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "dim. 1 mars 2026 à 18:40",
+       "where": [
+        "en-tête cité dans le corps"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "06-028",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Sun, 01 Mar 2026 18:40:00 +0100",
+       "where": [
+        "Date du message joint"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 64,
+      "vrais": 62,
+      "faux": 2,
+      "faux_dates": 0,
+      "faux_exemples": [
+       "batiment b",
+       "marchand de journaux"
+      ]
+     },
+     "keep_total": 2,
+     "keep_ok": 1,
+     "keep_lost": [
+      "Le marchand de journaux ferme le dimanche après-midi."
+     ]
+    },
+    {
+     "slug": "07_eml_encode",
+     "format": "eml",
+     "outputs": [
+      [
+       "coordonnees.eml",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "07-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Maëlle Le Goff",
+       "where": [
+        "From (RFC 2047 Q), Subject (RFC 2047 B), corps HTML coupé, zip joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-002",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "maelle.legoff@exemple.test",
+       "where": [
+        "From"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-003",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "9 venelle de Kerbriant, 29200 Brest",
+       "where": [
+        "corps HTML"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-004",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639980805",
+       "where": [
+        "corps HTML"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-005",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "mlegoff",
+       "where": [
+        "URL du pixel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-006",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Capucine Girard",
+       "where": [
+        "To (NOM Prénom), salutation"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-007",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "capucine.girard@exemple.test",
+       "where": [
+        "To"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-008",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "GE-319-LQ",
+       "where": [
+        "zip joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "07-009",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Thu, 05 Mar 2026 11:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 13,
+      "vrais": 13,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 1,
+     "keep_ok": 1,
+     "keep_lost": []
+    },
+    {
+     "slug": "08_mbox_boite",
+     "format": "mbox",
+     "outputs": [
+      [
+       "boite.mbox",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "08-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Agathe Rousseau",
+       "where": [
+        "From, ligne From mbox, corps (« From the desk of », ligne échappée >From)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-002",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "agathe.rousseau@exemple.test",
+       "where": [
+        "From, séparateur mbox"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-003",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7626774948594371797620829",
+       "where": [
+        "corps QP"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-004",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "avocate",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-005",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Quentin Morel",
+       "where": [
+        "To, From, signature initiale"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-006",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "quentin.morel@exemple.test",
+       "where": [
+        "To, From, séparateur mbox"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-007",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Noémie Faure",
+       "where": [
+        "To, From"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-008",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "noemie.faure@exemple.test",
+       "where": [
+        "From, séparateur mbox"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-009",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639982412",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-010",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Mathis Lambert",
+       "where": [
+        "CSV joint (base64), objet, corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-011",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "2001-04-04",
+       "where": [
+        "CSV joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-012",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639981703",
+       "where": [
+        "CSV joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-013",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "mlambert",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-014",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Gaëtan Mercier",
+       "where": [
+        "CSV joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-015",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1978-10-31",
+       "where": [
+        "CSV joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-016",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639988099",
+       "where": [
+        "CSV joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-017",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon, 09 Mar 2026 08:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-018",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon Mar  9 08:00:00 2026",
+       "where": [
+        "séparateurs mbox"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-019",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Tue, 10 Mar 2026 08:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "08-020",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Tue, 10 Mar 2026 09:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 30,
+      "vrais": 29,
+      "faux": 1,
+      "faux_dates": 0,
+      "faux_exemples": [
+       "12 mars 2026 a 14 h 30"
+      ]
+     },
+     "keep_total": 1,
+     "keep_ok": 0,
+     "keep_lost": [
+      "Le comité se réunira le 12 mars 2026 à 14 h 30 en salle Bleue."
+     ]
+    },
+    {
+     "slug": "09_msg_outlook",
+     "format": "msg",
+     "outputs": [
+      [
+       "coordonnees.msg",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "09-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Agathe Rousseau",
+       "where": [
+        "sujet, destinataire, corps texte/HTML/RTF, pièce jointe et son nom"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-002",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "agathe.rousseau@exemple.test",
+       "where": [
+        "destinataire, en-têtes"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-003",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639984898",
+       "where": [
+        "corps texte/HTML/RTF"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-004",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1977-07-07",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-005",
+       "type": "CARTE",
+       "direct": true,
+       "value": "5132253506383343",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-006",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7626774948594371797620829",
+       "where": [
+        "pièce jointe"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-007",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Baptiste Dumoulin",
+       "where": [
+        "expéditeur, en-têtes"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-008",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "baptiste.dumoulin@exemple.test",
+       "where": [
+        "expéditeur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-009",
+       "type": "IP",
+       "direct": true,
+       "value": "203.0.113.36",
+       "where": [
+        "en-tête Received"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "09-010",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Mon, 9 Mar 2026 10:00:00 +0100",
+       "where": [
+        "Received (en-têtes de transport)"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 20,
+      "vrais": 20,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 1,
+     "keep_ok": 1,
+     "keep_lost": []
+    },
+    {
+     "slug": "10_docx_audit",
+     "format": "docx",
+     "outputs": [
+      [
+       "rapport_audit.docx",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "10-001",
+       "type": "ORGANISATION",
+       "direct": false,
+       "value": "Cabinet Lerouge & Associés",
+       "where": [
+        "pied de page, métadonnées"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-002",
+       "type": "SIREN",
+       "direct": false,
+       "value": "832199046",
+       "where": [
+        "pied de page, métadonnées"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-003",
+       "type": "SIRET",
+       "direct": false,
+       "value": "83219904654882",
+       "where": [
+        "pied de page, métadonnées"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-004",
+       "type": "TVA",
+       "direct": false,
+       "value": "FR92832199046",
+       "where": [
+        "pied de page, métadonnées"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-005",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Yannick Brunet",
+       "where": [
+        "corps (gras/italique coupé), tableau, descr image, mots-clés, titre, image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-006",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1970-03-03",
+       "where": [
+        "corps, tableau, image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-007",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "auditeur",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-008",
+       "type": "NIR",
+       "direct": true,
+       "value": "170036382736553",
+       "where": [
+        "tableau"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-009",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639981265",
+       "where": [
+        "tableau"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-010",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "HH-804-DY",
+       "where": [
+        "image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-011",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Solène Chevalier",
+       "where": [
+        "lien sur deux runs, info-bulle"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-012",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "solene.chevalier@exemple.test",
+       "where": [
+        "corps, cible du lien, mots-clés"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-013",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Lorraine Vienne",
+       "where": [
+        "corps, commentaire (personne au nom de ville)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-014",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7679094396346529953210535",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-015",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639989541",
+       "where": [
+        "commentaire"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-016",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Quentin Morel",
+       "where": [
+        "révision insérée, auteur du commentaire, dernier modificateur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-017",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Capucine Girard",
+       "where": [
+        "auteur des révisions, propriété personnalisée"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-018",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Anaïs Perrin",
+       "where": [
+        "révision supprimée, en-tête, note de bas de page, auteur, responsable"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-019",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7630884574967118848637871",
+       "where": [
+        "révision supprimée"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-020",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "anais.perrin@exemple.test",
+       "where": [
+        "pied de page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "10-021",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639982949",
+       "where": [
+        "pied de page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 15,
+      "vrais": 14,
+      "faux": 1,
+      "faux_dates": 0,
+      "faux_exemples": [
+       "le boucher du marche couvert"
+      ]
+     },
+     "keep_total": 2,
+     "keep_ok": 1,
+     "keep_lost": [
+      "Le boucher du marché couvert propose désormais des produits bio."
+     ]
+    },
+    {
+     "slug": "11_xlsx_registre",
+     "format": "xlsx",
+     "outputs": [
+      [
+       "registre_personnel.xlsx",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "11-001",
+       "type": "ORGANISATION",
+       "direct": false,
+       "value": "Mutuelle des Hauts-Plateaux",
+       "where": [
+        "métadonnées (société)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-002",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Mathis Lambert",
+       "where": [
+        "nom de feuille, nom défini, formule, cellules"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-003",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "2001-04-04",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-004",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639981703",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-005",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7633794677577299956109875",
+       "where": [
+        "cellule (doubles espaces)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-006",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "mlambert",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-007",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Gaëtan Mercier",
+       "where": [
+        "cellules, commentaire de cellule, note VML"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-008",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1978-10-31",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-009",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639988099",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-010",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7623830326595947124391780",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-011",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "gmercier",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-012",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "25 rue du Moulin-Tourneur, 49000 Angers",
+       "where": [
+        "commentaire de cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-013",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Ophélie Gauthier",
+       "where": [
+        "cellules, dernier modificateur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-014",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1989-12-12",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-015",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639985259",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-016",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7693837924126264025618475",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-017",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "ogauthier",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-018",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Noémie Faure",
+       "where": [
+        "chaîne en ligne, en-tête, auteur du commentaire, créateur, responsable"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-019",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639982412",
+       "where": [
+        "cellule numérique"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "11-020",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "noemie.faure@exemple.test",
+       "where": [
+        "pied de page, propriété personnalisée"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 6,
+      "vrais": 6,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 2,
+     "keep_ok": 2,
+     "keep_lost": []
+    },
+    {
+     "slug": "12_pptx_projet",
+     "format": "pptx",
+     "outputs": [
+      [
+       "[ORGANISATION_013].pptx",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "12-001",
+       "type": "ORGANISATION",
+       "direct": false,
+       "value": "Clinique de l'Orme-Rond",
+       "where": [
+        "métadonnées"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-002",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Ophélie Gauthier",
+       "where": [
+        "titre coupé en deux runs, descr, disposition, créateur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-003",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "ophelie.gauthier@exemple.test",
+       "where": [
+        "masque"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-004",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Baptiste Dumoulin",
+       "where": [
+        "corps, notes, commentaire"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-005",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "baptiste.dumoulin@exemple.test",
+       "where": [
+        "corps, propriété personnalisée"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-006",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639987080",
+       "where": [
+        "notes de l'orateur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-007",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "90 avenue du Haut-Fourneau, 42000 Saint-Étienne",
+       "where": [
+        "notes de l'orateur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-008",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "bdumoulin",
+       "where": [
+        "commentaire"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-009",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Eléonore Vidal",
+       "where": [
+        "corps (civilité + NOM), notes, auteur de commentaire, modificateur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-010",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "présidente",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "12-011",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1974-06-21",
+       "where": [
+        "notes"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 11,
+      "vrais": 10,
+      "faux": 1,
+      "faux_dates": 0,
+      "faux_exemples": [
+       "projet hermine"
+      ]
+     },
+     "keep_total": 1,
+     "keep_ok": 1,
+     "keep_lost": []
+    },
+    {
+     "slug": "13_odt_compte_rendu",
+     "format": "odt",
+     "outputs": [
+      [
+       "compte_rendu_ag.odt",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "13-001",
+       "type": "ORGANISATION",
+       "direct": false,
+       "value": "Association des Riverains du Val-Fleuri",
+       "where": [
+        "titre, métadonnées"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-002",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Eléonore Vidal",
+       "where": [
+        "corps (span), en-tête, créatrice initiale"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-003",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "présidente",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-004",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "eleonore.vidal@exemple.test",
+       "where": [
+        "pied de page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-005",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639986206",
+       "where": [
+        "pied de page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-006",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Marc Durand",
+       "where": [
+        "corps, annotation, modification suivie, créateur"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-007",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "marc.durand@exemple.test",
+       "where": [
+        "annotation, mots-clés"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-008",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639986784",
+       "where": [
+        "modification suivie (suppression)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-009",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1966-09-14",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-010",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "55 rue de la Poterne, 54000 Nancy",
+       "where": [
+        "corps (saut de ligne)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "13-011",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7653236403886119690426816",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 13,
+      "vrais": 10,
+      "faux": 3,
+      "faux_dates": 0,
+      "faux_exemples": [
+       "12 mars 2026 a 14 h 30",
+       "salle bleue",
+       "16 h"
+      ]
+     },
+     "keep_total": 2,
+     "keep_ok": 1,
+     "keep_lost": [
+      "Le comité se réunira le 12 mars 2026 à 14 h 30 en salle Bleue."
+     ]
+    },
+    {
+     "slug": "14_ods_planning",
+     "format": "ods",
+     "outputs": [
+      [
+       "planning_astreintes.ods",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "14-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Lucas Blanc",
+       "where": [
+        "nom de feuille, cellule, formule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "14-002",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639987809",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "14-003",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Solène Chevalier",
+       "where": [
+        "cellule, annotation, en-tête"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "14-004",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639987507",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "14-005",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Océane Marchand",
+       "where": [
+        "cellule, auteur d'annotation, créatrice"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "14-006",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "oceane.marchand@exemple.test",
+       "where": [
+        "cellule"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 6,
+      "vrais": 6,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 1,
+     "keep_ok": 1,
+     "keep_lost": []
+    },
+    {
+     "slug": "15_rtf_attestation",
+     "format": "rtf",
+     "outputs": [
+      [
+       "attestation.rtf",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "15-001",
+       "type": "ORGANISATION",
+       "direct": false,
+       "value": "Clinique de l'Orme-Rond",
+       "where": [
+        "\\info company"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-002",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Thi Lan Nguyen",
+       "where": [
+        "titre, en-tête, corps (italique)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-003",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1981-10-12",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-004",
+       "type": "NIR",
+       "direct": true,
+       "value": "281101374236779",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-005",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "66 avenue des Cerisiers-du-Japon, 13008 Marseille",
+       "where": [
+        "corps (\\line)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-006",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Firmin Delacroix-Vasseur",
+       "where": [
+        "auteur, corps (gras coupé), signature"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-007",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "F.D.V.",
+       "where": [
+        "signature (initiales)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-008",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "firmin.dv@exemple.test",
+       "where": [
+        "pied de page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-009",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639985526",
+       "where": [
+        "pied de page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-010",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "ingénieur méthodes",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "15-011",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Rouen",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 7,
+      "vrais": 7,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 1,
+     "keep_ok": 1,
+     "keep_lost": []
+    },
+    {
+     "slug": "16_pdf_releve",
+     "format": "pdf",
+     "outputs": [
+      [
+       "releve_identite.pdf",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "16-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Lucas Blanc",
+       "where": [
+        "corps (NOM Prénom), adresse, titre, sujet, signet, page 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "16-002",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7694762577518283742967866",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "16-003",
+       "type": "CARTE",
+       "direct": true,
+       "value": "5132199930974746",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "16-004",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "8 quai des Mariniers-d'Antan, 33000 Bordeaux",
+       "where": [
+        "zone de texte sur deux lignes"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "16-005",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1984-12-24",
+       "where": [
+        "page 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "16-006",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639987809",
+       "where": [
+        "page 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "16-007",
+       "type": "PLAQUE",
+       "direct": true,
+       "value": "SM-244-QB",
+       "where": [
+        "page 2"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "16-008",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Thi Lan Nguyen",
+       "where": [
+        "deux polices sur une ligne, annotation, auteur, XMP"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "16-009",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "tl.nguyen@exemple.test",
+       "where": [
+        "corps, lien, mots-clés"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 1,
+      "vrais": 1,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 0,
+     "keep_ok": 0,
+     "keep_lost": []
+    },
+    {
+     "slug": "17_pdf_numerise",
+     "format": "pdf",
+     "outputs": [
+      [
+       "courrier_numerise.pdf",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "17-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Aymeric de Valombreuse",
+       "where": [
+        "image de la page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "17-002",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "2 place du Pilori-Vieux, 37000 Tours",
+       "where": [
+        "image de la page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "17-003",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639987445",
+       "where": [
+        "image de la page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "17-004",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1959-01-28",
+       "where": [
+        "image de la page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "17-005",
+       "type": "NIR",
+       "direct": true,
+       "value": "159013717447383",
+       "where": [
+        "image de la page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "17-006",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7653832419785025088366803",
+       "where": [
+        "image de la page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "17-007",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "a.devalombreuse@exemple.test",
+       "where": [
+        "image de la page"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 0,
+      "vrais": 0,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 0,
+     "keep_ok": 0,
+     "keep_lost": []
+    },
+    {
+     "slug": "18_png_capture",
+     "format": "png",
+     "outputs": [
+      [
+       "capture_formulaire.png",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "18-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Firmin Delacroix-Vasseur",
+       "where": [
+        "image, métadonnées PNG"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "18-002",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "firmin.dv@exemple.test",
+       "where": [
+        "image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "18-003",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639985526",
+       "where": [
+        "image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "18-004",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7687573018181263165969491",
+       "where": [
+        "image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "18-005",
+       "type": "IP",
+       "direct": true,
+       "value": "198.51.100.47",
+       "where": [
+        "image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "18-006",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "fdelacroixv",
+       "where": [
+        "image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "18-007",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Océane Marchand",
+       "where": [
+        "métadonnées PNG (tEXt, iTXt)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 0,
+      "vrais": 0,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 0,
+     "keep_ok": 0,
+     "keep_lost": []
+    },
+    {
+     "slug": "19_jpg_badge",
+     "format": "jpg",
+     "outputs": [
+      [
+       "photo_badge.jpg",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "19-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Océane Marchand",
+       "where": [
+        "image, EXIF (Artist, XPAuthor, CameraOwnerName, description)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "19-002",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1999-02-27",
+       "where": [
+        "image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "19-003",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "omarchand",
+       "where": [
+        "image"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "19-004",
+       "type": "GPS",
+       "direct": false,
+       "value": "47.22,-1.55",
+       "where": [
+        "EXIF GPS"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 0,
+      "vrais": 0,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 0,
+     "keep_ok": 0,
+     "keep_lost": []
+    },
+    {
+     "slug": "20_zip_dossier",
+     "format": "zip",
+     "outputs": [
+      [
+       "dossier_complet.zip",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "20-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Firmin Delacroix-Vasseur",
+       "where": [
+        "nom de dossier, nom de fichier, CV, courriel, docx et txt imbriqués"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-002",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "4 sentier des Grives, 76000 Rouen",
+       "where": [
+        "CV"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-003",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "firmin.dv@exemple.test",
+       "where": [
+        "CV, courriel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-004",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639985526",
+       "where": [
+        "CV"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-005",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1972-05-06",
+       "where": [
+        "CV, docx imbriqué"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-006",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "fdelacroixv",
+       "where": [
+        "nom de fichier du courriel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-007",
+       "type": "NIR",
+       "direct": true,
+       "value": "172057686617514",
+       "where": [
+        "docx dans zip dans courriel dans zip"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-008",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7687573018181263165969491",
+       "where": [
+        "txt dans zip dans courriel dans zip"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-009",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Inès Benali",
+       "where": [
+        "commentaire d'archive, courriel, auteur du docx, CSV"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-010",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "ines.benali@exemple.test",
+       "where": [
+        "courriel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-011",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639986593",
+       "where": [
+        "courriel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "20-012",
+       "type": "DATE_ENVOI",
+       "direct": false,
+       "value": "Fri, 06 Mar 2026 10:00:00 +0100",
+       "where": [
+        "Date"
+       ],
+       "leaked": false,
+       "precision_only": true,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 20,
+      "vrais": 20,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 2,
+     "keep_ok": 2,
+     "keep_lost": []
+    },
+    {
+     "slug": "21_7z_sauvegarde",
+     "format": "7z",
+     "outputs": [
+      [
+       "sauvegarde.7z",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "21-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Marc Durand",
+       "where": [
+        "courriel dans zip dans 7z, nom de fichier 7z, CSV"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "21-002",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "marc.durand@exemple.test",
+       "where": [
+        "courriel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "21-003",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+33639986784",
+       "where": [
+        "courriel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "21-004",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7653236403886119690426816",
+       "where": [
+        "CSV joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "21-005",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Eléonore Vidal",
+       "where": [
+        "courriel, CSV joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "21-006",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "eleonore.vidal@exemple.test",
+       "where": [
+        "courriel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "21-007",
+       "type": "IBAN",
+       "direct": true,
+       "value": "FR7645069266599252712395018",
+       "where": [
+        "CSV joint"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "21-008",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Mathis Lambert",
+       "where": [
+        "courriel"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 6,
+      "vrais": 6,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 1,
+     "keep_ok": 1,
+     "keep_lost": []
+    },
+    {
+     "slug": "22_dossiers_nommes",
+     "format": "txt",
+     "outputs": [
+      [
+       "Salariés/[PERSONNE_055]/[PERSONNE_055]_entretien.csv",
+       false
+      ],
+      [
+       "Salariés/[PERSONNE_055]/CV [PERSONNE_055].txt",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "22-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Ophélie Gauthier",
+       "where": [
+        "noms de dossier et de fichiers, minuscules et majuscules sans accent"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "22-002",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "1 square des Hortensias-Bleus, 06000 Nice",
+       "where": [
+        "CV"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "22-003",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1989-12-12",
+       "where": [
+        "CV"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "22-004",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Capucine Girard",
+       "where": [
+        "CSV"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 4,
+      "vrais": 4,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 1,
+     "keep_ok": 0,
+     "keep_lost": [
+      "Le boucher du marché couvert propose désormais des produits bio."
+     ]
+    },
+    {
+     "slug": "23_txt_temoins",
+     "format": "txt",
+     "outputs": [
+      [
+       "notes_internes.txt",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "23-001",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Lyon",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "23-002",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Vienne",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "23-003",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Paris",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "23-004",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Isère",
+       "where": [
+        "corps"
+       ],
+       "leaked": true,
+       "precision_only": false,
+       "hits": [
+        "23_txt_temoins/notes_internes.txt [octets utf-8] « Isère »",
+        "23_txt_temoins/notes_internes.txt « Isère »"
+       ],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 7,
+      "vrais": 3,
+      "faux": 4,
+      "faux_dates": 0,
+      "faux_exemples": [
+       "le boucher du marche couvert",
+       "12 mars 2026 a 14 h 30",
+       "salle bleue",
+       "fontaine"
+      ]
+     },
+     "keep_total": 13,
+     "keep_ok": 11,
+     "keep_lost": [
+      "Le boucher du marché couvert propose désormais des produits bio.",
+      "Le comité se réunira le 12 mars 2026 à 14 h 30 en salle Bleue."
+     ]
+    },
+    {
+     "slug": "24_txt_anglais",
+     "format": "txt",
+     "outputs": [
+      [
+       "incident_report.txt",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "24-001",
+       "type": "NUMERO_DOSSIER",
+       "direct": false,
+       "value": "INC-2026-0315",
+       "where": [
+        "titre"
+       ],
+       "leaked": true,
+       "precision_only": false,
+       "hits": [
+        "24_txt_anglais/incident_report.txt [octets latin-1] « inc20260315 »",
+        "24_txt_anglais/incident_report.txt [octets utf-8] « inc20260315 »",
+        "24_txt_anglais/incident_report.txt « inc20260315 »"
+       ],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-002",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Oliver Pemberton",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-003",
+       "type": "FONCTION",
+       "direct": false,
+       "value": "site manager",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-004",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "oliver.pemberton@company.example",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-005",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+442079460123",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-006",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+447700900456",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-007",
+       "type": "DATE_NAISSANCE",
+       "direct": true,
+       "value": "1985-03-14",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-008",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "opemberton",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-009",
+       "type": "ADRESSE",
+       "direct": true,
+       "value": "221 Larkspur Crescent, BS1 4XE Bristol",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-010",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Bristol",
+       "where": [
+        "adresse"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-011",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Siobhan O'Callaghan",
+       "where": [
+        "corps (apostrophe)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-012",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "siobhan.ocallaghan@company.example",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-013",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+35315550199",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-014",
+       "type": "IDENTIFIANT",
+       "direct": true,
+       "value": "socallaghan",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-015",
+       "type": "IP",
+       "direct": true,
+       "value": "2001:db8:85a3::8a2e:370:7334",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-016",
+       "type": "IP",
+       "direct": true,
+       "value": "198.51.100.77",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-017",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Lukas Müller",
+       "where": [
+        "corps (majuscules avec tréma)"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-018",
+       "type": "LIEU",
+       "direct": false,
+       "value": "Berlin",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-019",
+       "type": "TELEPHONE",
+       "direct": true,
+       "value": "+4930901820",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-020",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "lukas.mueller@firma.example",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-021",
+       "type": "IBAN",
+       "direct": true,
+       "value": "DE93899603461786412363",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-022",
+       "type": "CARTE",
+       "direct": true,
+       "value": "4970970234640391",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "24-023",
+       "type": "IBAN",
+       "direct": true,
+       "value": "BE25057790416082",
+       "where": [
+        "corps"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 19,
+      "vrais": 19,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 2,
+     "keep_ok": 2,
+     "keep_lost": []
+    },
+    {
+     "slug": "25_pdf_signe",
+     "format": "pdf",
+     "outputs": [
+      [
+       "Contrat_[PERSONNE_072]_signe.pdf",
+       false
+      ]
+     ],
+     "produced": true,
+     "quarantined": false,
+     "entries": [
+      {
+       "id": "25-001",
+       "type": "PERSONNE",
+       "direct": true,
+       "value": "Zéphyrin Quintavalle-Brezac",
+       "where": [
+        "corps, champ de formulaire, tampon image (casse mixte), signature numérique, métadonnées, XMP, nom de fichier"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "25-002",
+       "type": "EMAIL",
+       "direct": true,
+       "value": "zephyrin.quintavalle-brezac@exemple.test",
+       "where": [
+        "corps, certificat de signature"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "25-003",
+       "type": "HORODATAGE",
+       "direct": false,
+       "value": "2026-03-14 10:42:07 UTC",
+       "where": [
+        "tampon image (vertical), date de signature, XMP"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "25-004",
+       "type": "IDENTIFIANT_TECHNIQUE",
+       "direct": false,
+       "value": "9f3a7c21e8b04d56a1f2c3e4d5b6a7980c1d2e3f",
+       "where": [
+        "image, QR code, mots-clés"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      },
+      {
+       "id": "25-005",
+       "type": "IDENTIFIANT_TECHNIQUE",
+       "direct": false,
+       "value": "TRX-a8F3k2-xyz-9Qm4Lp",
+       "where": [
+        "texte invisible, mots-clés"
+       ],
+       "leaked": false,
+       "precision_only": false,
+       "hits": [],
+       "first_name_residue": false
+      }
+     ],
+     "precision": {
+      "spans": 1,
+      "vrais": 1,
+      "faux": 0,
+      "faux_dates": 0,
+      "faux_exemples": []
+     },
+     "keep_total": 2,
+     "keep_ok": 2,
+     "keep_lost": []
+    }
+   ],
+   "aggregate": {
+    "direct": [
+     324,
+     324
+    ],
+    "indirect": [
+     58,
+     60
+    ],
+    "by_type": {
+     "ORGANISATION": [
+      8,
+      8
+     ],
+     "SIREN": [
+      2,
+      2
+     ],
+     "SIRET": [
+      2,
+      2
+     ],
+     "TVA": [
+      2,
+      2
+     ],
+     "PERSONNE": [
+      72,
+      72
+     ],
+     "ADRESSE": [
+      30,
+      30
+     ],
+     "TELEPHONE": [
+      51,
+      51
+     ],
+     "EMAIL": [
+      49,
+      49
+     ],
+     "NUMERO_DOSSIER": [
+      2,
+      3
+     ],
+     "DATE_NAISSANCE": [
+      34,
+      34
+     ],
+     "LIEU": [
+      23,
+      24
+     ],
+     "NIR": [
+      7,
+      7
+     ],
+     "FONCTION": [
+      11,
+      11
+     ],
+     "IBAN": [
+      32,
+      32
+     ],
+     "CARTE": [
+      5,
+      5
+     ],
+     "PLAQUE": [
+      19,
+      19
+     ],
+     "IP": [
+      8,
+      8
+     ],
+     "IDENTIFIANT": [
+      17,
+      17
+     ],
+     "URL": [
+      4,
+      4
+     ],
+     "DATE_ENVOI": [
+      11,
+      11
+     ],
+     "GPS": [
+      1,
+      1
+     ],
+     "HORODATAGE": [
+      1,
+      1
+     ],
+     "IDENTIFIANT_TECHNIQUE": [
+      2,
+      2
+     ]
+    },
+    "by_format_type": {
+     "txt": {
+      "ORGANISATION": [
+       1,
+       1
+      ],
+      "SIREN": [
+       1,
+       1
+      ],
+      "SIRET": [
+       1,
+       1
+      ],
+      "TVA": [
+       1,
+       1
+      ],
+      "PERSONNE": [
+       7,
+       7
+      ],
+      "ADRESSE": [
+       4,
+       4
+      ],
+      "TELEPHONE": [
+       7,
+       7
+      ],
+      "EMAIL": [
+       5,
+       5
+      ],
+      "NUMERO_DOSSIER": [
+       1,
+       2
+      ],
+      "DATE_NAISSANCE": [
+       3,
+       3
+      ],
+      "LIEU": [
+       7,
+       8
+      ],
+      "NIR": [
+       1,
+       1
+      ],
+      "FONCTION": [
+       2,
+       2
+      ],
+      "IBAN": [
+       4,
+       4
+      ],
+      "CARTE": [
+       2,
+       2
+      ],
+      "PLAQUE": [
+       1,
+       1
+      ],
+      "IP": [
+       3,
+       3
+      ],
+      "IDENTIFIANT": [
+       3,
+       3
+      ],
+      "URL": [
+       1,
+       1
+      ]
+     },
+     "csv": {
+      "PERSONNE": [
+       12,
+       12
+      ],
+      "DATE_NAISSANCE": [
+       12,
+       12
+      ],
+      "EMAIL": [
+       12,
+       12
+      ],
+      "TELEPHONE": [
+       12,
+       12
+      ],
+      "IBAN": [
+       12,
+       12
+      ],
+      "ADRESSE": [
+       12,
+       12
+      ],
+      "LIEU": [
+       12,
+       12
+      ],
+      "PLAQUE": [
+       12,
+       12
+      ]
+     },
+     "json": {
+      "PERSONNE": [
+       2,
+       2
+      ],
+      "IDENTIFIANT": [
+       2,
+       2
+      ],
+      "EMAIL": [
+       2,
+       2
+      ],
+      "TELEPHONE": [
+       2,
+       2
+      ],
+      "DATE_NAISSANCE": [
+       2,
+       2
+      ],
+      "IP": [
+       2,
+       2
+      ],
+      "IBAN": [
+       1,
+       1
+      ],
+      "ADRESSE": [
+       2,
+       2
+      ],
+      "LIEU": [
+       1,
+       1
+      ],
+      "PLAQUE": [
+       1,
+       1
+      ],
+      "NIR": [
+       1,
+       1
+      ],
+      "CARTE": [
+       1,
+       1
+      ],
+      "FONCTION": [
+       1,
+       1
+      ]
+     },
+     "xml": {
+      "ORGANISATION": [
+       1,
+       1
+      ],
+      "PERSONNE": [
+       2,
+       2
+      ],
+      "IDENTIFIANT": [
+       1,
+       1
+      ],
+      "NUMERO_DOSSIER": [
+       1,
+       1
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "ADRESSE": [
+       1,
+       1
+      ],
+      "TELEPHONE": [
+       1,
+       1
+      ],
+      "EMAIL": [
+       1,
+       1
+      ],
+      "PLAQUE": [
+       1,
+       1
+      ],
+      "LIEU": [
+       1,
+       1
+      ]
+     },
+     "html": {
+      "PERSONNE": [
+       2,
+       2
+      ],
+      "EMAIL": [
+       1,
+       1
+      ],
+      "URL": [
+       2,
+       2
+      ],
+      "FONCTION": [
+       2,
+       2
+      ],
+      "ADRESSE": [
+       1,
+       1
+      ],
+      "LIEU": [
+       1,
+       1
+      ],
+      "IDENTIFIANT": [
+       1,
+       1
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "TELEPHONE": [
+       1,
+       1
+      ]
+     },
+     "eml": {
+      "ORGANISATION": [
+       1,
+       1
+      ],
+      "PERSONNE": [
+       7,
+       7
+      ],
+      "EMAIL": [
+       6,
+       6
+      ],
+      "IP": [
+       1,
+       1
+      ],
+      "IDENTIFIANT": [
+       2,
+       2
+      ],
+      "URL": [
+       1,
+       1
+      ],
+      "FONCTION": [
+       1,
+       1
+      ],
+      "TELEPHONE": [
+       5,
+       5
+      ],
+      "IBAN": [
+       1,
+       1
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "NIR": [
+       1,
+       1
+      ],
+      "PLAQUE": [
+       2,
+       2
+      ],
+      "ADRESSE": [
+       3,
+       3
+      ],
+      "DATE_ENVOI": [
+       5,
+       5
+      ]
+     },
+     "mbox": {
+      "PERSONNE": [
+       5,
+       5
+      ],
+      "EMAIL": [
+       3,
+       3
+      ],
+      "IBAN": [
+       1,
+       1
+      ],
+      "FONCTION": [
+       1,
+       1
+      ],
+      "TELEPHONE": [
+       3,
+       3
+      ],
+      "DATE_NAISSANCE": [
+       2,
+       2
+      ],
+      "IDENTIFIANT": [
+       1,
+       1
+      ],
+      "DATE_ENVOI": [
+       4,
+       4
+      ]
+     },
+     "msg": {
+      "PERSONNE": [
+       2,
+       2
+      ],
+      "EMAIL": [
+       2,
+       2
+      ],
+      "TELEPHONE": [
+       1,
+       1
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "CARTE": [
+       1,
+       1
+      ],
+      "IBAN": [
+       1,
+       1
+      ],
+      "IP": [
+       1,
+       1
+      ],
+      "DATE_ENVOI": [
+       1,
+       1
+      ]
+     },
+     "docx": {
+      "ORGANISATION": [
+       1,
+       1
+      ],
+      "SIREN": [
+       1,
+       1
+      ],
+      "SIRET": [
+       1,
+       1
+      ],
+      "TVA": [
+       1,
+       1
+      ],
+      "PERSONNE": [
+       6,
+       6
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "FONCTION": [
+       1,
+       1
+      ],
+      "NIR": [
+       1,
+       1
+      ],
+      "TELEPHONE": [
+       3,
+       3
+      ],
+      "PLAQUE": [
+       1,
+       1
+      ],
+      "EMAIL": [
+       2,
+       2
+      ],
+      "IBAN": [
+       2,
+       2
+      ]
+     },
+     "xlsx": {
+      "ORGANISATION": [
+       1,
+       1
+      ],
+      "PERSONNE": [
+       4,
+       4
+      ],
+      "DATE_NAISSANCE": [
+       3,
+       3
+      ],
+      "TELEPHONE": [
+       4,
+       4
+      ],
+      "IBAN": [
+       3,
+       3
+      ],
+      "IDENTIFIANT": [
+       3,
+       3
+      ],
+      "ADRESSE": [
+       1,
+       1
+      ],
+      "EMAIL": [
+       1,
+       1
+      ]
+     },
+     "pptx": {
+      "ORGANISATION": [
+       1,
+       1
+      ],
+      "PERSONNE": [
+       3,
+       3
+      ],
+      "EMAIL": [
+       2,
+       2
+      ],
+      "TELEPHONE": [
+       1,
+       1
+      ],
+      "ADRESSE": [
+       1,
+       1
+      ],
+      "IDENTIFIANT": [
+       1,
+       1
+      ],
+      "FONCTION": [
+       1,
+       1
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ]
+     },
+     "odt": {
+      "ORGANISATION": [
+       1,
+       1
+      ],
+      "PERSONNE": [
+       2,
+       2
+      ],
+      "FONCTION": [
+       1,
+       1
+      ],
+      "EMAIL": [
+       2,
+       2
+      ],
+      "TELEPHONE": [
+       2,
+       2
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "ADRESSE": [
+       1,
+       1
+      ],
+      "IBAN": [
+       1,
+       1
+      ]
+     },
+     "ods": {
+      "PERSONNE": [
+       3,
+       3
+      ],
+      "TELEPHONE": [
+       2,
+       2
+      ],
+      "EMAIL": [
+       1,
+       1
+      ]
+     },
+     "rtf": {
+      "ORGANISATION": [
+       1,
+       1
+      ],
+      "PERSONNE": [
+       3,
+       3
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "NIR": [
+       1,
+       1
+      ],
+      "ADRESSE": [
+       1,
+       1
+      ],
+      "EMAIL": [
+       1,
+       1
+      ],
+      "TELEPHONE": [
+       1,
+       1
+      ],
+      "FONCTION": [
+       1,
+       1
+      ],
+      "LIEU": [
+       1,
+       1
+      ]
+     },
+     "pdf": {
+      "PERSONNE": [
+       4,
+       4
+      ],
+      "IBAN": [
+       2,
+       2
+      ],
+      "CARTE": [
+       1,
+       1
+      ],
+      "ADRESSE": [
+       2,
+       2
+      ],
+      "DATE_NAISSANCE": [
+       2,
+       2
+      ],
+      "TELEPHONE": [
+       2,
+       2
+      ],
+      "PLAQUE": [
+       1,
+       1
+      ],
+      "EMAIL": [
+       3,
+       3
+      ],
+      "NIR": [
+       1,
+       1
+      ],
+      "HORODATAGE": [
+       1,
+       1
+      ],
+      "IDENTIFIANT_TECHNIQUE": [
+       2,
+       2
+      ]
+     },
+     "png": {
+      "PERSONNE": [
+       2,
+       2
+      ],
+      "EMAIL": [
+       1,
+       1
+      ],
+      "TELEPHONE": [
+       1,
+       1
+      ],
+      "IBAN": [
+       1,
+       1
+      ],
+      "IP": [
+       1,
+       1
+      ],
+      "IDENTIFIANT": [
+       1,
+       1
+      ]
+     },
+     "jpg": {
+      "PERSONNE": [
+       1,
+       1
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "IDENTIFIANT": [
+       1,
+       1
+      ],
+      "GPS": [
+       1,
+       1
+      ]
+     },
+     "zip": {
+      "PERSONNE": [
+       2,
+       2
+      ],
+      "ADRESSE": [
+       1,
+       1
+      ],
+      "EMAIL": [
+       2,
+       2
+      ],
+      "TELEPHONE": [
+       2,
+       2
+      ],
+      "DATE_NAISSANCE": [
+       1,
+       1
+      ],
+      "IDENTIFIANT": [
+       1,
+       1
+      ],
+      "NIR": [
+       1,
+       1
+      ],
+      "IBAN": [
+       1,
+       1
+      ],
+      "DATE_ENVOI": [
+       1,
+       1
+      ]
+     },
+     "7z": {
+      "PERSONNE": [
+       3,
+       3
+      ],
+      "EMAIL": [
+       2,
+       2
+      ],
+      "TELEPHONE": [
+       1,
+       1
+      ],
+      "IBAN": [
+       2,
+       2
+      ]
+     }
+    },
+    "precision_by_format": {
+     "txt": [
+      52,
+      57
+     ],
+     "csv": [
+      32,
+      32
+     ],
+     "json": [
+      21,
+      22
+     ],
+     "xml": [
+      2,
+      3
+     ],
+     "html": [
+      10,
+      10
+     ],
+     "eml": [
+      75,
+      77
+     ],
+     "mbox": [
+      29,
+      30
+     ],
+     "msg": [
+      20,
+      20
+     ],
+     "docx": [
+      14,
+      15
+     ],
+     "xlsx": [
+      6,
+      6
+     ],
+     "pptx": [
+      10,
+      11
+     ],
+     "odt": [
+      10,
+      13
+     ],
+     "ods": [
+      6,
+      6
+     ],
+     "rtf": [
+      7,
+      7
+     ],
+     "pdf": [
+      2,
+      2
+     ],
+     "png": [
+      0,
+      0
+     ],
+     "jpg": [
+      0,
+      0
+     ],
+     "zip": [
+      20,
+      20
+     ],
+     "7z": [
+      6,
+      6
+     ]
+    },
+    "precision": [
+     322,
+     337
+    ],
+    "precision_without_dates": [
+     322,
+     335
+    ],
+    "keep": [
+     37,
+     45
+    ]
+   },
+   "report_counts": {
+    "a_revoir": 10,
+    "anonymise": 16
+   }
+  }
+ }
+}
