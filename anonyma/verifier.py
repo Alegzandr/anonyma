@@ -53,6 +53,8 @@ from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.data import is_common_word
 from anonyma.detectors._custom import STOP_WORDS
+from anonyma.detectors.opaque import IdWhitelist
+from anonyma.detectors.regex_fr import kept_reference
 from anonyma.models import (
     Detector,
     Document,
@@ -66,7 +68,7 @@ from anonyma.models import (
     Severity,
     VerificationResult,
 )
-from anonyma.names import PARTICLES, civility_of, needs_capital
+from anonyma.names import PARTICLES, ROLE_WORDS, civility_of, needs_capital
 from anonyma.policy import keeps
 from anonyma.rawscan import RawScanner, raw_residues
 from anonyma.replacer import BLACKOUT_CHAR
@@ -151,6 +153,9 @@ class Verifier:
         self.config = config
         #: Detectors flagged ``verify = False`` (slow, non-deterministic LLM) are skipped.
         self.detectors = [d for d in detectors if d.verify]
+        #: References kept on purpose are no residues (« --conserver-identifiants »).
+        self.ids = IdWhitelist(config.opaque_id_whitelist or [])
+        self.keeping = bool(self.ids) or not config.mask_opaque_ids
 
     def verify(
         self,
@@ -274,9 +279,15 @@ class Verifier:
                     if found is None or entity.score < self.config.min_score:
                         continue
                     segment = found
-                    span = atomic.fit(segment.text, entity.start, entity.end)
+                    span = atomic.fit_typed(
+                        segment.text, entity.start, entity.end, entity.entity_type
+                    )
                     if span is None:
                         continue
+                    if self.keeping and kept_reference(
+                        self.config, self.ids, segment.text, span[0], span[1]
+                    ):
+                        continue  # « Facture_FAC-2026-743117.pdf »: kept on purpose
                     entity.start, entity.end = span
                     value = segment.text[entity.start : entity.end]
                     if normalize(value) in allowed_keys:
@@ -593,8 +604,14 @@ def _neutral_outside(
         key = normalize(word)
         if civility_of(word) is not None or key in PARTICLES or key in STOP_WORDS:
             continue
+        if key in ROLE_WORDS or key in _LINK_SCHEMES:
+            continue  # « Service Client » around a substitute, ``mailto:`` before one
         return False
     return True
+
+
+#: URL schemes glued to a substitute by a model span (``mailto:EMAIL_001@…``).
+_LINK_SCHEMES = frozenset({"mailto", "tel", "callto", "sip", "http", "https", "www"})
 
 
 __all__ = [
