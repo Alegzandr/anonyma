@@ -26,6 +26,7 @@ from pathlib import Path
 from anonyma import paths
 from anonyma.config import Config
 from anonyma.logs import get_logger
+from anonyma.winjob import ProcessJob
 
 log = get_logger("libreoffice")
 
@@ -287,6 +288,9 @@ def convert(
         )
     except OSError as exc:
         raise ConversionError("LibreOffice n'a pas pu être lancé") from exc
+    # Windows: soffice.exe may return while its soffice.bin is still running, holding
+    # the profile in the batch folder; the job waits for the whole tree, then ends it.
+    job = ProcessJob(process)
     try:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
@@ -295,6 +299,8 @@ def convert(
     except BaseException:  # interrupted (Ctrl+C, cancellation): no orphan soffice
         _kill_tree(process)
         raise
+    finally:
+        job.finish()
     extension = target.split(":", 1)[0]
     result = out_dir / f"{staged.stem}.{extension}"
     if process.returncode != 0 or not result.is_file() or result.stat().st_size == 0:
