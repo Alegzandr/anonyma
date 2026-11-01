@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import time
+import types
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -345,7 +346,13 @@ class _FakePopen:
 @pytest.fixture
 def fake_popen(monkeypatch: pytest.MonkeyPatch) -> type[_FakePopen]:
     monkeypatch.setattr(_FakePopen, "calls", [])
-    monkeypatch.setattr(updater.subprocess, "Popen", _FakePopen)
+    # Only the updater's own launches are faked: ``subprocess.run`` (``ditto`` when an
+    # archive is extracted on macOS) keeps the real ``Popen``.
+    fake = types.SimpleNamespace(
+        **{name: getattr(subprocess, name) for name in dir(subprocess) if not name.startswith("_")}
+    )
+    fake.Popen = _FakePopen
+    monkeypatch.setattr(updater, "subprocess", fake)
     return _FakePopen
 
 
