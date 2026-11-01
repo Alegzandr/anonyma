@@ -3,7 +3,10 @@
 Every generator is deterministic for a given ``random.Random`` and preserves the
 shape of the original (case, separators, grouping, prefixes). Numbers carry valid
 check digits (Luhn, mod-97, RIB and NIR keys); phone numbers use the ARCEP ranges
-reserved for fiction when possible; IP addresses use documentation ranges.
+reserved for fiction when possible; IP addresses use documentation ranges. Domains
+keep their public suffix with a plausible label (see :func:`fake_domain` for why no
+reserved suffix), places are real communes with a real postcode, organisations keep
+their designators (« Groupe », « SAS ») around a new core.
 """
 
 from __future__ import annotations
@@ -19,7 +22,8 @@ from functools import lru_cache
 from faker import Faker
 
 from anonyma import checksums
-from anonyma.data import first_names
+from anonyma.data import first_name, first_names
+from anonyma.data.communes import communes
 from anonyma.names import PersonName, initials_of, is_initial, login_of, login_parts
 
 PUBLIC_MAIL_DOMAINS = frozenset(
@@ -260,11 +264,70 @@ def fake_initials(fake: FakePerson) -> str:
 # -- contact data -----------------------------------------------------------------
 
 
-def fake_domain(rng: random.Random) -> str:
-    fake = faker_fr()
-    fake.seed_instance(rng.getrandbits(32))
-    word = re.sub(r"[^a-z0-9]", "", checksums.compact(fake.domain_word()).lower()) or "exemple"
-    return f"{word}.example"
+#: Public suffixes of more than one label, kept whole (``cabinet.co.uk`` -> ``co.uk``).
+#: ``gouv.fr`` is no suffix a substitute may claim: a fake ministry would read as one.
+_MULTI_SUFFIXES = frozenset(
+    ["co.uk", "org.uk", "ac.uk", "com.au", "co.jp", "com.br", "co.nz", "asso.fr", "com.fr",
+     "nom.fr", "tm.fr", "presse.fr"]
+)  # fmt: skip
+_SUFFIX_REWRITES = {"gouv.fr": "fr"}
+#: Sub-domain labels that name nothing (kept: ``mail.sorbel.fr`` -> ``mail.courtois.fr``).
+_GENERIC_SUBDOMAINS = frozenset(
+    ["www", "mail", "mail2", "smtp", "mx", "webmail", "extranet", "intranet", "portail", "app",
+     "api", "cloud", "fr", "en", "news", "info", "contact", "email", "e", "m", "secure"]
+)  # fmt: skip
+_DOMAIN_TAILS = ("conseil", "groupe", "partenaires", "services", "solutions", "industrie")
+
+
+def slug(text: str) -> str:
+    """``Groupe Courtois`` -> ``groupe-courtois`` (ASCII, lower case, hyphens)."""
+    from anonyma.textutils import strip_accents
+
+    return "-".join(_plain(strip_accents(text).replace("œ", "oe").replace("æ", "ae")))
+
+
+def compact_key(text: str) -> str:
+    """``Groupe-Sorbel`` / ``groupe sorbel`` / ``groupesorbel`` -> ``groupesorbel``."""
+    return slug(text).replace("-", "")
+
+
+def split_domain(host: str) -> tuple[list[str], str, str]:
+    """``mail.groupe-sorbel.co.uk`` -> (``["mail"]``, ``groupe-sorbel``, ``co.uk``);
+    a host without a dot is a bare label with no suffix."""
+    labels = [p for p in host.casefold().strip(".").split(".") if p]
+    if len(labels) < 2:
+        return [], labels[0] if labels else "", ""
+    tail = ".".join(labels[-2:])
+    multi = tail in _MULTI_SUFFIXES or tail in _SUFFIX_REWRITES
+    width = 2 if len(labels) >= 3 and multi else 1
+    suffix = ".".join(labels[-width:])
+    return labels[: -width - 1], labels[-width - 1], suffix
+
+
+def fake_domain(original: str, rng: random.Random, label: str | None = None) -> str:
+    """A plausible domain in the style of ``original``: the same public suffix
+    (``.fr``, ``.com``, ``.co.uk``), generic sub-domains kept, and ``label`` (a
+    substitute organisation, made by the caller) or an invented surname-like brand.
+
+    SAFETY decision: substitutes keep the original top-level domain rather than a
+    reserved one (``.example``, RFC 2606). A reserved suffix is safe but gives every
+    address away as fake, which defeats the realistic mode; the cost is that a
+    substitute such as ``courtois.fr`` may be registered by someone. That is accepted
+    because a substitute never carries original data (nothing confidential can reach
+    that domain), and the mode is documented as unfit for corpora fed to systems that
+    send mail (REFERENCE.md: use the tag mode there). Phone numbers and IP addresses
+    stay in their reserved ranges: those have realistic reserved values, domains do not.
+    """
+    prefix, original_label, suffix = split_domain(original)
+    suffix = _SUFFIX_REWRITES.get(suffix, suffix)
+    if label is None:
+        label = slug(fake_org_word(rng))
+        if rng.random() < 0.3:
+            label = f"{label}-{rng.choice(_DOMAIN_TAILS)}"
+        if "-" not in original_label:
+            label = label.replace("-", "")
+    kept = [p for p in prefix if p in _GENERIC_SUBDOMAINS]
+    return ".".join([*kept, label, *([suffix] if suffix else [])])
 
 
 def fake_local_part(rng: random.Random) -> str:
@@ -637,23 +700,34 @@ _STREET = re.compile(
 )
 
 
+def real_commune(rng: random.Random) -> tuple[str, str]:
+    """A real ``(postcode, commune)`` pair (:mod:`anonyma.data.communes`): an
+    invented commune or postcode gives a substitute address away."""
+    return rng.choice(communes())
+
+
 def fake_city(rng: random.Random) -> str:
-    fake = faker_fr()
-    fake.seed_instance(rng.getrandbits(32))
-    return str(fake.city())
+    return real_commune(rng)[1]
 
 
 def fake_postcode(rng: random.Random) -> str:
-    fake = faker_fr()
-    fake.seed_instance(rng.getrandbits(32))
-    return str(fake.postcode())
+    return real_commune(rng)[0]
+
+
+def _postcode_like(original: str, postcode: str) -> str:
+    """``postcode`` written like ``original`` (``75 008`` -> ``69 001``)."""
+    return reshape(original, postcode) if any(c.isspace() for c in original) else postcode
 
 
 def fake_address(original: str, rng: random.Random) -> str:
-    """Street (number + street name) and/or postcode + city, separators kept."""
+    """Street (number + street name) and/or postcode + city, separators kept. The
+    postcode and city are a real pair; a postcode alone becomes a real postcode."""
     fake = faker_fr()
     fake.seed_instance(rng.getrandbits(32))
     text = original
+    if re.fullmatch(r"\s*(?:\d{5}|\d{2}\s\d{3})\s*", text):
+        core = text.strip()
+        return text.replace(core, _postcode_like(core, fake_postcode(rng)))
     cp_city = _CP_CITY.search(text)
     street_part = text[: cp_city.start()] if cp_city else text
     out = ""
@@ -672,15 +746,147 @@ def fake_address(original: str, rng: random.Random) -> str:
             out = lead + mirror_case(street_part.strip(), street)
         out += trail
     if cp_city:
-        city = mirror_case(cp_city.group("city"), str(fake.city()))
-        out += f"{fake.postcode()}{cp_city.group('sp')}{city}"
+        postcode, commune = real_commune(rng)
+        city = cp_city.group("city")
+        trail = city[len(city.rstrip()) :]
+        out += (
+            f"{_postcode_like(cp_city.group('cp'), postcode)}{cp_city.group('sp')}"
+            f"{mirror_case(city, commune)}{trail}"
+        )
     return out or str(fake.street_address())
 
 
+# Organisations keep their shape: the designator in front (« Groupe », « Projet »)
+# and the legal form behind (« SAS », « & Associés ») stay, only the distinctive core
+# changes, so that « Groupe Sorbel » becomes « Groupe Courtois », « Sorbel SAS »
+# « Courtois SAS » and a bare « Colibri » one word. Keys are :func:`compact_key` forms.
+ORG_PREFIXES = frozenset(
+    ["groupe", "group", "societe", "ste", "cabinet", "banque", "laboratoires", "laboratoire",
+     "labo", "association", "asso", "fondation", "institut", "agence", "compagnie", "cie",
+     "entreprise", "entreprises", "etablissements", "ets", "maison", "atelier", "ateliers",
+     "studio", "clinique", "editions", "transports", "assurances", "mutuelle", "holding",
+     "federation", "syndicat", "collectif", "projet", "programme", "operation", "chantier",
+     "mission", "project", "program"]
+)  # fmt: skip
+#: Designators that make the name a project's: its core gets a code name.
+PROJECT_PREFIXES = frozenset(["projet", "programme", "operation", "chantier", "mission",
+                              "project", "program"])  # fmt: skip
+_ORG_LINKS = frozenset(["de", "du", "des", "la", "le", "les"])
+ORG_SUFFIXES = frozenset(
+    ["sa", "sas", "sasu", "sarl", "eurl", "snc", "sci", "scp", "scop", "selarl", "selas", "sca",
+     "gie", "gmbh", "ltd", "limited", "inc", "llc", "plc", "ag", "bv", "nv", "spa", "srl",
+     "corp", "co", "associes", "associe", "avocats", "conseil", "conseils", "consulting",
+     "partners", "partenaires", "group", "groupe", "france", "international", "holding",
+     "industries", "industrie", "services", "solutions", "technologies", "freres", "fils",
+     "cie"]
+)  # fmt: skip
+_SUFFIX_LINKS = frozenset(["&", "et", "and"])
+
+#: Neutral code names for projects (birds, stones, stars, trees, winds): never a
+#: person's or a company's name. Given names among them are dropped at load time.
+PROJECT_WORDS = (
+    "Héron", "Aigrette", "Mésange", "Pluvier", "Sterne", "Loriot", "Martinet", "Bouvreuil",
+    "Grèbe", "Fauvette", "Bergeronnette", "Courlis", "Vanneau", "Guillemot", "Macareux",
+    "Cormoran", "Albatros", "Pélican", "Flamant", "Ibis", "Toucan", "Épervier", "Gerfaut",
+    "Busard", "Harfang", "Goéland", "Verdier", "Roitelet", "Sittelle", "Grimpereau",
+    "Alouette", "Hirondelle", "Cigogne", "Bécasse", "Perdrix", "Onyx", "Agate", "Quartz",
+    "Basalte", "Granit", "Obsidienne", "Jaspe", "Malachite", "Lapis", "Rubis", "Topaze",
+    "Émeraude", "Grenat", "Péridot", "Béryl", "Calcite", "Pyrite", "Ardoise", "Porphyre",
+    "Silex", "Tourmaline", "Cobalt", "Mica", "Deneb", "Rigel", "Bételgeuse", "Antarès",
+    "Aldébaran", "Canopus", "Arcturus", "Pollux", "Castor", "Pégase", "Andromède", "Persée",
+    "Céphée", "Hydre", "Mistral", "Sirocco", "Tramontane", "Noroît", "Mélèze", "Séquoia",
+    "Cèdre", "Érable", "Bouleau", "Tilleul", "Frêne", "Platane", "Cyprès", "Genévrier",
+    "Sorbier", "Aulne", "Saule",
+)  # fmt: skip
+
+
+def _token_key(token: str) -> str:
+    return "&" if token == "&" else compact_key(token)
+
+
+def split_organization(text: str) -> tuple[str, str, str]:
+    """``Groupe Sorbel`` -> (``Groupe ``, ``Sorbel``, ``""``); ``Sorbel SAS`` ->
+    (``""``, ``Sorbel``, `` SAS``); ``DocuSign, Inc.`` -> (``""``, ``DocuSign``,
+    ``, Inc.``). The core always keeps at least one word."""
+    tokens = list(re.finditer(r"\S+", text))
+    if not tokens:
+        return "", text, ""
+    first, last = 0, len(tokens)
+    while first < last - 1 and _token_key(tokens[first].group()) in ORG_PREFIXES:
+        first += 1
+        while first < last - 1 and _token_key(tokens[first].group()) in _ORG_LINKS:
+            first += 1
+    stripped = False
+    while last - 1 > first:
+        key = _token_key(tokens[last - 1].group())
+        if key in ORG_SUFFIXES or (stripped and key in _SUFFIX_LINKS):
+            last -= 1
+            stripped = True
+        else:
+            break
+    start, end = tokens[first].start(), tokens[last - 1].end()
+    head, dash, rest = tokens[first].group().partition("-")
+    if first == last - 1 and rest and _token_key(head) in ORG_PREFIXES:
+        start += len(head) + len(dash)  # « PROJET-X »: the designator is joined
+    while end > start + 1 and not text[end - 1].isalnum():
+        end -= 1
+    return text[:start], text[start:end], text[end:]
+
+
+def is_project_name(text: str) -> bool:
+    """« Projet Colibri », « Programme Héron »: named by a project designator."""
+    prefix = split_organization(text)[0].split()
+    return bool(prefix) and _token_key(prefix[0]) in PROJECT_PREFIXES
+
+
+@lru_cache(maxsize=1)
+def _org_word_pool() -> tuple[str, ...]:
+    """Faker ``fr_FR`` surnames that read as a brand or a firm (« Courtois », «
+    Lacroix »): one plain word, never a given name (« Groupe Jean » is not credible,
+    « Groupe Martin » reads as a person)."""
+    provider = faker_fr().provider("faker.providers.person")
+    names = getattr(provider, "last_names", ()) if provider is not None else ()
+    return tuple(
+        sorted({str(n) for n in names if str(n).isalpha() and len(str(n)) >= 4
+                and first_name(str(n)) is None})
+    )  # fmt: skip
+
+
+@lru_cache(maxsize=1)
+def _project_pool() -> tuple[str, ...]:
+    return tuple(w for w in PROJECT_WORDS if first_name(w) is None)
+
+
+def fake_org_word(rng: random.Random) -> str:
+    return rng.choice(_org_word_pool())
+
+
+def fake_project_word(rng: random.Random) -> str:
+    return rng.choice(_project_pool())
+
+
+def fake_org_core(core: str, rng: random.Random, *, project: bool = False) -> str:
+    """A substitute for the distinctive core of an organisation or project name: a
+    code name for a project, letters for an acronym, else one surname-like word per
+    word of the original (two at most), in the case of ``core``."""
+    words = [w for w in core.split() if any(c.isalpha() for c in w)]
+    if len(words) == 1 and core.isalpha() and core.isupper() and len(core) <= 4:
+        return "".join(rng.choice(string.ascii_uppercase) for _ in core)
+    if project:
+        return mirror_case(core, fake_project_word(rng))
+    picked = [fake_org_word(rng) for _ in range(min(max(len(words), 1), 2))]
+    return mirror_case(core, " ".join(picked))
+
+
+def render_organization(original: str, fake_core: str) -> str:
+    """``original`` with its core replaced by ``fake_core`` (case of the core)."""
+    prefix, core, suffix = split_organization(original)
+    return f"{prefix}{mirror_case(core, fake_core)}{suffix}"
+
+
 def fake_company(original: str, rng: random.Random) -> str:
-    fake = faker_fr()
-    fake.seed_instance(rng.getrandbits(32))
-    return mirror_case(original, str(fake.company()))
+    _, core, _ = split_organization(original)
+    return render_organization(original, fake_org_core(core, rng))
 
 
 def fake_job(original: str, rng: random.Random) -> str:
@@ -749,10 +955,13 @@ __all__ = [
     "fake_mac",
     "fake_message_id",
     "fake_nir",
+    "fake_org_core",
+    "fake_org_word",
     "fake_person",
     "fake_phone_national",
     "fake_plate",
     "fake_postcode",
+    "fake_project_word",
     "fake_siren",
     "fake_siret",
     "fake_url",
@@ -763,8 +972,13 @@ __all__ = [
     "match_case",
     "mirror_case",
     "random_like",
+    "real_commune",
+    "render_organization",
     "render_person",
     "render_phone",
     "reshape",
     "shift_date",
+    "slug",
+    "split_domain",
+    "split_organization",
 ]

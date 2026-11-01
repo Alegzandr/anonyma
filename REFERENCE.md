@@ -500,6 +500,20 @@ ré-identifiés.
   toujours signalé dans le rapport.
 - **Commentaires bureautiques conservés et anonymisés** (auteur « Anonyme ») ; les
   révisions suivies sont acceptées (les suppressions disparaissent entièrement).
+- **Substituts du mode réaliste** : une organisation garde sa forme (« Groupe Sorbel »
+  devient « Groupe Courtois », « Sorbel SAS » « Courtois SAS », un mot seul reste un mot
+  seul) et un projet reçoit un nom de code neutre (oiseau, pierre, étoile…) ; « Projet
+  Colibri » et « Colibri » partagent le même substitut (« Projet Héron », « Héron »). Un
+  nom de famille substitué n'est jamais réutilisé comme nom d'organisation ou de domaine,
+  ni l'inverse. Les adresses, villes et codes postaux sont de vraies communes françaises
+  avec un de leurs vrais codes postaux (seule la rue est inventée). Les domaines de
+  messagerie publics (gmail.com, orange.fr…) sont conservés ; le domaine d'une
+  organisation du lot suit son substitut (`sorbel.fr` → `courtois.fr`,
+  `groupe-sorbel.fr` → `groupe-courtois.fr`) ; les autres reçoivent un nom vraisemblable,
+  avec la même extension (`.fr`, `.com`…). Ces domaines **peuvent exister réellement** :
+  ils ne transportent aucune donnée d'origine, mais n'écrivez pas aux adresses d'un
+  document anonymisé et préférez le mode balises (domaines réservés `anonyme.invalid`)
+  pour un corpus destiné à un système qui envoie des courriels.
 - **PST restitué en dossier d'eml** : aucun outil libre ne sait réécrire un PST de façon
   fiable.
 - **Dates en mode réaliste** : toutes les dates du lot sont décalées d'un même nombre de
