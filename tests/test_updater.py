@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -236,18 +238,19 @@ def _check_installed(root: Path) -> None:
     assert not (root / "data" / "maj").exists()
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="PowerShell installer")
-def test_powershell_installer_replaces_the_program(tmp_path: Path) -> None:
-    if shutil.which("powershell.exe") is None:
-        pytest.skip("powershell.exe absent")
-    root, staged = _fake_install(tmp_path)
+def _run_script(tmp_path: Path, root: Path, staged: Path, pid: int) -> int:
+    """Run the platform's installer script in the foreground; its exit code."""
     updates = root / "data" / "maj"
     entries = updater.replaced_entries(staged)
-    script = tmp_path / "installer.ps1"
-    text = updater.powershell_script(root, staged, entries, _dead_pid(), updates, relaunch=False)
-    script.write_text(text, encoding="utf-8-sig")
-    subprocess.run(
-        [
+    if sys.platform == "win32":
+        if shutil.which("powershell.exe") is None:
+            pytest.skip("powershell.exe absent")
+        script = tmp_path / "installer.ps1"
+        text = updater.powershell_script(
+            root, staged, entries, pid, updates, version="9.0.0", relaunch=False
+        )
+        script.write_text(text, encoding="utf-8-sig")
+        command = [
             "powershell.exe",
             "-NoProfile",
             "-NonInteractive",
@@ -255,23 +258,168 @@ def test_powershell_installer_replaces_the_program(tmp_path: Path) -> None:
             "Bypass",
             "-File",
             str(script),
-        ],
-        check=True,
-        timeout=120,
-    )
-    _check_installed(root)
+        ]
+    else:
+        script = tmp_path / "installer.sh"
+        text = updater.shell_script(
+            root, staged, entries, pid, updates, version="9.0.0", relaunch=False
+        )
+        script.write_text(text, encoding="utf-8")
+        command = ["/bin/sh", str(script)]
+    return subprocess.run(command, timeout=120, check=False).returncode
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="sh installer")
-def test_shell_installer_replaces_the_program(tmp_path: Path) -> None:
+def _check_log(root: Path) -> str:
+    text = updater.install_log_path(root).read_text(encoding="utf-8")
+    # Value-free: step and entry names, never the installation path.
+    assert str(root) not in text and root.name not in text
+    return text
+
+
+def test_installer_script_replaces_the_program(tmp_path: Path) -> None:
     root, staged = _fake_install(tmp_path)
-    updates = root / "data" / "maj"
-    entries = updater.replaced_entries(staged)
-    script = tmp_path / "installer.sh"
-    text = updater.shell_script(root, staged, entries, _dead_pid(), updates, relaunch=False)
-    script.write_text(text, encoding="utf-8")
-    subprocess.run(["/bin/sh", str(script)], check=True, timeout=120)
+    assert _run_script(tmp_path, root, staged, _dead_pid()) == 0
     _check_installed(root)
+    state = updater.read_state(root)
+    assert state is not None and (state.status, state.detail) == ("ok", "9.0.0")
+    log = _check_log(root)
+    assert "replacing _internal" in log and "update installed" in log
+
+
+def test_installer_gives_up_while_the_application_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(updater, "WAIT_STEPS", 2)
+    root, staged = _fake_install(tmp_path)
+    assert _run_script(tmp_path, root, staged, os.getpid()) == 1  # this process lives on
+    assert (root / "_internal" / "ancienne.txt").read_text() == "ancienne"  # untouched
+    state = updater.read_state(root)
+    assert state is not None and (state.status, state.detail) == ("echec", "attente")
+    assert "still running" in _check_log(root)
+
+
+def test_detached_installer_really_runs(tmp_path: Path) -> None:
+    """The real launch (creation flags, detached session, handshake): the installer
+    must outlive the call and replace the program. Started with DETACHED_PROCESS,
+    PowerShell 5.1 exited without running its script."""
+    if sys.platform == "win32" and shutil.which("powershell.exe") is None:
+        pytest.skip("powershell.exe absent")
+    root, staged = _fake_install(tmp_path)
+    updater.launch_installer(staged, root, _dead_pid(), version="9.0.0", relaunch=False)
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        state = updater.read_state(root)
+        if state is not None and state.status != updater.STATE_STARTED:
+            break
+        time.sleep(0.2)
+    assert state is not None and (state.status, state.detail) == ("ok", "9.0.0")
+    time.sleep(0.5)  # the installer removes data/maj right after writing its state
+    _check_installed(root)
+    assert "restart skipped" in _check_log(root)
+
+
+class _FakePopen:
+    """Records the launch; writes the installer's first state like the real one."""
+
+    calls: list[dict[str, Any]] = []
+    refuse_breakaway = False
+    starts = True
+
+    def __init__(self, command: list[str], **kwargs: Any) -> None:
+        flags = int(kwargs.get("creationflags", 0))
+        if self.refuse_breakaway and flags & updater.CREATE_BREAKAWAY_FROM_JOB:
+            raise PermissionError("accès refusé")
+        type(self).calls.append({"command": command, **kwargs})
+        self.killed = False
+        if self.starts:
+            root = Path(kwargs["cwd"])
+            updater.state_path(root).write_text("demarre 9.0.0", encoding="utf-8")
+
+    def poll(self) -> int | None:
+        return None if self.starts else 1
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+@pytest.fixture
+def fake_popen(monkeypatch: pytest.MonkeyPatch) -> type[_FakePopen]:
+    monkeypatch.setattr(_FakePopen, "calls", [])
+    monkeypatch.setattr(updater.subprocess, "Popen", _FakePopen)
+    return _FakePopen
+
+
+def test_windows_launch_breaks_away_from_the_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_popen: type[_FakePopen]
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    root, staged = _fake_install(tmp_path)
+    updater.launch_installer(staged, root, 4242, version="9.0.0")
+    (call,) = fake_popen.calls
+    flags = call["creationflags"]
+    assert flags & updater.CREATE_BREAKAWAY_FROM_JOB
+    assert flags & updater.CREATE_NO_WINDOW
+    assert not flags & updater.DETACHED_PROCESS  # PowerShell would exit at once
+    assert call["command"][0] == "powershell.exe"
+    script = Path(call["command"][-1])
+    assert script == root / "data" / "maj" / "installer.ps1"
+    assert call["cwd"] == str(root)
+    text = script.read_text(encoding="utf-8-sig")
+    assert f"$exe = '{root / 'Anonyma.exe'}'" in text  # quoted: the path has spaces
+    assert "Start-Process -FilePath $exe -WorkingDirectory $root" in text
+    assert "Get-Process -Id 4242" in text
+
+    # A job that forbids breaking away refuses the flag: started inside it instead.
+    monkeypatch.setattr(fake_popen, "refuse_breakaway", True)
+    fake_popen.calls.clear()
+    updater.launch_installer(staged, root, 4242, version="9.0.0")
+    (call,) = fake_popen.calls
+    assert not call["creationflags"] & updater.CREATE_BREAKAWAY_FROM_JOB
+
+
+@pytest.mark.parametrize("system", ["linux", "darwin"])
+def test_posix_launch_starts_a_new_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_popen: type[_FakePopen], system: str
+) -> None:
+    root, staged = _fake_install(tmp_path)
+    monkeypatch.setattr(sys, "platform", system)
+    updater.launch_installer(staged, root, 4242, version="9.0.0")
+    (call,) = fake_popen.calls
+    assert call["start_new_session"] is True
+    assert call["command"][0] == "/bin/sh"
+    text = Path(call["command"][1]).read_text(encoding="utf-8")
+    assert "kill -0 4242" in text
+    if system == "darwin":
+        assert 'open "$root/Anonyma.app"' in text
+    else:
+        assert 'nohup "$root/Anonyma"' in text
+
+
+def test_launch_fails_visibly_when_the_installer_does_not_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_popen: type[_FakePopen]
+) -> None:
+    root, staged = _fake_install(tmp_path)
+    monkeypatch.setattr(fake_popen, "starts", False)
+    with pytest.raises(updater.UpdateError, match="arrêté avant de commencer"):
+        updater.launch_installer(staged, root, 4242, version="9.0.0", timeout=5)
+
+
+def test_install_state_is_read_once(tmp_path: Path) -> None:
+    root = tmp_path / "Anonyma"
+    (root / "data").mkdir(parents=True)
+    assert updater.take_state(root) is None
+    updater.state_path(root).write_text("ok 9.0.0", encoding="utf-8")
+    state = updater.take_state(root)
+    assert state is not None and state.status == "ok" and state.detail == "9.0.0"
+    assert not state.running
+    assert updater.take_state(root) is None  # consumed
+    # A fresh "started" state: the installer may still run, keep it.
+    updater.state_path(root).write_text("demarre 9.0.0", encoding="utf-8")
+    state = updater.take_state(root)
+    assert state is not None and state.running
+    assert updater.state_path(root).exists()
+    updater.state_path(root).write_text("n'importe quoi", encoding="utf-8")
+    assert updater.read_state(root) is None
 
 
 def test_current_version_is_parsable() -> None:
