@@ -276,8 +276,12 @@ def smoke_test(folder: Path, with_libreoffice: bool) -> None:
             )
         print(f"{len(expected)} fichiers anonymisés : {', '.join(expected)}", flush=True)
     tmp_left = folder / "data" / "tmp"
-    if tmp_left.is_dir() and any(tmp_left.iterdir()):
-        raise SystemExit("Test de fumée en échec : fichiers temporaires non supprimés.")
+    left = sorted(p.relative_to(tmp_left).as_posix() for p in tmp_left.rglob("*"))
+    if left:
+        # Batch folders, LibreOffice profiles and staged copies have neutral names.
+        raise SystemExit(
+            "Test de fumée en échec : fichiers temporaires non supprimés : " + ", ".join(left[:20])
+        )
     if sys.platform == "win32" and not appdata_existed and appdata_lo.exists():
         raise SystemExit("Test de fumée en échec : LibreOffice a écrit dans %APPDATA%.")
     print("Test de fumée réussi.", flush=True)

@@ -61,3 +61,17 @@ def test_own_claims_survive_clean_tmp() -> None:
         assert folder.is_dir()
     finally:
         paths.release(folder)
+
+
+def test_remove_tree_waits_for_a_file_released_shortly(tmp_path: Path) -> None:
+    import threading
+
+    from anonyma.paths import remove_tree
+
+    folder = tmp_path / "lot"
+    (folder / "profil").mkdir(parents=True)
+    held = (folder / "profil" / "registrymodifications.xcu").open("w", encoding="utf-8")
+    # On Windows an open file cannot be deleted: the first attempts fail.
+    threading.Timer(0.6, held.close).start()
+    assert remove_tree(folder, retry_seconds=5.0)
+    assert not folder.exists()

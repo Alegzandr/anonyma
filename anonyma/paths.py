@@ -182,6 +182,24 @@ def _recent(path: Path) -> bool:
         return False
 
 
+#: Seconds a removal keeps retrying while files are still held: on Windows,
+#: ``soffice.exe`` returns while its ``soffice.bin`` child still holds the profile.
+REMOVE_RETRY_SECONDS = 10.0
+
+
+def remove_tree(path: Path, retry_seconds: float = REMOVE_RETRY_SECONDS) -> bool:
+    """Remove the folder ``path``, retrying while some of its files are still held by
+    a process that is exiting. True when nothing is left."""
+    deadline = time.monotonic() + retry_seconds
+    while True:
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.25)
+
+
 def clean_tmp() -> None:
     """Remove the temporary files left behind (called at startup): batch folders no
     live process holds, and other entries untouched for :data:`STALE_SECONDS`. A

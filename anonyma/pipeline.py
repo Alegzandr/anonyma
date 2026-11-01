@@ -1986,7 +1986,11 @@ class Pipeline:
 
     def close(self, analysis: BatchAnalysis) -> None:
         paths.release(analysis.work_dir)
-        shutil.rmtree(analysis.work_dir, ignore_errors=True)
+        # The batch folder holds decoded copies of the inputs: retry while an exiting
+        # helper (LibreOffice) still holds some of them; the next start removes the
+        # rest, since nobody claims the folder any more.
+        if not paths.remove_tree(analysis.work_dir):
+            log.warning("batch temporary folder not fully removed; removed at next start")
 
 
 def display_names(analysis: BatchAnalysis, separator: str = " › ") -> dict[str, str]:
