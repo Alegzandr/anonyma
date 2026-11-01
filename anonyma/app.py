@@ -66,7 +66,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     logs.setup_logging()
     _configure_qt()
 
+    from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
+
+    from anonyma import updater
+
+    if updater.can_self_update():
+        updater.cleanup()  # leftovers of a previous update
 
     from anonyma.gui import dialogs, errors, icons, theme
     from anonyma.gui.context import AppContext
@@ -96,6 +102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     window.show()
     if context.load_error:
         dialogs.warning(window, context.load_error)
+    QTimer.singleShot(1500, window.updates.check_on_startup)
     return app.exec()
 
 

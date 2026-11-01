@@ -15,7 +15,12 @@ from anonyma.model_manager import ModelManager
 log = get_logger("gui.context")
 
 #: Config fields that do not influence detection (changing them needs no new analysis).
-NON_DETECTION_FIELDS = frozenset({"ui", "mode", "regime", "store_path", "workers"})
+NON_DETECTION_FIELDS = frozenset({"ui", "mode", "regime", "store_path", "workers", "check_updates"})
+
+#: ``Config.ui`` key of the folders remembered per file chooser.
+LAST_DIRS_KEY = "last_dirs"
+#: ``Config.ui`` key of the last valid output folder.
+OUTPUT_DIR_KEY = "output_dir"
 
 
 def detection_fingerprint(config: Config) -> str:
@@ -87,3 +92,33 @@ class AppContext(QObject):
                 self._config.save(self.config_path)
             except OSError as exc:
                 log.warning("could not save preferences: %s", type(exc).__name__)
+
+    # -- remembered folders (file choosers, output folder) -------------------------------
+    # Kept in data/config.json, inside the portable folder (never in QSettings or the
+    # registry, see gui/dialogs.py), and never logged.
+
+    def last_dir(self, key: str) -> Path | None:
+        """Folder last used by the chooser ``key``, if it still exists."""
+        dirs = self._config.ui.get(LAST_DIRS_KEY)
+        raw = dirs.get(key) if isinstance(dirs, dict) else None
+        if not isinstance(raw, str) or not raw:
+            return None
+        path = Path(raw)
+        try:
+            return path if path.is_dir() else None
+        except OSError:
+            return None
+
+    def remember_dir(self, key: str, folder: Path) -> None:
+        """Remember ``folder`` as the starting point of the chooser ``key``."""
+        dirs = self._config.ui.get(LAST_DIRS_KEY)
+        updated = dict(dirs) if isinstance(dirs, dict) else {}
+        updated[key] = str(folder)
+        self.set_ui_pref(LAST_DIRS_KEY, updated)
+
+    def remember_selection(self, key: str, chosen: list[Path] | Path | None) -> None:
+        """Remember the folder holding the chosen files or folder (nothing when cancelled)."""
+        if chosen is None or (isinstance(chosen, list) and not chosen):
+            return
+        first = chosen[0] if isinstance(chosen, list) else chosen
+        self.remember_dir(key, first.parent if first.parent != first else first)

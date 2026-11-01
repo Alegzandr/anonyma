@@ -83,6 +83,28 @@ def confirm(
     return box.clickedButton() is ok
 
 
+def ask_update(parent: QWidget | None, current: str, available: str) -> str:
+    """Offer an update: "installer", "plus_tard" or "ignorer"."""
+    box = QMessageBox(
+        QMessageBox.Icon.Information,
+        "Mise à jour disponible",
+        f"Une nouvelle version d'Anonyma est disponible : {available} (version installée : "
+        f"{current}).\n\nL'installer maintenant ? Anonyma la télécharge, se ferme puis "
+        "redémarre. Vos réglages, votre table de correspondance et vos modèles sont conservés.",
+        parent=parent,
+    )
+    install = box.addButton("Installer", QMessageBox.ButtonRole.AcceptRole)
+    later = box.addButton("Plus tard", QMessageBox.ButtonRole.RejectRole)
+    skip = box.addButton("Ignorer cette version", QMessageBox.ButtonRole.DestructiveRole)
+    box.setDefaultButton(install)
+    box.setEscapeButton(later)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is install:
+        return "installer"
+    return "ignorer" if clicked is skip else "plus_tard"
+
+
 def ask_text(parent: QWidget | None, title: str, label: str, value: str = "") -> str | None:
     text, ok = QInputDialog.getText(parent, title, label, QLineEdit.EchoMode.Normal, value)
     return text if ok else None

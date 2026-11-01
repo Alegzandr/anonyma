@@ -41,8 +41,10 @@ through a file the tool silently skipped.
 
 ## Positioning
 
-- **Fully local, provably offline**: outbound connections are blocked inside the process;
-  the only network action is a model download the user explicitly triggers. No telemetry.
+- **Fully local, provably offline for documents**: outbound connections are blocked inside
+  the process; the only network actions are a model download the user explicitly triggers
+  and the startup update check of the portable build (one GitHub API request carrying no
+  document or setting, can be switched off in Réglages). No telemetry.
 - **Verification is part of the product, not an option**: every output is re-read by
   independent means; a recovered original value sends the file to `<output>_quarantaine/` (a sibling of the output folder), never to
   the "Anonymisé" count.
@@ -112,7 +114,8 @@ through a file the tool silently skipped.
 ## Product Principles
 
 1. **Nothing leaves the machine, and the user can tell.** Locality is the core promise; any
-   network action is explicit, user-triggered and visible.
+   network action is explicit, visible and can be switched off (the startup update check
+   is the only automatic one and sends nothing about the user's data).
 2. **Never claim more than was verified.** Status, counts and wording reflect what the
    verifier actually checked; doubt is surfaced, not hidden.
 3. **The safe default does the work.** A non-technical user who clicks "Anonymiser" with

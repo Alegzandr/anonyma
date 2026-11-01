@@ -85,6 +85,9 @@ class Config:
     #: When the one-click flow stops for review: "aucune" (write directly),
     #: "incertaines" (only when uncertain entities await review) or "systematique".
     review_policy: str = "incertaines"
+    #: Ask GitHub for a newer release at GUI startup (portable build only): the one
+    #: automatic network access of the application, see ``anonyma/updater.py``.
+    check_updates: bool = True
 
     # -- detection ---------------------------------------------------------------
     #: Mask every complete date as DATE (dates of birth are always masked).

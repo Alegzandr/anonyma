@@ -28,6 +28,7 @@ from anonyma.gui.pages.processing import ProcessingPage
 from anonyma.gui.pages.report import ReportPage
 from anonyma.gui.pages.review import ReviewPage
 from anonyma.gui.pages.settings import SettingsPage
+from anonyma.gui.update import UpdateManager
 from anonyma.logs import get_logger
 
 log = get_logger("gui.window")
@@ -133,6 +134,7 @@ class MainWindow(QMainWindow):
         self.review.pending_changed.connect(self._update_review_label)
         self.report.correct_requested.connect(self._correct_and_reapply)
         self.report.residue_requested.connect(self._show_residue)
+        self.updates = UpdateManager(self)
         self.controller.result_ready.connect(self._result_ready)
         self.controller.phase_changed.connect(self._phase_changed)
         theme.notifier().changed.connect(self._refresh_icons)
@@ -259,7 +261,7 @@ class MainWindow(QMainWindow):
     # -- closing -------------------------------------------------------------------------------
 
     def busy(self) -> bool:
-        return self.controller.busy or self.models.busy()
+        return self.controller.busy or self.models.busy() or self.updates.busy()
 
     @override
     def closeEvent(self, event: QCloseEvent) -> None:
@@ -284,6 +286,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self.models.cancel_download()
+        self.updates.shutdown()
         self.controller.shutdown()
         self.models.runner.wait_all(10_000)
         try:

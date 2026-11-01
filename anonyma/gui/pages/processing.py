@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from anonyma import registry
 from anonyma.frenchtext import NBSP, item_progress, plural, typo
 from anonyma.gui import dialogs
+from anonyma.gui.context import OUTPUT_DIR_KEY
 from anonyma.gui.controller import REVIEW_POLICIES, REVIEW_POLICY_GLOSSES, BatchController, Phase
 from anonyma.gui.itemmodels import QueueModel, QueueRow
 from anonyma.gui.labels import STATUS_LEVELS, status_label
@@ -259,6 +260,7 @@ class ProcessingPage(QWidget):
         c.effective_ready.connect(self.refresh)
         c.context.config_changed.connect(self._load_policy)
         self._load_policy()
+        self._restore_output()
         self.refresh()
 
     # -- helpers ------------------------------------------------------------------
@@ -343,21 +345,39 @@ class ProcessingPage(QWidget):
             self._output_edited()
 
     def _pick_files(self) -> None:
-        files = dialogs.open_files(self, "Ajouter des fichiers")
+        context = self.controller.context
+        files = dialogs.open_files(self, "Ajouter des fichiers", start=context.last_dir("entrees"))
+        context.remember_selection("entrees", files)
         if files:
             self.add_paths(files)
 
     def _pick_folder(self) -> None:
-        folder = dialogs.open_folder(self, "Ajouter un dossier")
+        context = self.controller.context
+        folder = dialogs.open_folder(self, "Ajouter un dossier", context.last_dir("entrees"))
+        context.remember_selection("entrees", folder)
         if folder is not None:
             self.add_paths([folder])
 
     def _pick_output(self) -> bool:
-        folder = dialogs.open_folder(self, "Dossier de sortie", self.controller.output_dir)
+        start = self.controller.output_dir or self.controller.context.last_dir("sortie")
+        folder = dialogs.open_folder(self, "Dossier de sortie", start)
         if folder is None:
             return False
         self.output_edit.setText(str(folder))
         return self._output_edited()
+
+    def _restore_output(self) -> None:
+        """Pre-fill the output folder chosen last time (when it still exists)."""
+        saved = self.controller.context.ui_pref(OUTPUT_DIR_KEY)
+        if not isinstance(saved, str) or not saved:
+            return
+        try:
+            exists = Path(saved).is_dir()
+        except OSError:
+            exists = False
+        if exists:
+            self.output_edit.setText(saved)
+            self._output_edited()
 
     def set_output_dir(self, path: Path) -> bool:
         self.output_edit.setText(str(path))
@@ -373,8 +393,16 @@ class ProcessingPage(QWidget):
             self.output_error.show()
         else:
             self.output_error.hide()
+            self._remember_output()
         self._update_buttons()
         return not error
+
+    def _remember_output(self) -> None:
+        out = self.controller.output_dir
+        context = self.controller.context
+        context.set_ui_pref(OUTPUT_DIR_KEY, str(out) if out is not None else "")
+        if out is not None:
+            context.remember_dir("sortie", out)
 
     def _remove_selected(self) -> None:
         roots = {

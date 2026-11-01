@@ -196,3 +196,125 @@ def test_status_badges_are_not_clipped(window: MainWindow) -> None:
         needed = QFontMetrics(view.font()).horizontalAdvance(longest) + 24  # pill padding
         assert view.columnWidth(column) >= needed
         assert view.columnWidth(column) == badge_column_width(view, [longest])
+
+
+def test_output_folder_and_browse_start_are_remembered(
+    qtbot: Any,
+    window: MainWindow,
+    recorder: DialogRecorder,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from anonyma.config import Config
+    from anonyma.gui import dialogs
+    from anonyma.gui.context import AppContext
+
+    sources = tmp_path / "sources"
+    sources.mkdir()
+    (sources / "a.txt").write_text("texte", encoding="utf-8")
+    out = tmp_path / "sortie"
+    out.mkdir()
+    recorder.files = [sources / "a.txt"]
+    window.processing._pick_files()
+    assert window.processing.set_output_dir(out)
+
+    starts: list[Path | None] = []
+
+    def fake_open_files(*args: Any, start: Path | None = None, **_k: Any) -> list[Path]:
+        starts.append(start)
+        return []
+
+    monkeypatch.setattr(dialogs, "open_files", fake_open_files)
+    window.processing._pick_files()
+    assert starts == [sources.resolve()]
+
+    # A new session (same data/config.json) restores the output folder.
+    config_path = window.controller.context.config_path
+    assert config_path is not None
+    reopened = AppContext(Config.load(config_path), config_path=config_path)
+    assert reopened.last_dir("entrees") == sources.resolve()
+    second = MainWindow(reopened)
+    qtbot.addWidget(second)
+    assert second.processing.output_edit.text() == str(out.resolve())
+    assert second.controller.output_dir == out.resolve()
+    second.controller.shutdown(10_000)
+    second.models.runner.wait_all(10_000)
+
+
+def test_missing_remembered_output_is_not_restored(
+    qtbot: Any, context: Any, recorder: DialogRecorder, tmp_path: Path
+) -> None:
+    context.set_ui_pref("output_dir", str(tmp_path / "disparu"))
+    context.remember_dir("entrees", tmp_path / "disparu")
+    assert context.last_dir("entrees") is None
+    win = MainWindow(context)
+    qtbot.addWidget(win)
+    assert win.processing.output_edit.text() == ""
+    assert win.controller.output_dir is None
+    win.controller.shutdown(10_000)
+    win.models.runner.wait_all(10_000)
+
+
+def test_update_offer_skip_and_install(
+    qtbot: Any,
+    window: MainWindow,
+    recorder: DialogRecorder,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from anonyma import updater
+    from anonyma.gui import dialogs
+    from anonyma.gui.update import SKIPPED_VERSION_KEY
+
+    release = updater.Release("9.0.0", "", "a.zip", "https://x/a.zip", 1, "00" * 32)
+    answers = ["ignorer", "installer"]
+    asked: list[str] = []
+
+    def ask(_parent: Any, current: str, available: str) -> str:
+        asked.append(available)
+        return answers.pop(0)
+
+    monkeypatch.setattr(dialogs, "ask_update", ask)
+    staged = tmp_path / "maj" / "Anonyma"
+    monkeypatch.setattr(updater, "prepare", lambda _r, _p, _c: staged)
+    launched: list[Path] = []
+    monkeypatch.setattr(updater, "launch_installer", launched.append)
+
+    window.show()
+    window.updates._checked(release)
+    assert window.context.ui_pref(SKIPPED_VERSION_KEY) == "9.0.0"
+    window.updates._checked(release)  # skipped version: not offered again
+    assert asked == ["9.0.0"]
+
+    window.updates.offer(release)
+    qtbot.waitUntil(lambda: bool(launched), timeout=10_000)
+    assert launched == [staged]
+    assert not window.isVisible()
+    assert "redémarrer" in recorder.confirms[-1]
+
+
+def test_update_refused_while_busy(
+    window: MainWindow, recorder: DialogRecorder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma import updater
+
+    monkeypatch.setattr(window, "busy", lambda: True)
+    window.updates.install(updater.Release("9.0.0", "", "a.zip", "https://x", 1, ""))
+    assert recorder.warnings and "en cours" in recorder.warnings[-1]
+    assert not window.updates.busy()
+
+
+def test_update_check_disabled_or_from_sources(
+    window: MainWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from anonyma import updater
+
+    calls: list[int] = []
+    monkeypatch.setattr(updater, "check_latest", lambda: calls.append(1))
+    window.updates.check_on_startup()  # sources: never
+    monkeypatch.setattr(updater, "can_self_update", lambda: True)
+    window.context.config.check_updates = False
+    window.updates.check_on_startup()  # disabled in Réglages
+    assert not window.updates.runner.running()
+    assert calls == []
+    assert window.settings.check_updates.isChecked() is True

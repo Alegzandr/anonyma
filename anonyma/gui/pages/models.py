@@ -460,12 +460,19 @@ class ModelsPage(QWidget):
     def import_files(self) -> None:
         if self.selected_spec() is None:
             return
-        self._import(dialogs.open_files(self, "Importer les fichiers du modèle"))
+        files = dialogs.open_files(
+            self, "Importer les fichiers du modèle", start=self.context.last_dir("modeles")
+        )
+        self.context.remember_selection("modeles", files)
+        self._import(files)
 
     def import_folder(self) -> None:
         if self.selected_spec() is None:
             return
-        folder = dialogs.open_folder(self, "Importer le dossier du modèle")
+        folder = dialogs.open_folder(
+            self, "Importer le dossier du modèle", self.context.last_dir("modeles")
+        )
+        self.context.remember_selection("modeles", folder)
         if folder is not None:
             self._import([folder])
 

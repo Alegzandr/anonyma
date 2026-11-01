@@ -68,7 +68,14 @@ fails. A tag with a suffix (`v1.2.0-rc1`) is published as a pre-release.
 - **No native Qt file dialogs**: they remember recent folders in the Windows registry,
   outside the portable folder.
 - **Network guard**: every outbound connection is blocked at process level, except inside
-  a user-triggered model download (`netguard.allow_network()`).
+  a user-triggered model download and the startup update check (`netguard.allow_network()`).
+- **Self-update** (`anonyma/updater.py`, portable build only): `releases/latest` of the
+  GitHub repository, archive `Anonyma-<version>-<os>-<arch>[-sans-libreoffice].zip`
+  checked against the asset's `sha256` digest from the API, unpacked into `data/maj/`
+  (not `data/tmp/`, emptied after each batch). A PowerShell or `sh` script waits for the
+  application to exit, swaps every top-level entry except `data/` and `models/` (previous
+  ones kept as `*.old-maj` and restored on failure), then relaunches it. Keep the archive
+  names and their single `Anonyma/` top folder stable: older versions rely on them.
 - **Two-level verification**: a recovered original value, or a reliable deterministic
   detector, quarantines the file; a signal from a statistical detector alone (GLiNER, LLM)
   marks it « À revoir », since these models react to the new context created by the tags.

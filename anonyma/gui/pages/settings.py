@@ -461,6 +461,13 @@ class SettingsPage(QWidget):
         self.theme.setMaximumWidth(200)
         self.theme.currentIndexChanged.connect(self._theme_changed)
         self._row(f, "T&hème", self.theme)
+        self.check_updates = QCheckBox("Rechercher une mise à jour au démarrage")
+        self.check_updates.setObjectName("CheckUpdates")
+        self.check_updates.setToolTip(
+            "Seule connexion automatique d'Anonyma : une requête vers GitHub pour connaître "
+            "la dernière version. Aucune donnée de document n'est envoyée."
+        )
+        self._row(f, "Mises à jour", self.check_updates)
 
         buttons = QHBoxLayout()
         self.dirty_label = muted("")
@@ -497,6 +504,7 @@ class SettingsPage(QWidget):
             self.ocr_full_pages,
             self.decode_barcodes,
             self.remove_invisible_text,
+            self.check_updates,
         ):
             check.toggled.connect(self._mark_dirty)
         for edit in (self.store_path, self.libreoffice_path):
@@ -656,6 +664,7 @@ class SettingsPage(QWidget):
             self.workers.setValue(config.workers)
             self.ocr.setChecked(config.ocr_enabled)
             self.use_libreoffice.setChecked(config.use_libreoffice)
+            self.check_updates.setChecked(config.check_updates)
             self.libreoffice_path.setText(config.libreoffice_path)
             self._select(self.theme, str(config.ui.get("theme", theme.DEFAULT_THEME)))
             self.detect_dates.setChecked(config.detect_dates)
@@ -740,6 +749,7 @@ class SettingsPage(QWidget):
         config.workers = self.workers.value()
         config.ocr_enabled = self.ocr.isChecked()
         config.use_libreoffice = self.use_libreoffice.isChecked()
+        config.check_updates = self.check_updates.isChecked()
         config.libreoffice_path = self.libreoffice_path.text().strip()
         config.ui["theme"] = str(self.theme.currentData())
         config.detect_dates = self.detect_dates.isChecked()
@@ -837,7 +847,10 @@ class SettingsPage(QWidget):
         self.business_lists.addItem(item)
 
     def _import_csv(self) -> None:
-        files = dialogs.open_files(self, "Importer une liste métier", ["*.csv", "*.txt"])
+        files = dialogs.open_files(
+            self, "Importer une liste métier", ["*.csv", "*.txt"], self.context.last_dir("listes")
+        )
+        self.context.remember_selection("listes", files)
         for file in files:
             self.import_business_list(file)
 
@@ -896,7 +909,12 @@ class SettingsPage(QWidget):
             self.store_path.setText(str(chosen))
 
     def _pick_libreoffice(self) -> None:
-        files = dialogs.open_files(self, "Exécutable de LibreOffice", ["soffice*", "libreoffice*"])
+        current = self.libreoffice_path.text().strip()
+        start = Path(current).parent if current else self.context.last_dir("libreoffice")
+        files = dialogs.open_files(
+            self, "Exécutable de LibreOffice", ["soffice*", "libreoffice*"], start
+        )
+        self.context.remember_selection("libreoffice", files)
         if files:
             self.libreoffice_path.setText(str(files[0]))
 
