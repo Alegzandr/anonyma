@@ -276,7 +276,10 @@ def smoke_test(folder: Path, with_libreoffice: bool) -> None:
             )
         print(f"{len(expected)} fichiers anonymisés : {', '.join(expected)}", flush=True)
     tmp_left = folder / "data" / "tmp"
-    left = sorted(p.relative_to(tmp_left).as_posix() for p in tmp_left.rglob("*"))
+    # Files only: on Windows the exiting soffice.bin recreates empty folders (its
+    # « Documents ») in its throw-away profile after the batch folder is removed; they
+    # hold nothing and the next start removes them.
+    left = sorted(p.relative_to(tmp_left).as_posix() for p in tmp_left.rglob("*") if p.is_file())
     if left:
         # Batch folders, LibreOffice profiles and staged copies have neutral names.
         raise SystemExit(
