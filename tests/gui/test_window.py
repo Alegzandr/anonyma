@@ -271,7 +271,13 @@ def test_update_offer_skip_and_install(
     staged = tmp_path / "maj" / "Anonyma"
     monkeypatch.setattr(updater, "prepare", lambda _r, _p, _c: staged)
     launched: list[Path] = []
-    monkeypatch.setattr(updater, "launch_installer", launched.append)
+    versions: list[str] = []
+
+    def launch(path: Path, *, version: str) -> None:
+        launched.append(path)
+        versions.append(version)
+
+    monkeypatch.setattr(updater, "launch_installer", launch)
 
     window.show()
     window.updates._checked(release)
@@ -282,6 +288,7 @@ def test_update_offer_skip_and_install(
     window.updates.offer(release)
     qtbot.waitUntil(lambda: bool(launched), timeout=10_000)
     assert launched == [staged]
+    assert versions == ["9.0.0"]
     assert not window.isVisible()
     assert "redémarrer" in recorder.confirms[-1]
 

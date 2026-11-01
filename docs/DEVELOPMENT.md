@@ -85,7 +85,13 @@ fails. A tag with a suffix (`v1.2.0-rc1`) is published as a pre-release.
   checked against the asset's `sha256` digest from the API, unpacked into `data/maj/`
   (not `data/tmp/`, emptied after each batch). A PowerShell or `sh` script waits for the
   application to exit, swaps every top-level entry except `data/` and `models/` (previous
-  ones kept as `*.old-maj` and restored on failure), then relaunches it. Keep the archive
+  ones kept as `*.old-maj` and restored on failure), then relaunches it. On Windows it is
+  started with `CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB`, never `DETACHED_PROCESS`
+  (PowerShell 5.1 without a console exits without running its script); elsewhere in a
+  new session. The application waits for the script's first state write before quitting
+  (failure shown at once); the script logs its steps, value-free, to
+  `data/logs/mise-a-jour.log` and its outcome to `data/maj-etat.txt`, which the next
+  start reports to the user. Keep the archive
   names and their single `Anonyma/` top folder stable: older versions rely on them.
 - **Two-level verification, then a corrective pass**: what the verification finds is
   masked batch-wide and the affected files are rewritten with the same substitutes. What

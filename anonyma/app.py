@@ -71,8 +71,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from anonyma import updater
 
+    update_state = None
     if updater.can_self_update():
-        updater.cleanup()  # leftovers of a previous update
+        update_state = updater.take_state()  # outcome of the last installation
+        if update_state is None or not update_state.running:
+            updater.cleanup()  # leftovers of a previous update
 
     from anonyma.gui import dialogs, errors, icons, theme
     from anonyma.gui.context import AppContext
@@ -102,6 +105,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     window.show()
     if context.load_error:
         dialogs.warning(window, context.load_error)
+    window.updates.report_previous(update_state)
     QTimer.singleShot(1500, window.updates.check_on_startup)
     return app.exec()
 

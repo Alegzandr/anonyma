@@ -104,7 +104,8 @@ passe en local : aucune donnée ne quitte le poste.
   plus récente est publiée et la propose. Si vous acceptez, elle télécharge l'archive de
   votre système, vérifie son empreinte SHA-256, se ferme, remplace le programme puis
   redémarre. `data/` (réglages, table de correspondance) et `models/` sont conservés ; en
-  cas d'échec, l'ancienne version est remise en place. « Ignorer cette version » ne la
+  cas d'échec, l'ancienne version est remise en place et le prochain démarrage le
+  signale (étapes consignées dans `data/logs/mise-a-jour.log`). « Ignorer cette version » ne la
   propose plus ; la case « Rechercher une mise à jour au démarrage » (Réglages) coupe
   cette vérification.
 
