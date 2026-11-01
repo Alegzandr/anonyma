@@ -726,6 +726,8 @@ class Heartbeat:
         with self._lock:
             previous = self._state
             self._state = (event.stage, event.done, event.total)
+            if event.note:
+                self._write(f"{event.note} ({_elapsed(self._clock() - self._started)})")
             if event.item_total:
                 self._item = item_progress(event.item_done, event.item_total, event.item_step)
             elif previous != self._state:
@@ -950,6 +952,19 @@ def _estimate_llm(pipeline: Pipeline, inputs: Sequence[Path]) -> LlmEstimate | N
             soft_wrap=True,
         )
     return estimate
+
+
+def _add_estimates(
+    target: dict[str, Any], estimate: LlmEstimate | None, pipeline: Pipeline
+) -> None:
+    """``estimation_minutes`` (before the run, from a sample; ``_max``: its upper
+    bound) and ``estimation_minutes_modele`` (exact workload once the other
+    detectors were done), FULL only."""
+    if estimate is not None:
+        target["estimation_minutes"] = round(estimate.minutes)
+        target["estimation_minutes_max"] = round(estimate.max_minutes)
+    if pipeline.llm_workload is not None:
+        target["estimation_minutes_modele"] = round(pipeline.llm_workload.minutes)
 
 
 def _settings(config: Config) -> dict[str, str]:
@@ -1403,8 +1418,7 @@ def run(
         except OSError:
             fail("Impossible d'enregistrer le rapport.", EXIT_PARTIAL)
     summary = run_summary(report, result, pipeline.config, report_path, previous=previous)
-    if estimate is not None:
-        summary["parametres"]["estimation_minutes"] = round(estimate.minutes)
+    _add_estimates(summary["parametres"], estimate, pipeline)
     if as_json:
         _print_run_summary(err, report, summary)
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -1675,8 +1689,7 @@ def analyse(
     finally:
         pipeline.close(analysis)
     summary["profil"] = pipeline.config.effective_profile().value
-    if estimate is not None:
-        summary["estimation_minutes"] = round(estimate.minutes)
+    _add_estimates(summary, estimate, pipeline)
     if as_json:
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
     else:

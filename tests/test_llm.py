@@ -491,6 +491,10 @@ def test_prose_gate() -> None:
     prose = [
         "La DRH de l'agence de Nantes a validé la mutation hier.",
         "Nous avons revu le dossier avec Kervella hier soir.",
+        # Numbers and identifiers inside sentences are still prose (benchmark item
+        # 24-018: a city in a sentence full of phone numbers and card numbers).
+        "Ms Quinn escalated to Lukas Brandt (Brest office, +49 30 901820, l.b@x.example) "
+        "and confirmed the refund to IBAN DE93 8996 0346 1786 4123 63 on 12 March 2026.",
     ]
     not_prose = [
         "Kervella",
@@ -599,6 +603,49 @@ def test_pipeline_runs_prior_detectors_last_with_item_progress(
     assert {e.item_step for e in inside} == {"Prior"}  # only detectors that report
     assert all(e.stage == pipeline.LLM_STAGE and e.done == 0 for e in inside)
     assert pipeline._item_progress is None
+
+
+def test_extrapolation_follows_the_sample_growth() -> None:
+    """A sample whose unique paragraphs stop growing (later files repeat the first:
+    a CSV of every mail, then the .eml) is not extrapolated linearly; the linear
+    figure stays as the upper bound."""
+    probable, upper = pipeline.extrapolate([(100, 50), (200, 51), (400, 52)], 40, 4000)
+    assert upper == 400
+    assert probable == pytest.approx(40 * 10**pipeline.ESTIMATE_MIN_BETA)  # beta 0.03: clamped
+    probable, upper = pipeline.extrapolate([(100, 10), (400, 40)], 40, 4000)
+    assert probable == pytest.approx(upper)  # no repetition seen: linear
+    one, upper = pipeline.extrapolate([(100, 10)], 40, 1000)  # one file: no curve
+    assert one == pytest.approx(40 * 10**pipeline.ESTIMATE_MIN_BETA) and upper == 400
+    assert pipeline.extrapolate([(500, 10)], 40, 500) == (40, 40)  # all read: exact
+    estimate = pipeline.LlmEstimate(20.0, 300, 12, 205, 160.0, 2400)
+    text = estimate.warning("--profil standard")
+    assert "environ 20 min estimées (au plus environ 2 h 40 min)" in text
+    assert not pipeline.LlmEstimate(14.0, 200, 12, 205, 160.0, 2400).long
+
+
+def test_exact_workload_is_announced_before_the_model_stage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once the other detectors are done, the paragraphs left for the model (gated,
+    not covered, each once) are counted and announced as one line, then analysed."""
+    folder = tmp_path / "lot"
+    folder.mkdir()
+    mail = "Bonjour,\n\nLe fils du maire de Plouha rappellera ce soir pour le dossier.\n"
+    (folder / "a.txt").write_text(mail, encoding="utf-8")
+    (folder / "b.txt").write_text("> " + mail.replace("\n", "\n> "), encoding="utf-8")
+    config = Config(profile=Profile.FULL, workers=1)
+    detector = LlmDetector(config)
+    runner = FakeRunner([])
+    monkeypatch.setattr(detector, "_runner", lambda: runner)
+    monkeypatch.setattr(pipeline, "detectors_for", lambda config: [detector])
+    monkeypatch.setattr(llm_detector, "call_seconds", lambda config: 90.0)
+    run = Pipeline(config)
+    events: list[pipeline.ProgressEvent] = []
+    run.analyze([folder], progress=events.append)
+    notes = [e.note for e in events if e.note]
+    assert notes == ["Modèle de langue : 1\u00a0passage à analyser, environ 2 min"]
+    assert run.llm_workload is not None and run.llm_workload.exact
+    assert len(runner.calls) == 1  # the quoted copy was not sent again
 
 
 def test_full_run_is_estimated_before_it_starts(

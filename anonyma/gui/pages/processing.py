@@ -570,6 +570,9 @@ class ProcessingPage(QWidget):
         self.notice_label.show()
 
     def _on_progress(self, event: ProgressEvent) -> None:
+        if event.note:  # the language model's exact workload, once known
+            self.notice_label.setText(typo(event.note))
+            self.notice_label.show()
         self._last_event = event
         label = STAGE_LABELS.get(event.stage, event.stage)
         text = f"{label} : {event.done} / {event.total}"
