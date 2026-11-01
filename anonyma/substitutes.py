@@ -406,6 +406,8 @@ def fake_mac(original: str, rng: random.Random) -> str:
 _NUMERIC_DATE = re.compile(r"^(\d{1,2})([/.\-])(\d{1,2})\2(\d{2}|\d{4})$")
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 _TEXT_DATE = re.compile(r"^(1er|1re|\d{1,2})(\s+)([^\W\d_]+)(\.?)(\s+)(\d{4})$", re.UNICODE)
+_TEXT_DAY_MONTH = re.compile(r"^(1er|1re|\d{1,2})(\s+)([^\W\d_]+)(\.?)$", re.UNICODE)
+_NUMERIC_DAY_MONTH = re.compile(r"^(\d{1,2})/(\d{1,2})$")
 _EN_DATE = re.compile(r"^([^\W\d_]+)(\.?)(\s+)(\d{1,2})(st|nd|rd|th)?(,?)(\s+)(\d{4})$")
 
 
@@ -475,8 +477,31 @@ def parse_date(original: str) -> date | None:
     return None
 
 
-def shift_date(original: str, days: int) -> str | None:
-    """``original`` shifted by ``days``, in the same format; None if not parseable."""
+def _text_day_month(new: date, day_s: str, month_s: str, dot: str, style: str) -> tuple[str, str]:
+    """Day and month of a written date (« 4 octobre », « 1er mai », « 3 sept. »): no
+    leading zero (« 04 octobre » is not French), the abbreviation dot only on a
+    month that is really abbreviated (never « mai. »)."""
+    from anonyma.textutils import normalize
+
+    day_out = "1er" if new.day == 1 and day_s in ("1er", "1re") else str(new.day)
+    # A leading zero written by the author is kept, and so is the fixed width of a
+    # capitalized abbreviation (« 01 Nov 2026 » of a mail header); a French date in
+    # prose (« 14 octobre ») never gets one (« 04 octobre »).
+    header = month_s[:1].isupper() and not dot and len(month_s) == 3
+    if day_s.isdigit() and len(day_s) == 2 and (day_s.startswith("0") or header):
+        day_out = f"{new.day:02d}"
+    month_out = _month_name(new.month - 1, style, month_s)
+    full = style == "fr" or normalize(month_out) == normalize(MONTHS_FR[new.month - 1])
+    if style.endswith("abbr") and dot and not full:
+        month_out += dot
+    return day_out, month_out
+
+
+def shift_date(original: str, days: int, year: int | None = None) -> str | None:
+    """``original`` shifted by ``days``, in the same format; None if not parseable.
+
+    A day and month without a year (« 9 octobre », « 9/10 ») is shifted as a date of
+    ``year`` (default: the current one) and written back without it."""
     text = original.strip()
     m = _NUMERIC_DATE.match(text)
     if m:
@@ -509,14 +534,32 @@ def shift_date(original: str, days: int) -> str | None:
         if parsed is None:
             return None
         new = parsed + timedelta(days=days)
-        day_out = (
-            "1er"
-            if new.day == 1 and day_s in ("1er", "1re")
-            else (f"{new.day:02d}" if len(day_s) == 2 and day_s.isdigit() else str(new.day))
+        day_out, month_out = _text_day_month(new, day_s, month_s, dot, found[1])
+        return original.replace(text, f"{day_out}{sp1}{month_out}{sp2}{new.year}")
+    m = _TEXT_DAY_MONTH.match(text)
+    if m:
+        day_s, sp1, month_s, dot = m.groups()
+        found = _month_index(month_s)
+        if found is None:
+            return None
+        day_num = 1 if day_s in ("1er", "1re") else int(day_s)
+        parsed = _safe_date(year or date.today().year, found[0] + 1, day_num)
+        if parsed is None:
+            return None
+        day_out, month_out = _text_day_month(
+            parsed + timedelta(days=days), day_s, month_s, dot, found[1]
         )
-        month_out = _month_name(new.month - 1, found[1], month_s)
-        dot_out = dot if found[1].endswith("abbr") else ""
-        return original.replace(text, f"{day_out}{sp1}{month_out}{dot_out}{sp2}{new.year}")
+        return original.replace(text, f"{day_out}{sp1}{month_out}")
+    m = _NUMERIC_DAY_MONTH.match(text)
+    if m:
+        d_s, m_s = m.groups()
+        parsed = _safe_date(year or date.today().year, int(m_s), int(d_s))
+        if parsed is None:
+            return None
+        new = parsed + timedelta(days=days)
+        day = f"{new.day:02d}" if len(d_s) == 2 else str(new.day)
+        month = f"{new.month:02d}" if len(m_s) == 2 else str(new.month)
+        return original.replace(text, f"{day}/{month}")
     m = _EN_DATE.match(text)
     if m:
         month_s, dot, sp1, day_s, suffix, comma, sp2, year_s = m.groups()

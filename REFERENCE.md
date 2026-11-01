@@ -472,6 +472,12 @@ ré-identifiés.
 
 - **Dans le doute, Anonyma masque** : une seule détection suffit ; les entités
   incertaines sont masquées sans rien vous demander, jamais laissées visibles.
+- **Prénoms et initiales** : dès qu'une personne est reconnue sous son nom complet,
+  son prénom seul (« Merci Maëlle ») est masqué dans tout le lot, quelle que soit sa
+  fréquence ; un prénom qui est aussi un mot courant (« pierre ») ne l'est en minuscules
+  que seul sur sa ligne (signature). Ses initiales (« JB », « J.-B. », « HM ») le sont
+  seules sur leur ligne, et « J.-B. » partout ; en mode réaliste, elles deviennent les
+  initiales du substitut.
 - **Seconde passe** : ce que la vérification trouve encore dans un fichier produit (un
   prénom seul, un lieu que les modèles ne voient qu'une fois les noms remplacés) est
   masqué dans tout le lot, puis les fichiers concernés sont réécrits et vérifiés à
@@ -490,8 +496,11 @@ ré-identifiés.
 - **PST restitué en dossier d'eml** : aucun outil libre ne sait réécrire un PST de façon
   fiable.
 - **Dates en mode réaliste** : toutes les dates du lot sont décalées d'un même nombre de
-  jours entiers (entre 30 et 400, avant ou après), tiré au hasard et secret ; l'heure et
-  le fuseau horaire sont conservés. Un même instant reçoit donc le même substitut dans
+  jours entiers (entre 30 et 400, toujours vers le passé), tiré au hasard et secret ;
+  l'heure et le fuseau horaire sont conservés. Les dates sans année (« reporté au
+  9 octobre », « le 9/10 ») reçoivent le même décalage, calculé dans l'année la plus
+  fréquente des dates du lot, et restent écrites sans année : aucune date d'origine ne
+  reste à côté de sa version décalée. Un même instant reçoit donc le même substitut dans
   tous les formats (`2026-09-01T08:14:29Z`, `01/09/2026 10:14`, en-tête
   `Date: Tue, 01 Sep 2026 08:14:29 +0000`, « 1er septembre 2026 », dates des msg),
   l'ordre et les intervalles sont préservés (une réponse reste après le message auquel

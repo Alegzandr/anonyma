@@ -434,6 +434,7 @@ class _Realistic:
         #: Substitutes kept from an earlier assignment, never given to another cluster.
         self.pinned = {normalize(v): cid for cid, v in replacer.pinned.items()}
         self.shift = self._date_shift()
+        self.year = _usual_year(clusters.values())
         self.birth_key = self._birth_key()
         self.tags = replacer.tag_allocator()
 
@@ -541,7 +542,9 @@ class _Realistic:
                 shift = int(known)
         if shift is None:
             rng = random.SystemRandom()
-            shift = rng.choice([-1, 1]) * rng.randint(*DATE_SHIFT_DAYS)
+            # Always back in time: a mail of last month moved into next year surprises
+            # the reader, and dates in the past stay plausible.
+            shift = -rng.randint(*DATE_SHIFT_DAYS)
             if self.store:
                 self.store.save(PARAMETER_TYPE, DATE_SHIFT_KEY, DATE_SHIFT_KEY, str(shift))
         self.r.batch_shift = shift
@@ -667,13 +670,85 @@ def _person(
         person = parse_person(variant)
         compact = variant.strip()
         template = match_login_template(compact, canonical) if " " not in compact else None
-        if template is not None:
+        # Case tells the roles of a mention unless it is in lower case or a single word.
+        lone = variant.islower() or len(_NAME_WORD.findall(variant)) == 1
+        by_role = _by_roles(variant, canonical, fake) if lone else None
+        initials = _initials_like(compact, canonical, fake)
+        if initials is not None:
+            out[variant] = variant.replace(compact, initials)
+        elif template is not None:
             out[variant] = fk.login_like(template, compact, fake)
+        elif by_role is not None:
+            out[variant] = by_role
         elif person is not None:
             out[variant] = fk.render_person(person, fake)
         else:
             out[variant] = out[""]
     return out
+
+
+def _initials_like(variant: str, canonical: PersonName, fake: fk.FakePerson) -> str | None:
+    """Initials of the canonical name (« JB », « J.-B. », « H. », « GM ») rewritten as
+    the initials of its substitute, punctuation kept: a reader must not see the
+    initials of the real person next to its new name."""
+    letters = "".join(c for c in variant if c.isalpha())
+    if not (1 <= len(letters) <= 4 and letters.isupper() and canonical.is_full):
+        return None
+    if any(c not in ".- " for c in variant if not c.isalpha()):
+        return None
+    if any(is_initial(g) for g in canonical.given):
+        return None
+    given = "".join(p[0] for g in canonical.given for p in g.split("-") if p).upper()
+    family = "".join(s[0] for s in canonical.surname if normalize(s) not in PARTICLES).upper()
+    fake_given = "".join(p[0] for g in fake.given for p in g.split("-") if p).upper()
+    fake_family = "".join(p[0] for p in fake.surname.split("-") if p).upper()[:1]
+    if letters == given + family:
+        new = fake_given + fake_family
+    elif letters == given:
+        new = fake_given
+    else:
+        return None
+    if len(new) != len(letters):
+        return None  # another shape: left to the generic rendering
+    chars = iter(new)
+    return "".join(next(chars) if c.isalpha() else c for c in variant)
+
+
+_NAME_WORD = re.compile(r"[^\W\d_]+(?:[\-'’][^\W\d_]+)*")
+
+
+def _by_roles(variant: str, canonical: PersonName, fake: fk.FakePerson) -> str | None:
+    """A mention whose words are all words of the canonical name, each rendered by its
+    role there rather than by its place in the mention: case and order say nothing
+    in « lan nguyen » (for « NGUYEN Thi Lan ») or in a lone « Maëlle », and the given
+    name must not get the surname's substitute (« lelièvre lelièvre »)."""
+    if not canonical.is_full:
+        return None
+    roles: dict[str, str] = {}
+    for i, given in enumerate(canonical.given):
+        if is_initial(given):
+            return None
+        roles[normalize(given)] = fake.given[min(i, len(fake.given) - 1)]
+    names = [w for w in canonical.surname if normalize(w) not in PARTICLES]
+    if len(names) != 1:
+        return None
+    for word in canonical.surname:
+        key = normalize(word)
+        role = fake.surname if word == names[0] else word
+        if roles.get(key, role) != role:
+            return None  # « Martin Martin »: the role of each word is unknown
+        roles[key] = role
+    pieces: list[str] = []
+    cursor = 0
+    for m in _NAME_WORD.finditer(variant):
+        substitute = roles.get(normalize(m.group()))
+        if substitute is None:
+            return None
+        pieces += [variant[cursor : m.start()], fk.mirror_case(m.group(), substitute)]
+        cursor = m.end()
+    if not pieces:
+        return None
+    return "".join(pieces) + variant[cursor:]
 
 
 def _email(
@@ -788,12 +863,25 @@ def _dates(
     days = st.date_shift(cluster.entity_type, cluster.canonical)
 
     def shifted(value: str) -> str | None:
-        return fk.shift_date(value, days) or fk.shift_timestamp(value, days)
+        return fk.shift_date(value, days, st.year) or fk.shift_timestamp(value, days)
 
     for variant in cluster.variants:
         out[variant] = shifted(variant) or known or fk.random_like(variant, rng)
     out[""] = shifted(cluster.canonical) or known or fk.random_like(cluster.canonical, rng)
     return out
+
+
+def _usual_year(clusters: Iterable[EntityCluster]) -> int | None:
+    """Most frequent year of the batch's full dates: the year a day and month written
+    alone (« reporté au 9 octobre ») most likely belongs to. Only a leap day can make
+    the guess matter (one day of difference)."""
+    years: dict[int, int] = {}
+    for cluster in clusters:
+        if cluster.entity_type == EntityType.DATE:
+            found = fk.parse_date(cluster.canonical)
+            if found is not None:
+                years[found.year] = years.get(found.year, 0) + 1
+    return max(years, key=lambda y: (years[y], y)) if years else None
 
 
 def _shared(make: Callable[[str, random.Random], str]) -> Generator:

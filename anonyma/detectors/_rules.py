@@ -886,6 +886,31 @@ DATE_RULES: tuple[Rule, ...] = (
         flags=regex.MULTILINE | regex.IGNORECASE,
     ),
     Rule(
+        # Day and month without a year (« reporté au 9 octobre », « le 3 sept. »): left
+        # visible next to a shifted full date, it would give the batch offset away.
+        # Abbreviations need their dot (« 3 sept personnes » is a number).
+        "date_sans_annee",
+        EntityType.DATE,
+        r"(?<![\w])(?:1er|1re|0?[1-9]|[12]\d|3[01])"
+        + SP
+        + r"+(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre"
+        r"|novembre|d[ée]cembre|(?:janv|f[ée]vr?|avr|juil|sept|oct|nov|d[ée]c)\.)"
+        r"(?![\w])(?!\.?" + SP + r"*(?:19|20)\d{2}(?![\w]))",
+        0.6,
+        flags=regex.MULTILINE | regex.IGNORECASE,
+    ),
+    Rule(
+        # « le 9/10 », « jusqu'au 15/11 »: day/month after a date preposition only
+        # (« noté 9/10 » is a mark).
+        "date_jour_mois",
+        EntityType.DATE,
+        r"(?<=(?<![\w])(?:le|du|au|dès|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)"
+        + SP
+        + r"+)(?:0?[1-9]|[12]\d|3[01])/(?:0?[1-9]|1[0-2])(?![\d/]|[.,]\d)",
+        0.6,
+        flags=regex.MULTILINE | regex.IGNORECASE,
+    ),
+    Rule(
         # Year first with dots or slashes (``2026.10.31``: signature appearances).
         "date_annee_points",
         EntityType.DATE,
