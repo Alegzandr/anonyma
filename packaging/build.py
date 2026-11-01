@@ -67,7 +67,7 @@ SMOKE_FIXTURES = (
 #: Every other format, .msg included, keeps its original extension.
 CONVERTED = {".pst": ""}
 #: Report statuses meaning "verified clean" (uncertain entities masked and flagged).
-CLEAN_STATUSES = frozenset({"Anonymisé", "À revoir"})
+CLEAN_STATUSES = frozenset({"anonymise", "a_revoir"})  # status codes of the JSON report
 #: Legacy formats, round-tripped through the bundled LibreOffice.
 LEGACY_FIXTURES = (
     ("rapport.doc", "rapport.docx", "doc:MS Word 97"),
