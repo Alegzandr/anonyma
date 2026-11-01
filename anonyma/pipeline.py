@@ -82,6 +82,7 @@ from anonyma.resolver import (
     cluster_forms,
     propagate,
     resolve,
+    searched_variant,
 )
 from anonyma.structure import PROPERTY as STRUCTURE
 from anonyma.textsearch import MultiMatcher, leftmost_longest
@@ -1578,6 +1579,7 @@ class Pipeline:
                 for cid, c in active.items()
                 if cid not in local
                 for v in c.variants
+                if searched_variant(c, v)  # a word masked where found only: not a value
             }
         )
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)

@@ -72,7 +72,7 @@ from anonyma.names import PARTICLES, ROLE_WORDS, civility_of, needs_capital
 from anonyma.policy import keeps
 from anonyma.rawscan import RawScanner, raw_residues
 from anonyma.replacer import BLACKOUT_CHAR
-from anonyma.resolver import NAME_TYPES, cluster_forms
+from anonyma.resolver import DOCUMENT_LOCAL_TYPES, NAME_TYPES, cluster_forms
 from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import normalize, normalize_with_map, strip_accents
 
@@ -234,7 +234,10 @@ class Verifier:
                 for m in leftmost_longest(table.find(segment.text, prepared=prepared)):
                     if not _inside(m.start, m.end, spans):
                         entity_type, source = m.payloads[0]
-                        hits.append((m.start, m.end, entity_type, source, True))
+                        # A job title left elsewhere in its file describes nobody for
+                        # sure (it was masked next to its person): to review.
+                        sure = entity_type not in DOCUMENT_LOCAL_TYPES
+                        hits.append((m.start, m.end, entity_type, source, sure))
                 if segment.context.kind is SegmentKind.OCR and len(ocr_table):
                     for om in leftmost_longest(ocr_table.find(skeleton(segment.text))):
                         if not _inside(om.start, om.end, spans):

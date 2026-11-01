@@ -258,3 +258,24 @@ def test_kept_reference_is_no_residue() -> None:
     config = Config(mask_opaque_ids=False)
     result = Verifier(config, [RegexDetector(config)]).verify(doc, [], set(), [])
     assert result.clean, [(r.reason, r.entity_type) for r in result.residues]
+
+
+def test_unsearched_lone_word_is_not_a_batch_value() -> None:
+    from anonyma.resolver import searched_variant
+
+    cluster = EntityCluster(id="c", entity_type=EntityType.ORGANIZATION, canonical="Entreprises")
+    cluster.variants.add("Entreprises")
+    cluster.detectors = {"gliner"}
+    assert not searched_variant(cluster, "Entreprises")
+    person = EntityCluster(id="p", entity_type=EntityType.PERSON, canonical="Marc Petit")
+    person.variants.add("Petit")
+    person.detectors = {"gliner"}
+    assert searched_variant(person, "Petit")  # a real person's surname is searched
+
+
+def test_job_title_left_in_its_file_is_to_review() -> None:
+    doc = _output("Conseillère clientèle Entreprises", SegmentKind.BODY, "")
+    result = Verifier(Config(), []).verify(
+        doc, [("Conseillère clientèle Entreprises", EntityType.JOB_TITLE)], set(), []
+    )
+    assert result.residues and not any(r.certain for r in result.residues)

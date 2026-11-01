@@ -696,25 +696,33 @@ def _grouped(compact: str, size: int = 4) -> str:
     return " ".join(compact[i : i + size] for i in range(0, len(compact), size))
 
 
+def searched_variant(cluster: EntityCluster, variant: str) -> bool:
+    """Whether a mention of ``cluster`` is searched through the batch (propagation and
+    verification). An uncertain mention, a « person » made of ordinary words or a lone
+    ordinary word only a model found is masked where found, nowhere else (« Nouvelle »
+    of « Société Nouvelle des… », « Entreprises » of « Facturation Entreprises »)."""
+    if cluster.entity_type not in NAME_TYPES or not _lone_common(variant):
+        return True
+    if normalize(variant) in _CALENDAR_WORDS:
+        return False
+    if cluster.needs_review or not _reliable_cluster(cluster):
+        return False
+    person = parse_person(cluster.canonical) if cluster.entity_type == EntityType.PERSON else None
+    if person is not None and person.is_full:
+        return True  # the surname of a real person (« Petit » of « Marc Petit »)
+    return not (bool(cluster.detectors) and cluster.detectors <= MODEL_DETECTORS)
+
+
 def cluster_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
     """Every surface form worth searching for ``cluster``: (form, needs capital)."""
     entity_type = cluster.entity_type
     # An uncertain mention, or a « person » made of ordinary words, is masked where it
     # was found; a lone ordinary word of it is not searched batch-wide (« Nouvelle »
     # of « Société Nouvelle des… », « Entreprises » of « Facturation Entreprises »).
-    narrow = (
-        cluster.needs_review
-        or not _reliable_cluster(cluster)
-        or (bool(cluster.detectors) and cluster.detectors <= MODEL_DETECTORS)
-    )
     for variant in cluster.variants:
         if len(normalize(variant)) < MIN_PROPAGATION_LENGTH:
             continue
-        if (
-            entity_type in NAME_TYPES
-            and _lone_common(variant)
-            and (narrow or normalize(variant) in _CALENDAR_WORDS)
-        ):
+        if not searched_variant(cluster, variant):
             continue
         cap = entity_type in NAME_TYPES and needs_capital(variant)
         yield variant, cap
@@ -1057,4 +1065,5 @@ __all__ = [
     "phone_key",
     "propagate",
     "resolve",
+    "searched_variant",
 ]
