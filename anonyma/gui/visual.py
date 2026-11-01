@@ -20,6 +20,7 @@ from PySide6.QtGui import (
     QBrush,
     QColor,
     QFont,
+    QFontMetricsF,
     QImage,
     QPen,
     QPixmap,
@@ -52,6 +53,8 @@ MAX_SIDE = 2400
 CACHE_SIZE = 8
 #: Smallest automatic zoom (a PDF rendered at ``PDF_ZOOM`` shown at about 100 %).
 MIN_FIT_ZOOM = 0.5
+#: Smallest label of a box, in page pixels: below, the label is cut with « … ».
+MIN_LABEL_PX = 6
 
 
 def visual_kind(doc: Document) -> str | None:
@@ -179,6 +182,30 @@ class Box:
 BoxProvider = Callable[[int], list[Box]]
 
 
+def _box_label(label: str, rect: QRectF) -> QGraphicsSimpleTextItem:
+    """The substitute written in a box: shrunk to the box width like the writers
+    shrink it in the file, then cut with « … » if even the smallest size is too wide
+    (the tooltip keeps it whole). Never left out: an empty box reads as a blank."""
+    font = QFont()
+    size = max(MIN_LABEL_PX, min(int(rect.height() * 0.7), 18))
+    font.setPixelSize(size)
+    room = rect.width() - 2
+    width = QFontMetricsF(font).horizontalAdvance(label)
+    if width > room:
+        # Proportional first guess, then down a pixel at a time (hinting is not linear).
+        size = max(MIN_LABEL_PX, min(size, int(size * room / width)))
+        font.setPixelSize(size)
+        while size > MIN_LABEL_PX and QFontMetricsF(font).horizontalAdvance(label) > room:
+            size -= 1
+            font.setPixelSize(size)
+    metrics = QFontMetricsF(font)
+    if metrics.horizontalAdvance(label) > room:
+        label = metrics.elidedText(label, Qt.TextElideMode.ElideRight, max(room, 0.0))
+    text = QGraphicsSimpleTextItem(label)
+    text.setFont(font)
+    return text
+
+
 class PageView(QGraphicsView):
     """One rendered page with box overlays; Ctrl+wheel requests a zoom."""
 
@@ -219,17 +246,13 @@ class PageView(QGraphicsView):
             if box.tooltip:
                 item.setToolTip(box.tooltip)
             if box.label and box.fill is not None and rect.height() >= 9:
-                text = QGraphicsSimpleTextItem(box.label)
-                font = QFont()
-                font.setPixelSize(max(8, min(int(rect.height() * 0.7), 18)))
-                text.setFont(font)
+                text = _box_label(box.label, rect)
                 text.setBrush(
                     QColor(theme.tokens().text if box.fill.lightness() > 128 else "#ffffff")
                 )
                 bounds = text.boundingRect()
-                if bounds.width() <= rect.width() + 2:
-                    text.setParentItem(item)
-                    text.setPos(rect.x() + 2, rect.y() + (rect.height() - bounds.height()) / 2)
+                text.setParentItem(item)
+                text.setPos(rect.x() + 2, rect.y() + (rect.height() - bounds.height()) / 2)
             if box.key is not None:
                 self.items_by_key[box.key] = item
         scene.setSceneRect(QRectF(page.image.rect()))

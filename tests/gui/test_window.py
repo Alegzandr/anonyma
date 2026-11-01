@@ -318,3 +318,10 @@ def test_update_check_disabled_or_from_sources(
     assert not window.updates.runner.running()
     assert calls == []
     assert window.settings.check_updates.isChecked() is True
+
+
+def test_report_titles_are_never_cut(window: MainWindow) -> None:
+    """« Résidus possibles » is wider than a default section: it keeps its width."""
+    header = window.report.files_table.horizontalHeader()
+    for c in range(1, header.count()):
+        assert header.sectionSize(c) >= header.sectionSizeHint(c)

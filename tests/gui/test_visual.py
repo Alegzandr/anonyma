@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from PySide6.QtCore import QRectF
 
 from anonyma.config import Config
 from anonyma.gui.main_window import MainWindow
 from anonyma.gui.textview import header_label, ordered_segments
-from anonyma.gui.visual import render_page
+from anonyma.gui.visual import MIN_LABEL_PX, _box_label, render_page
 from anonyma.models import BBox, Document, Segment, SegmentContext, SegmentKind
 from tests.gui.conftest import prepare
 
@@ -126,3 +127,19 @@ def test_only_user_errors_are_shown_verbatim() -> None:
     # A library ValueError may quote a value of the document.
     leaked = user_message(ValueError("invalid literal for int(): 'Quintavalle'"))
     assert "Quintavalle" not in leaked and "ValueError" in leaked
+
+
+def test_long_substitute_is_shrunk_then_cut_never_left_out(qapp: Any) -> None:
+    """« Brest » -> « Enghien-les-Bains »: the box keeps the width of the original;
+    its label is shrunk to fit, then cut, instead of disappearing."""
+    short = _box_label("Lyon", QRectF(0, 0, 200, 24))
+    assert short.text() == "Lyon" and short.font().pixelSize() == 16
+    natural = _box_label("Enghien-les-Bains", QRectF(0, 0, 10_000, 24)).boundingRect().width()
+    room = natural * 0.6
+    shrunk = _box_label("Enghien-les-Bains", QRectF(0, 0, room + 2, 24))
+    assert shrunk.text() == "Enghien-les-Bains"
+    assert MIN_LABEL_PX <= shrunk.font().pixelSize() < 16
+    assert shrunk.boundingRect().width() <= room + 1
+    cut = _box_label("Enghien-les-Bains", QRectF(0, 0, natural * 0.15, 24))
+    assert cut.font().pixelSize() == MIN_LABEL_PX
+    assert cut.text() and cut.text().endswith("…")

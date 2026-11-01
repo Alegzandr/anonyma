@@ -82,7 +82,12 @@ def _table(headers: list[str]) -> QTableWidget:
     table.setAlternatingRowColors(True)
     table.setShowGrid(False)
     left_header(table)
-    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    header = table.horizontalHeader()
+    header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    # A title wider than the default section (« Résidus possibles ») stays whole.
+    header.ensurePolished()
+    for c in range(1, len(headers)):
+        header.resizeSection(c, max(header.sectionSize(c), header.sectionSizeHint(c)))
     return table
 
 
