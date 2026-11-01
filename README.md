@@ -347,6 +347,15 @@ llama-cpp-python** : le profil `complet` y tourne comme `standard`, même si `mo
 liste` montre un modèle de langue installé et vérifié (la colonne État le signale).
 Depuis les sources, le moteur s'installe avec `uv sync --extra llm`.
 
+Le modèle de langue lit les paragraphes rédigés (pas les valeurs de champs, en-têtes ou
+identifiants), seulement ceux où il peut ajouter quelque chose aux autres détecteurs,
+et une seule fois par lot un paragraphe répété (le même courriel dans un .eml, un
+export JSON, un CSV ou une réponse citée). Sur processeur, il reste nettement plus lent
+que `standard` : avant de commencer, Anonyma estime sa durée sur un échantillon du lot
+et, au-delà de 15 minutes, l'annonce avec l'alternative (`estimation_minutes` dans la
+sortie `--json`). Pendant l'analyse, la progression indique où en est le fichier en
+cours (« fichier en cours : 1 240/7 217 segments · modèle de langue »).
+
 ## Modèles
 
 Les modèles d'IA ne sont pas livrés dans l'archive :

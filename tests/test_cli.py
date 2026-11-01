@@ -215,6 +215,27 @@ def test_analyser_json(tmp_path: Path, corpus: Path, business_list: Path) -> Non
     assert not any((tmp_path / "home" / "data" / "tmp").iterdir())
 
 
+def test_long_full_run_is_announced(
+    monkeypatch: pytest.MonkeyPatch, corpus: Path, business_list: Path
+) -> None:
+    """Before a FULL run the language model's work is estimated: beyond 15 minutes a
+    warning gives the estimate and the faster profile, and --json carries it."""
+    from anonyma.pipeline import LlmEstimate, Pipeline
+
+    monkeypatch.setattr(
+        Pipeline, "estimate_llm", lambda self, inputs: LlmEstimate(130.4, 1950, 12, 205)
+    )
+    result = invoke(
+        "analyser", corpus, "-p", "leger", "--liste-metier", business_list, "-j", "1", "--json"
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["estimation_minutes"] == 130
+    warning = " ".join(result.stderr.split())
+    assert "environ 2 h 10 min estimées" in warning
+    assert "1 950 passages" in warning.replace("\u00a0", " ").replace("\u202f", " ")
+    assert "d'après 12 fichiers sur 205" in warning and "--profil standard" in warning
+
+
 def test_missing_models_are_announced(
     monkeypatch: pytest.MonkeyPatch, corpus: Path, business_list: Path
 ) -> None:
@@ -1079,6 +1100,26 @@ def test_heartbeat_lines_are_plain_and_rate_limited() -> None:
         "Analyse terminée, étape suivante en préparation… (3 min 35 s)",
         "Écriture et vérification : 0/205 fichiers… (3 min 35 s)",
     ]
+
+
+def test_heartbeat_shows_progress_inside_a_long_file() -> None:
+    """One long file (the language model on a big export): the heartbeat says where it
+    is inside the file, in counts only, and forgets it once the file is done."""
+    from anonyma.pipeline import ProgressEvent
+
+    now = [0.0]
+    lines: list[str] = []
+    beat = cli.Heartbeat(lines.append, interval=10.0, clock=lambda: now[0])
+    beat.update(ProgressEvent("analyse", 0, 205))
+    now[0] = 12.0
+    beat.update(ProgressEvent("analyse", 0, 205, None, 1240, 7217, "Modèle de langue"))
+    assert lines[-1] == (
+        "Analyse : 0/205 fichiers… · fichier en cours : 1\u202f240/7\u202f217 segments"
+        " · modèle de langue (12 s)"
+    )
+    now[0] = 30.0
+    beat.update(ProgressEvent("analyse", 1, 205, index=0))
+    assert lines[-1] == "Analyse : 1/205 fichiers… (30 s)"
 
 
 def test_redirected_run_prints_heartbeat_not_a_bar(

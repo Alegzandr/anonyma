@@ -23,12 +23,18 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from anonyma.frenchtext import plural
+from anonyma.frenchtext import item_progress, plural
 from anonyma.models import DocumentStatus, Profile, Regime, ReplacementMode, Severity
 
 if TYPE_CHECKING:
     from anonyma.config import Config
-    from anonyma.pipeline import BatchAnalysis, BatchResult, ProgressEvent
+    from anonyma.pipeline import (
+        BatchAnalysis,
+        BatchResult,
+        LlmEstimate,
+        Pipeline,
+        ProgressEvent,
+    )
     from anonyma.report import BatchReport
     from anonyma.store import EncryptedMappingStore
 
@@ -665,8 +671,16 @@ def open_store(path: Path, *, create: bool) -> EncryptedMappingStore:
 
 
 #: French names of the pipeline stages (progress bar and heartbeat).
-STAGE_LABELS = {"analyse": "Analyse", "ecriture": "Écriture et vérification"}
-_STAGE_DONE = {"analyse": "Analyse terminée", "ecriture": "Écriture et vérification terminées"}
+STAGE_LABELS = {
+    "analyse": "Analyse",
+    "langue": "Modèle de langue",
+    "ecriture": "Écriture et vérification",
+}
+_STAGE_DONE = {
+    "analyse": "Analyse terminée",
+    "langue": "Modèle de langue terminé",
+    "ecriture": "Écriture et vérification terminées",
+}
 #: Seconds between two heartbeat lines when stderr is not a terminal.
 HEARTBEAT_SECONDS = 10.0
 
@@ -705,11 +719,17 @@ class Heartbeat:
         self._started = self._clock()
         self._last = self._started
         self._state: tuple[str, int, int] | None = None
+        #: Progress inside the current file (``ProgressEvent.item_*``), if any.
+        self._item = ""
 
     def update(self, event: ProgressEvent) -> None:
         with self._lock:
             previous = self._state
             self._state = (event.stage, event.done, event.total)
+            if event.item_total:
+                self._item = item_progress(event.item_done, event.item_total, event.item_step)
+            elif previous != self._state:
+                self._item = ""  # a file finished: its inner progress is over
             now = self._clock()
             changed = previous is None or previous[0] != event.stage
             finished = 0 < event.total <= event.done and previous != self._state
@@ -735,7 +755,8 @@ class Heartbeat:
         else:
             files = "fichier" if total < 2 else "fichiers"
             ending = ", terminé" if total and done >= total else "…"
-            self._write(f"{label} : {done}/{total} {files}{ending} ({elapsed})")
+            inner = f" · {self._item}" if self._item and done < total else ""
+            self._write(f"{label} : {done}/{total} {files}{ending}{inner} ({elapsed})")
         self._last = now
 
 
@@ -792,11 +813,15 @@ def progress_display(enabled: bool) -> Iterator[Callable[[ProgressEvent], None] 
         tasks: dict[str, Any] = {}
 
         def update(event: ProgressEvent) -> None:
+            label = labels.get(event.stage, event.stage)
             if event.stage not in tasks:
-                tasks[event.stage] = bar.add_task(
-                    labels.get(event.stage, event.stage), total=event.total
-                )
-            bar.update(tasks[event.stage], completed=event.done, total=event.total)
+                tasks[event.stage] = bar.add_task(label, total=event.total)
+            if event.item_total and event.done < event.total:
+                inner = item_progress(event.item_done, event.item_total, event.item_step)
+                label = f"{label} · {inner}"
+            bar.update(
+                tasks[event.stage], completed=event.done, total=event.total, description=label
+            )
 
         yield update
 
@@ -913,6 +938,18 @@ def _warn_profile(config: Config) -> None:
     warning = _profile_warning(config)
     if warning:
         err.print(f"[bold yellow]Attention :[/] {_markup_escape(warning)}", soft_wrap=True)
+
+
+def _estimate_llm(pipeline: Pipeline, inputs: Sequence[Path]) -> LlmEstimate | None:
+    """FULL only: estimate the language model's work before starting and warn (stderr)
+    when it should take more than ``LLM_WARNING_MINUTES``. Counts only."""
+    estimate = pipeline.estimate_llm(inputs)
+    if estimate is not None and estimate.long:
+        err.print(
+            f"[bold yellow]Attention :[/] {_markup_escape(estimate.warning('--profil standard'))}",
+            soft_wrap=True,
+        )
+    return estimate
 
 
 def _settings(config: Config) -> dict[str, str]:
@@ -1346,6 +1383,7 @@ def run(
     previous = _prepare_output(output, replace_previous)
     try:
         pipeline = Pipeline(config, store=store)
+        estimate = _estimate_llm(pipeline, inputs)
         with progress_display(not quiet) as progress:
             result = pipeline.run(inputs, output, progress=progress)
     except OutputDirError as exc:
@@ -1365,6 +1403,8 @@ def run(
         except OSError:
             fail("Impossible d'enregistrer le rapport.", EXIT_PARTIAL)
     summary = run_summary(report, result, pipeline.config, report_path, previous=previous)
+    if estimate is not None:
+        summary["parametres"]["estimation_minutes"] = round(estimate.minutes)
     if as_json:
         _print_run_summary(err, report, summary)
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -1624,6 +1664,7 @@ def analyse(
     )
     _warn_profile(config)
     pipeline = Pipeline(config)
+    estimate = _estimate_llm(pipeline, inputs)
     try:
         with progress_display(not quiet and not as_json) as progress:
             analysis = pipeline.analyze(inputs, progress=progress)
@@ -1634,6 +1675,8 @@ def analyse(
     finally:
         pipeline.close(analysis)
     summary["profil"] = pipeline.config.effective_profile().value
+    if estimate is not None:
+        summary["estimation_minutes"] = round(estimate.minutes)
     if as_json:
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
     else:

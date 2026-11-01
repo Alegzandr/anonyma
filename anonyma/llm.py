@@ -27,6 +27,7 @@ import json
 import os
 import re
 import threading
+import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -136,6 +137,9 @@ FEW_SHOT: tuple[tuple[str, list[tuple[str, str]]], ...] = (
     ),
 )
 
+#: Bump when the prompt, schema or decoding changes: part of :attr:`LlmRunner.key`,
+#: which keys the detector's memo of already analysed passages.
+PROMPT_VERSION = 3
 SEED = 1234
 N_CTX = 4096
 #: Context reserved for the answer (about 30 tokens per item).
@@ -384,6 +388,11 @@ class LlmRunner:
             verbose=False,
         )
         self.n_ctx = n_ctx
+        self.key = f"{Path(model_path).name}:v{PROMPT_VERSION}"
+        #: Model calls made and their wall time (seconds): measured throughput.
+        self.measured_calls = 0
+        self.measured_seconds = 0.0
+        self.measured_tokens = 0
         self.grammar = LlamaGrammar.from_json_schema(json.dumps(SCHEMA), verbose=False)
         model = self.llm._model
         n_vocab = int(model.n_vocab())
@@ -449,6 +458,7 @@ class LlmRunner:
         max_tokens = min(OUTPUT_TOKENS, self.n_ctx - len(prompt))
         if max_tokens < 64:
             raise ValueError("document chunk too long for the model context")
+        started = time.perf_counter()
         with self._lock:
             # Restart from the cached prefix only: identical results whatever ran before.
             if self.llm.n_tokens < len(self._prefix) or list(
@@ -457,6 +467,9 @@ class LlmRunner:
                 self._warm()
             self.llm.n_tokens = len(self._prefix)
             raw = self._generate(prompt, max_tokens)
+            self.measured_calls += 1
+            self.measured_tokens += len(body)
+            self.measured_seconds += time.perf_counter() - started
         return parse_answer(raw)
 
     def _generate(self, prompt: list[int], max_tokens: int) -> str:
@@ -494,6 +507,7 @@ class LlmRunner:
 
 __all__ = [
     "LLM_TYPES",
+    "PROMPT_VERSION",
     "SCHEMA",
     "LlmMention",
     "LlmRunner",
