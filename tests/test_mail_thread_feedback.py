@@ -102,6 +102,26 @@ def test_partial_date_formats() -> None:
     assert shift_date("3 mai 2026", 123) == "3 septembre 2026"
     assert shift_date("9 octobre", 7, 2026) == "16 octobre"
     assert shift_date("28/02", 1, 2028) == "29/02"
+    # A mail header stays in English: « 22 Sept 2026 » does not parse as RFC 5322.
+    assert shift_date("02 Oct 2026", -10) == "22 Sep 2026"
+
+
+def test_realistic_mail_date_header_is_shifted(tmp_path: Path, canary_config: Config) -> None:
+    out = _run(
+        tmp_path,
+        canary_config,
+        {
+            "m.eml": (
+                "From: Hélène Marchetti <h.marchetti@client.exemple.test>\r\n"
+                "Subject: Point\r\nDate: Fri, 02 Oct 2026 10:00:00 +0200\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n\r\nBonjour.\r\n"
+            )
+        },
+        ReplacementMode.REALISTIC,
+    )
+    date = next(line for line in out.splitlines() if line.startswith("Date:"))
+    assert "1970" not in date and "02 Oct 2026" not in date, date
+    assert re.fullmatch(r"Date: \w{3}, \d{2} \w{3} 20\d\d 10:00:00 \+0200", date), date
 
 
 def test_greeting_word_before_known_given_name(tmp_path: Path, canary_config: Config) -> None:
@@ -164,3 +184,23 @@ def test_substitute_written_otherwise_is_no_residue() -> None:
     assert plan.holds("GROUPE COURTOIS")
     assert plan.holds("Courtois")
     assert not plan.holds("Groupe Sorbel")
+
+
+def test_domain_follows_organisation_detected_by_its_core(
+    tmp_path: Path, canary_config: Config
+) -> None:
+    out = _run(
+        tmp_path,
+        canary_config,
+        {
+            "m.eml": (
+                "From: Hélène Marchetti <hmarchetti@groupe-sorbel.fr>\r\n"
+                "Subject: Point\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+                "Parfait, le Groupe Sorbel valide.\r\n"
+            )
+        },
+        ReplacementMode.REALISTIC,
+    )
+    m = re.search(r"le Groupe (\w+) valide", out)
+    assert m is not None and m.group(1) != "Sorbel", out
+    assert f"@groupe-{normalize(m.group(1))}.fr>" in normalize(out), out

@@ -540,6 +540,9 @@ def parse_date(original: str) -> date | None:
     return None
 
 
+_EN_ABBR = frozenset(m[:3] for m in MONTHS_EN)
+
+
 def _text_day_month(new: date, day_s: str, month_s: str, dot: str, style: str) -> tuple[str, str]:
     """Day and month of a written date (« 4 octobre », « 1er mai », « 3 sept. »): no
     leading zero (« 04 octobre » is not French), the abbreviation dot only on a
@@ -553,6 +556,9 @@ def _text_day_month(new: date, day_s: str, month_s: str, dot: str, style: str) -
     header = month_s[:1].isupper() and not dot and len(month_s) == 3
     if day_s.isdigit() and len(day_s) == 2 and (day_s.startswith("0") or header):
         day_out = f"{new.day:02d}"
+    if header and style == "fr_abbr" and month_s.casefold() in _EN_ABBR:
+        # « 02 Oct 2026 » of a mail header is English: « 22 Sept » would not parse.
+        style = "en_abbr"
     month_out = _month_name(new.month - 1, style, month_s)
     full = style == "fr" or normalize(month_out) == normalize(MONTHS_FR[new.month - 1])
     if style.endswith("abbr") and dot and not full:

@@ -696,10 +696,22 @@ class _Realistic:
                         self._org_labels.setdefault(whole, (key, prefix, True))
         label = fk.split_domain(domain)[1]
         found = self._org_labels.get(fk.compact_key(label))
+        head = ""
+        if found is None and "-" in label:
+            # Only the core was detected (« Sorbel » of « Groupe Sorbel »): the other
+            # words of ``groupe-sorbel.fr`` are kept around its substitute.
+            parts = label.split("-")
+            for i in range(1, len(parts)):
+                found = self._org_labels.get(fk.compact_key("-".join(parts[i:])))
+                if found is not None and found[0] in self.cores:
+                    head = " ".join(parts[:i])
+                    break
         if found is None or found[0] not in self.cores:
             return None
         key, prefix, full = found
         fake = fk.slug(f"{prefix} {self.cores[key]}" if full else self.cores[key])
+        if head:
+            fake = fk.slug(f"{head} {fake}")
         if "-" not in label:
             fake = fake.replace("-", "")
         return (fake, f"o:{key}") if fake else None
