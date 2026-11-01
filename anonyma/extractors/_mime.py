@@ -403,7 +403,7 @@ def extract_mime(data: bytes, document: Document, ctx: ExtractionContext) -> Non
 
 def _extract_part(part: Message, path: str, state: _Extraction) -> None:
     document = state.document
-    for index, (name, value) in enumerate(part.items()):
+    for index, (name, value) in enumerate(part.raw_items()):
         lname = name.lower()
         if lname in DROPPED_HEADERS or lname in STRUCTURAL_HEADERS:
             continue
@@ -567,7 +567,7 @@ def _header_lines(part: Message, path: str, state: _Writing) -> list[str]:
     by_index = {int(s.locator[2]): s for s in state.headers.get(path, [])}
     lines: list[str] = []
     nl = state.newline
-    items = part.items()
+    items = list(part.raw_items())  # 8-bit bytes kept: ``items()`` makes them U+FFFD
     depth = thread_depth((name, decode_header_value(str(value))) for name, value in items)
     for index, (name, value) in enumerate(items):
         lname = name.lower()
