@@ -685,7 +685,16 @@ def test_throughput_is_measured_and_reused(tmp_path: Path, monkeypatch: pytest.M
     runner.key = f"{model.name}:v{llm.PROMPT_VERSION}"
     runner.measured_calls, runner.measured_seconds = 30, 75.0
     llm_detector.record_throughput(runner)
+    assert llm_detector.call_seconds(config) == llm_detector.DEFAULT_CALL_SECONDS  # too few
+    runner.measured_calls, runner.measured_seconds = 60, 150.0  # 30 more calls, same rate
+    llm_detector.record_throughput(runner)
     assert llm_detector.call_seconds(config) == 2.5
+    llm_detector.record_throughput(runner)  # nothing new: unchanged
+    other = _runner([])  # a later run, much slower: averaged in, not taking over
+    other.key = runner.key
+    other.measured_calls, other.measured_seconds = 60, 600.0
+    llm_detector.record_throughput(other)
+    assert llm_detector.call_seconds(config) == pytest.approx(750 / 120)
 
 
 def test_no_model_means_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

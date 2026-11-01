@@ -428,20 +428,36 @@ def _throughput_path() -> Path:
     return paths.data_dir() / THROUGHPUT_FILE
 
 
+#: Calls the saved throughput is averaged over (older runs fade out beyond).
+THROUGHPUT_WINDOW = 2000
+#: Calls measured before the saved throughput replaces :data:`DEFAULT_CALL_SECONDS`.
+THROUGHPUT_MIN_CALLS = 50
+_recorded: dict[int, tuple[int, float]] = {}
+
+
 def record_throughput(runner: llm.LlmRunner) -> None:
-    """Remember this process's measured seconds per call for later estimates (best
-    effort: counts only)."""
-    if not runner.measured_calls:
+    """Add this process's new measured calls to the saved average seconds per call,
+    over the last :data:`THROUGHPUT_WINDOW` calls of every run (best effort: counts
+    only). One small or unusual run does not set the next estimate on its own."""
+    done_calls, done_seconds = _recorded.get(id(runner), (0, 0.0))
+    calls = runner.measured_calls - done_calls
+    seconds = runner.measured_seconds - done_seconds
+    if calls <= 0:
         return
+    _recorded[id(runner)] = (runner.measured_calls, runner.measured_seconds)
     path = _throughput_path()
     try:
         data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         if not isinstance(data, dict):
             data = {}
-        data[runner.key] = {
-            "appels": runner.measured_calls,
-            "secondes": round(runner.measured_seconds, 3),
-        }
+        old = data.get(runner.key)
+        if isinstance(old, dict):
+            calls += int(old.get("appels", 0))
+            seconds += float(old.get("secondes", 0.0))
+        if calls > THROUGHPUT_WINDOW:
+            seconds *= THROUGHPUT_WINDOW / calls
+            calls = THROUGHPUT_WINDOW
+        data[runner.key] = {"appels": calls, "secondes": round(seconds, 3)}
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=1), encoding="utf-8")
     except (OSError, ValueError):
@@ -461,7 +477,7 @@ def call_seconds(config: Config) -> float:
         calls, seconds = int(item["appels"]), float(item["secondes"])
     except (OSError, ValueError, KeyError, TypeError):
         return DEFAULT_CALL_SECONDS
-    return seconds / calls if calls >= 20 else DEFAULT_CALL_SECONDS
+    return seconds / calls if calls >= THROUGHPUT_MIN_CALLS else DEFAULT_CALL_SECONDS
 
 
 def memo_key(model: Path) -> str:

@@ -484,6 +484,13 @@ avant et après la reprise du harnais du modèle de langage (`results/complet.*`
 |---|---|---|---|---|---|
 | `complet` — avant | 100,0 % (324/324) | 96,7 % | 92,7 % | 82,2 % | 6 |
 | `complet` — après | 100,0 % (324/324) | 96,7 % | 92,7 % | 82,2 % | 9 |
+| `complet` — gros lots (`results/complet-volume.*`) | 100,0 % (324/324) | 96,7 % | 95,5 % | 82,2 % | 10 |
+
+Ligne « gros lots » : le modèle ne lit plus que les paragraphes rédigés où il peut
+ajouter quelque chose, une fois chacun par lot, après les autres détecteurs (lancés en
+parallèle) ; lot traité en 442 s au lieu de 937 à 1 459 s. Une première mesure avait
+perdu « Berlin » (24-018, phrase anglaise pleine de numéros, pas reconnue comme
+rédigée) : les chiffres comptent désormais comme du texte rédigé.
 
 Sur ce corpus, les expressions régulières et GLiNER trouvent déjà tout ce que le modèle
 de langage trouve : les chiffres ne bougent pas. Les phrases témoins perdues par rapport
