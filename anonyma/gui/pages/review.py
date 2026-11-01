@@ -610,7 +610,7 @@ class ReviewPage(QWidget):
             for r in range(len(self.model.ids))
             if self.queue.isExpanded(self.model.index(r, 0))
         ]
-        was_reset = self.model.refresh(reset=reset)
+        was_reset = self.model.refresh(reset=reset, expanded=set(expanded))
         if was_reset:
             for e_cid in expanded:
                 row = self.model.row_of(e_cid)
@@ -787,7 +787,9 @@ class ReviewPage(QWidget):
     def _rerender(self) -> None:
         self._render_current()
 
-    def _render_current(self, *, reset_view: bool = False) -> None:
+    def _render_current(self, *, reset_view: bool = False, preview: bool = True) -> None:
+        """Render the current document; ``preview=False`` keeps the anonymized side as
+        it is (a decision: the side is re-rendered once its new preview is computed)."""
         doc = self._docs.get(self.current_doc_id or "")
         if doc is None:
             self.original.clear()
@@ -810,7 +812,8 @@ class ReviewPage(QWidget):
         else:
             self.view_stack.setCurrentIndex(0)
             self._render_original(doc)
-            self._render_anonymized(doc)
+            if preview:
+                self._render_anonymized(doc)
             self._highlight_current()
         types = {
             r.entity_type
@@ -1450,7 +1453,9 @@ class ReviewPage(QWidget):
     def _decisions_changed(self) -> None:
         self._fill_filters()
         self._refresh_model()
-        self._render_current()
+        # The preview still reflects the previous decisions: ``_effective_ready``
+        # renders the anonymized side once the new one is computed.
+        self._render_current(preview=False)
         if self.visual_mode.isChecked():
             self.visual.refresh_boxes()
         self._update_tree_states()

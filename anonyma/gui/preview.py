@@ -76,8 +76,21 @@ class EffectiveState:
     table: SubstitutionTable
     by_document: dict[str, list[Entity]] = field(default_factory=dict)
 
+    #: ``cluster id -> entities``, built on the first :meth:`for_cluster` call.
+    _by_cluster: dict[str, list[Entity]] | None = field(default=None, init=False, repr=False)
+
     def for_document(self, document_id: str) -> list[Entity]:
         return self.by_document.get(document_id, [])
+
+    def for_cluster(self, cluster_id: str) -> list[Entity]:
+        """Entities of a cluster (manual ones included), in ``entities`` order."""
+        if self._by_cluster is None:
+            index: dict[str, list[Entity]] = {}
+            for e in self.entities:
+                if e.cluster_id is not None:
+                    index.setdefault(e.cluster_id, []).append(e)
+            self._by_cluster = index
+        return self._by_cluster.get(cluster_id, [])
 
 
 def compute_effective(

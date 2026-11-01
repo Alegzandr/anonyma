@@ -200,16 +200,25 @@ class BatchController(QObject):
             return 0
         added = 0
         current = [p.resolve() for p in self.inputs]
+        # A set and the folders apart: hundreds of dropped files are checked without
+        # scanning (and stat-ing) every input for each of them.
+        known = set(current)
+        folders = [c for c in current if c.is_dir()]
         for raw in items:
             path = Path(raw)
             if not path.exists():
                 continue
             path = path.resolve()
-            if any(path == c or c in path.parents for c in current if c.is_dir() or c == path):
+            if path in known or any(f in path.parents for f in folders):
                 continue
-            # A folder replaces the files/folders it contains.
-            current = [c for c in current if path not in c.parents]
+            if path.is_dir():
+                # A folder replaces the files/folders it contains.
+                current = [c for c in current if path not in c.parents]
+                folders = [f for f in folders if path not in f.parents]
+                folders.append(path)
+                known = set(current)
             current.append(path)
+            known.add(path)
             added += 1
         if added:
             self.inputs = current
@@ -357,10 +366,14 @@ class BatchController(QObject):
     def result_for(self, document_id: str) -> DocumentResult | None:
         if self.result is None:
             return None
-        for r in self.result.all_results():
-            if r.document_id == document_id:
-                return r
-        return None
+        # Indexed once per result: called for every document of the tree and queue.
+        cached = getattr(self, "_results_index", None)
+        if cached is None or cached[0] is not self.result:
+            index: dict[str, DocumentResult] = {}
+            for r in self.result.all_results():
+                index.setdefault(r.document_id, r)  # the first one, as a scan would give
+            cached = self._results_index = (self.result, index)
+        return cached[1].get(document_id)
 
     def _invalidate_analysis(self) -> None:
         if self.analysis is not None and self._pipeline is not None:

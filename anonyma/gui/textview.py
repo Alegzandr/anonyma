@@ -160,9 +160,13 @@ def render_segments(
     """Render ``(segment id, context, text, spans)`` into ``edit``, grouped by kind."""
     t = theme.tokens()
     document = edit.document()
+    # Read-only views: no undo history, and one layout pass at the end instead of one
+    # per inserted piece (ten times faster on a document of thousands of segments).
+    document.setUndoRedoEnabled(False)
     document.clear()
     mapping = RenderMap()
     cursor = QTextCursor(document)
+    cursor.beginEditBlock()
     base = QTextCharFormat()
     base.setForeground(QColor(t.text))
     heading = QTextCharFormat()
@@ -226,6 +230,7 @@ def render_segments(
         need_break = kind is not SegmentKind.BODY or not shown.endswith("\n")
     if first:
         cursor.insertText("Aucun texte extrait pour ce document.", caption)
+    cursor.endEditBlock()
     mapping.finish()
     edit.moveCursor(QTextCursor.MoveOperation.Start)
     return mapping

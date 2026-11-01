@@ -684,11 +684,21 @@ class ProcessingPage(QWidget):
     # -- table ---------------------------------------------------------------------------
 
     def _root_for(self, source: Path) -> str:
-        resolved = source.resolve()
-        for root in self.controller.inputs:
-            if resolved == root or root in resolved.parents:
-                return str(root)
-        return ""
+        # Memoised per input list: refresh() runs after every review decision, and
+        # resolving thousands of paths (on a network share) each time froze the GUI.
+        inputs = tuple(self.controller.inputs)
+        cache: dict[Path, str] | None = getattr(self, "_roots", None)
+        if cache is None or getattr(self, "_roots_inputs", None) != inputs:
+            cache = {}
+            self._roots: dict[Path, str] = cache
+            self._roots_inputs = inputs
+        if source not in cache:
+            resolved = source.resolve()
+            cache[source] = next(
+                (str(root) for root in inputs if resolved == root or root in resolved.parents),
+                "",
+            )
+        return cache[source]
 
     def refresh(self) -> None:
         c = self.controller

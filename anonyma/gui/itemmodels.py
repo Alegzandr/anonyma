@@ -6,6 +6,7 @@ batches with thousands of files and mentions stay responsive.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, override
 
@@ -228,7 +229,7 @@ class ClusterTreeModel(QAbstractItemModel):
             effective = self.controller.effective()
             order = self.controller.index.doc_order
             mentions = sorted(
-                (e for e in (effective.entities if effective else []) if e.cluster_id == cid),
+                effective.for_cluster(cid) if effective else [],
                 key=lambda e: (order.get(e.document_id, 0), e.segment_id, e.start),
             )
         self._mentions[cid] = mentions
@@ -335,8 +336,14 @@ class ClusterTreeModel(QAbstractItemModel):
             key=lambda c: (v.entity_type, normalize(v.canonical)) if (v := views[c]) else ("", ""),
         )
 
-    def refresh(self, *, reset: bool | None = None) -> bool:
-        """Recompute visible rows. Returns True when the model was reset."""
+    def refresh(
+        self, *, reset: bool | None = None, expanded: Collection[str] | None = None
+    ) -> bool:
+        """Recompute visible rows. Returns True when the model was reset.
+
+        ``expanded``: clusters whose mentions are shown; only their rows are notified
+        (None: every cluster's). One signal per cluster made a view of 5,000 clusters
+        call back into the model hundreds of thousands of times per decision."""
         self._views.clear()
         self._mentions.clear()
         self._mention_views.clear()
@@ -355,6 +362,8 @@ class ClusterTreeModel(QAbstractItemModel):
         elif self.ids:
             self.dataChanged.emit(self.index(0, 0), self.index(len(self.ids) - 1, 1))
             for row, cid in enumerate(self.ids):
+                if expanded is not None and cid not in expanded:
+                    continue
                 n = len(self.mentions(cid))
                 if n:
                     parent = self.index(row, 0)
