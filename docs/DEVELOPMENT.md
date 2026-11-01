@@ -14,6 +14,16 @@ uv run anonyma --help        # command line
 uv run python -m anonyma.app # graphical interface
 ```
 
+To use Anonyma from sources without the development tools, install with
+`uv sync --no-dev` and keep passing `--no-dev` to every command: a plain `uv run`
+syncs the default groups again and reinstalls the dev tools.
+
+```sh
+uv sync --no-dev
+uv run --no-dev anonyma run dossier -o sortie
+uv run --no-dev python -m anonyma.app
+```
+
 From sources, `data/` and `models/` are created at the project root. The `ANONYMA_HOME`
 environment variable selects another application folder. Without a LibreOffice on the
 machine, `.doc` and `.ppt` are unsupported and `.xls` is written as `.xlsx`.

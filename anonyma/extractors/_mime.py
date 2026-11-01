@@ -791,6 +791,13 @@ def _render_child(
     ):
         ctype = mime_for(name)
     type_params: list[tuple[str, str]] = []
+    if ctype.startswith("text/") and ctype == part.get_content_type():
+        # A text attachment keeps its charset and formatting parameters, or mail
+        # clients guess the encoding and show mojibake.
+        charset = _child_charset(part.get_content_charset(), data)
+        if charset:
+            type_params.append(("charset", charset))
+        type_params.extend(kept_params)
     if original_name is not None:
         type_params.append(("name", name))
     header_lines.append(fold_header("Content-Type", _content_type(ctype, type_params), nl))
@@ -809,6 +816,24 @@ def _render_child(
             value += "; " + _filename_params("filename", name)
         header_lines.append(fold_header("Content-Disposition", value, nl))
     return "".join(header_lines).encode("utf-8", "surrogateescape") + nl.encode() + body
+
+
+def _child_charset(declared: str | None, data: bytes) -> str | None:
+    """Charset to declare for the rewritten text attachment ``data``: the original
+    one while the bytes still decode with it, else UTF-8 when they are UTF-8, else
+    none (better no label than a wrong one)."""
+    codec = _codec(declared)
+    if declared and codec:
+        try:
+            data.decode(codec)
+            return declared
+        except UnicodeDecodeError:
+            pass
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return "utf-8" if declared or not data.isascii() else None
 
 
 # ---------------------------------------------------------------------------
@@ -882,7 +907,12 @@ def build_eml(
                 lines.append(f"Content-Transfer-Encoding: 8bit{nl}")
                 parts.append("".join(lines).encode("utf-8") + nl.encode() + payload)
             else:
-                ctype = _content_type(att.content_type, [("name", att.name)])
+                params = [("name", att.name)]
+                if att.content_type.startswith("text/"):
+                    charset = _child_charset(None, att.data)
+                    if charset:
+                        params.insert(0, ("charset", charset))
+                ctype = _content_type(att.content_type, params)
                 parts.append(leaf(ctype, att.data, extra, qp=False))
         body = multipart("mixed", parts)
     head = "".join(

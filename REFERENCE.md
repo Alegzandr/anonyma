@@ -228,7 +228,8 @@ vérifiés et peut être partagé tel quel) ; ils ne doivent pas être diffusés
 
 Sans console interactive (script, agent, tâche planifiée), une commande qui a besoin de la
 phrase secrète échoue aussitôt (code 2) si `ANONYMA_PASSPHRASE` n'est pas définie, au lieu
-d'attendre une saisie.
+d'attendre une saisie ; de même pour une confirmation (`modeles telecharger`,
+`modeles supprimer`) sans l'option `--oui`.
 
 ### Automatisation (`--json`)
 
@@ -251,6 +252,7 @@ d'archives, messages d'une boîte, à toute profondeur) et l'ensemble des **él�
 | `verdict`, `verdict_libelle` | `anonymise`, `a_revoir`, `quarantaine`, `echec` ou `vide` ; la phrase du résumé |
 | `code_sortie` | code de sortie, déduit du verdict (0 ou 1) |
 | `lot`, `regime` | identifiant du lot ; `anonymisation` ou `pseudonymisation` |
+| `profil_degrade` | `true` si le lot a tourné avec une détection plus légère que le profil choisi (ou, en `auto`, que le profil conseillé pour la machine) parce qu'un modèle ou un moteur manque — l'avertissement « Profil appliqué… » de la sortie d'erreur ; `false` sinon |
 | `nombre_fichiers` (alias `fichiers`) | fichiers traités |
 | `nombre_elements` (alias `elements`), `nombre_elements_inclus` | tous les éléments ; éléments inclus seulement |
 | `elements_omis` | éléments inclus retirés de leur conteneur (chiffrés, illisibles, non pris en charge) |
@@ -269,8 +271,8 @@ d'archives, messages d'une boîte, à toute profondeur) et l'ensemble des **él�
 | `documents` | par fichier : `fichier` (nom anonymisé), `chemin` (fichier produit ou `null`), `chemin_relatif` (le même, relatif au dossier de sortie ou de quarantaine), `format`, `format_sortie`, `statut`, `statut_libelle`, `resultat`, `quarantaine`, `occurrences`, `residus` (certains), `residus_possibles`, `masques_apres_verification`, `elements_omis`, `problemes` (liste de `element`, `code`, `gravite`, `message`) |
 
 Le rapport JSON reprend `schema`, `lot`, `regime`, `verdict`, `verdict_libelle`,
-`code_sortie` et les comptages (de `nombre_fichiers` à `occurrences_par_type`, sans les
-alias), avec `debut`, `fin` et le détail : `fichiers` (mêmes champs que `documents`, sans `chemin`, `chemin_relatif` ni
+`code_sortie`, `profil_degrade` et les comptages (de `nombre_fichiers` à
+`occurrences_par_type`, sans les alias), avec `debut`, `fin` et le détail : `fichiers` (mêmes champs que `documents`, sans `chemin`, `chemin_relatif` ni
 `problemes`), `residus` (`fichier`, `emplacement`, `zone`, `type`, `origine` —
 `valeur_origine` ou `detecteur` —, `detecteur`, `certitude` — `certain` ou `possible` —,
 et leurs libellés), `echecs` (`fichier`
@@ -296,7 +298,8 @@ Une erreur d'utilisation (code 2) n'écrit rien sur la sortie standard : le mess
 la sortie d'erreur. `analyser --json` donne de même `occurrences_par_type` (aussi sous son
 ancien nom `mentions_par_type`), `entites_distinctes_par_type`, et dans `non_analyses` les
 éléments illisibles ou non pris en charge (`fichier` sous son nom anonymisé, `statut`,
-`statut_libelle`, `problemes`, `codes`), que l'affichage texte liste aussi.
+`statut_libelle`, `problemes`, `codes`), que l'affichage texte liste aussi, ainsi que
+`profil` et `profil_degrade`.
 
 ## Formats
 
@@ -362,7 +365,11 @@ anonyma-cli modeles telecharger <identifiant>
 anonyma-cli modeles supprimer <identifiant>
 ```
 
-Le téléchargement d'un modèle est toujours déclenché explicitement. Avant de télécharger, Anonyma lit la licence publiée sur Hugging Face et
+Le téléchargement d'un modèle est toujours déclenché explicitement et demande
+confirmation (sauf avec `--oui`, comme la suppression). Sans console interactive pour
+répondre, la commande échoue aussitôt (code 2) en suggérant `--oui` ; une réponse
+« non » l'arrête avec le code 1 : le code 0 signifie toujours que l'opération a eu lieu.
+Avant de télécharger, Anonyma lit la licence publiée sur Hugging Face et
 refuse le modèle si elle est non commerciale (`cc-by-nc…`, « recherche uniquement »…),
 non identifiée (`other`, `unknown`) ou différente de celle du catalogue. Les fichiers
 sont téléchargés à la révision figée par le catalogue, **vérifiés par empreinte

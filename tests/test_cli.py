@@ -252,6 +252,38 @@ def test_missing_models_are_announced(
     assert settings["Profil"].endswith("non disponible : GLiNER")
 
 
+def test_degraded_profile_in_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, corpus: Path, business_list: Path
+) -> None:
+    from anonyma import hardware, registry
+
+    gliner = registry.detector_classes()["gliner"]
+    monkeypatch.setattr(gliner, "is_available", classmethod(lambda cls, config: False))
+    report = tmp_path / "rapport.json"
+    args = _run_args(corpus, tmp_path / "s1", business_list, "--json", "--rapport", report)
+    args[args.index("leger")] = "standard"
+    result = invoke(*args)
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["profil_degrade"] is True
+    assert data["parametres"]["profil"] == "standard"
+    assert json.loads(report.read_text(encoding="utf-8"))["profil_degrade"] is True
+
+    # "auto": the advised profile needs the missing model.
+    monkeypatch.setattr(hardware, "recommend_profile", lambda info: Profile.STANDARD)
+    monkeypatch.setattr(cli, "engine_available", lambda name: name == "gliner")
+    args = _run_args(corpus, tmp_path / "s2", business_list, "--json")
+    args[args.index("leger")] = "auto"
+    data = json.loads(invoke(*args).stdout)
+    assert data["profil_degrade"] is True and data["parametres"]["profil_effectif"] == "leger"
+    result = invoke("analyser", corpus, "--liste-metier", business_list, "-j", "1", "-q", "--json")
+    assert json.loads(result.stdout)["profil_degrade"] is True
+
+    # A light profile chosen on purpose is not degraded.
+    args = _run_args(corpus, tmp_path / "s3", business_list, "--json")
+    assert json.loads(invoke(*args).stdout)["profil_degrade"] is False
+
+
 def test_analyser_table(corpus: Path, business_list: Path) -> None:
     result = invoke(
         "analyser", corpus, "-p", "leger", "--liste-metier", business_list, "-j", "1", "-q"
@@ -439,8 +471,25 @@ def test_models_download(
     result = invoke("modeles", "telecharger", "modele-test", "--oui")
     assert result.exit_code == 1
     assert "non commercial" in result.output
+
+    # No console to answer the prompt: fail at once, never "abandon" with code 0.
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "_manager", lambda: calls.append("manager"))
+    monkeypatch.setattr(cli, "_interactive", lambda: False)
+    result = invoke("modeles", "telecharger", "modele-test")
+    assert result.exit_code == 2
+    assert "--oui" in result.output
+    result = invoke("modeles", "supprimer", "modele-test")
+    assert result.exit_code == 2
+    assert "--oui" in result.output
+    # An explicit « non » at a console is not a success either.
+    monkeypatch.setattr(cli, "_interactive", lambda: True)
     result = invoke("modeles", "telecharger", "modele-test", input="n\n")
     assert result.exit_code == 1
+    assert "annulé" in result.output
+    result = invoke("modeles", "supprimer", "modele-test", input="n\n")
+    assert result.exit_code == 1
+    assert not calls
 
 
 # -- protection options (global fix) --------------------------------------------------

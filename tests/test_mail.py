@@ -226,6 +226,30 @@ def test_eml_switches_to_utf8_when_substitute_needs_it(
     assert decode_header_value(parsed["From"]) == "Zoé Lefèvre <bob@exemple.test>"
 
 
+def test_eml_text_attachment_keeps_charset(tmp_path: Path, canary_config: Config) -> None:
+    raw = (
+        b"From: a@exemple.test\r\nSubject: Pi\xc3\xa8ce\r\nMIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="b1"\r\n\r\n'
+        b"--b1\r\nContent-Type: text/plain; charset=us-ascii\r\n\r\nVoir la piece.\r\n"
+        b'--b1\r\nContent-Type: text/plain; charset="utf-8"; format=flowed; delsp=yes\r\n'
+        b"Content-Transfer-Encoding: 8bit\r\n"
+        b'Content-Disposition: attachment; filename="note.txt"\r\n\r\n'
+        b"R\xc3\xa9sum\xc3\xa9 pr\xc3\xa9par\xc3\xa9 pour " + CANARY_PERSON.encode() + b".\r\n"
+        b"--b1--\r\n"
+    )
+    output, _ = _run(tmp_path, "m.eml", raw, canary_config)
+    parsed = email.message_from_bytes(output.read_bytes(), policy=compat32)
+    attachment = next(p for p in parsed.walk() if p.get_filename())
+    assert attachment.get_content_charset() == "utf-8"
+    assert attachment.get_param("format") == "flowed"
+    assert attachment.get_param("delsp") == "yes"
+    payload = attachment.get_payload(decode=True)
+    assert isinstance(payload, bytes)
+    text = payload.decode("utf-8")
+    assert text.startswith("Résumé préparé pour [PERSONNE_001]")
+    assert "uintavalle" not in text
+
+
 def test_encrypted_mail_fails(tmp_path: Path, canary_config: Config) -> None:
     raw = (
         b"From: a@exemple.test\r\nMIME-Version: 1.0\r\n"

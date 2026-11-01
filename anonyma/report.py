@@ -176,6 +176,9 @@ class BatchReport:
     settings: dict[str, str] = field(default_factory=dict)
     #: The same settings as machine values (``{"profil": "leger", ...}``).
     parameters: dict[str, Any] = field(default_factory=dict)
+    #: The batch ran with a lighter detection than the chosen or advised profile
+    #: because a model or engine is missing.
+    profile_degraded: bool = False
     regime: Regime = Regime.ANONYMIZATION
     #: For each entry of ``files`` (same order): its status, and whether its output was
     #: placed in the quarantine folder.
@@ -418,6 +421,8 @@ class BatchReport:
             "verifications_incompletes": self.incomplete,
         }
         if self.parameters or self.settings:
+            # Known only where the batch settings are (the command line).
+            data["profil_degrade"] = self.profile_degraded
             data["parametres"] = self.parameters
             data["parametres_libelles"] = self.settings
         return data

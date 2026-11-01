@@ -628,6 +628,21 @@ def read_passphrase(*, confirm: bool) -> str:
     return value
 
 
+def confirm_or_fail(question: str, *, default: bool) -> bool:
+    """Ask a yes/no question; without a console to answer it, fail at once (code 2)
+    instead of reading an empty answer, so that a script never mistakes a skipped
+    operation for a done one. Ctrl+C or end of input counts as « non »."""
+    if not _interactive():
+        fail(
+            "Confirmation requise, mais aucune console interactive pour la saisir : "
+            "ajoutez l'option --oui."
+        )
+    try:
+        return bool(typer.confirm(question, default=default, err=True))
+    except typer.Abort:
+        return False
+
+
 def _interactive() -> bool:
     """Whether a user can answer a prompt (standard input is a terminal)."""
     try:
@@ -886,14 +901,27 @@ def _profile_name(profile: Profile) -> str:
     return _short_label(PROFILE_LABELS.get(profile, profile.value))
 
 
-def _profile_warning(config: Config) -> str | None:
-    """Say when the detection actually run is below the chosen or advised profile."""
+def _advised_profile() -> Profile:
+    """The profile advised for this machine, never one whose engine this build lacks."""
     from anonyma import hardware
 
+    return runnable_profile(hardware.recommend_profile(hardware.detect_hardware()))
+
+
+def profile_degraded(config: Config) -> bool:
+    """Whether the batch runs a lighter detection than the chosen profile (or, in
+    "auto", the advised one) because a model or engine is missing: the condition of
+    :func:`_profile_warning`, as a machine value (``profil_degrade``)."""
+    if config.profile is None:
+        return _advised_profile().rank > config.effective_profile().rank
+    return bool(_missing_detector_names(config))
+
+
+def _profile_warning(config: Config) -> str | None:
+    """Say when the detection actually run is below the chosen or advised profile."""
     effective = config.effective_profile()
     if config.profile is None:
-        # Never advise a profile whose engine this build lacks.
-        advised = runnable_profile(hardware.recommend_profile(hardware.detect_hardware()))
+        advised = _advised_profile()
         if advised.rank <= effective.rank:
             return None
         return (
@@ -1323,6 +1351,7 @@ def run(
     report = BatchReport.from_result(result)
     report.settings = _settings(pipeline.config)
     report.parameters = _parameters(pipeline.config)
+    report.profile_degraded = profile_degraded(config)  # before "auto" is resolved
     if report_path is not None:
         try:
             report.save(report_path)
@@ -1439,6 +1468,7 @@ def run_summary(
         "verdict": report.verdict_code(),
         "verdict_libelle": text,
         "code_sortie": report.exit_code(),
+        "profil_degrade": report.profile_degraded,
         "lot": report.batch_id,
         "regime": report.regime.value,
         # Same counts as nombre_fichiers / nombre_elements (names kept for scripts).
@@ -1591,6 +1621,7 @@ def analyse(
     finally:
         pipeline.close(analysis)
     summary["profil"] = pipeline.config.effective_profile().value
+    summary["profil_degrade"] = profile_degraded(config)
     _add_estimates(summary, estimate, pipeline)
     if as_json:
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -2038,7 +2069,7 @@ def models_download(
         f"{spec.title} — dépôt {spec.repo_id}, licence {spec.license}, "
         f"{format_bytes(size) if size else 'taille inconnue'}."
     )
-    if not yes and not typer.confirm(
+    if not yes and not confirm_or_fail(
         "Autoriser l'accès réseau vers Hugging Face pour ce téléchargement ?", default=True
     ):
         fail("Téléchargement annulé.", EXIT_PARTIAL)
@@ -2101,8 +2132,8 @@ def models_remove(
 ) -> None:
     """Supprimer un modèle installé (et ses téléchargements partiels)."""
     _spec_or_fail(model_id)
-    if not yes and not typer.confirm(f"Supprimer le modèle « {model_id} » ?", default=False):
-        raise typer.Exit(EXIT_OK)
+    if not yes and not confirm_or_fail(f"Supprimer le modèle « {model_id} » ?", default=False):
+        fail("Suppression annulée.", EXIT_PARTIAL)
     from anonyma.model_manager import ModelError
 
     try:

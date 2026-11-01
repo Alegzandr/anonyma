@@ -14,6 +14,10 @@ reste rien.
 > **Usage interne uniquement.** Anonyma contient des composants sous licence AGPL-3.0 et
 > GPL-3.0 : il ne doit pas être distribué en dehors de l'entreprise. Voir
 > [LICENSES.md](LICENSES.md).
+>
+> Consultants : vous pouvez l'utiliser au sein de votre cabinet, y compris sur les
+> documents de vos clients, et leur remettre les fichiers anonymisés. En revanche, ne
+> remettez pas l'outil lui-même à un client (ni copie, ni installation chez lui).
 
 ## Démarrer
 
