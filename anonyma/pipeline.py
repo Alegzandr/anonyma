@@ -305,9 +305,10 @@ class _StderrToLog(io.TextIOBase):
         return len(text)
 
 
-def _worker_init() -> None:
-    from anonyma import logs, netguard
+def _worker_init(pool_size: int = 0) -> None:
+    from anonyma import logs, netguard, threads
 
+    threads.set_pool_size(pool_size)
     paths.configure_environment()
     netguard.install()
     # Like the main process: records go to data/logs, never to the user's terminal.
@@ -334,7 +335,10 @@ def worker_pool(workers: int) -> Iterator[ProcessPoolExecutor]:
     # ONNX Runtime, the language model) and a forked copy of a lock held by one of them
     # never gets released; workers also start with their own logging and caches.
     pool = ProcessPoolExecutor(
-        workers, mp_context=multiprocessing.get_context("spawn"), initializer=_worker_init
+        workers,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=_worker_init,
+        initargs=(workers,),
     )
     try:
         yield pool
@@ -1622,8 +1626,12 @@ class Pipeline:
         progress: ProgressCallback | None,
         cancel: CancelToken | None,
         crashed: Callable[..., Any],
+        sizes: Sequence[int] = (),
     ) -> list[Any | None]:
         """Run ``fn(*job)`` for each job; ``None`` for jobs skipped by cancellation.
+
+        ``sizes`` (bytes of each job's input): a pool takes the largest jobs first, so
+        that one big file started last never runs alone while the other workers idle.
 
         Worker processes may die (native crash, memory): the items left are then run
         one at a time in a fresh single-worker pool, never in this process, and an
@@ -1659,7 +1667,8 @@ class Pipeline:
                     _item_progress = None
             return results
         try:
-            self._pool(fn, jobs, list(range(total)), self._workers(total, stage), cancel, done)
+            order = sorted(range(total), key=lambda i: -sizes[i]) if sizes else range(total)
+            self._pool(fn, jobs, list(order), self._workers(total, stage), cancel, done)
         except BrokenProcessPool:
             log.warning("worker pool broken during %s; retrying the remaining items", stage)
             # A worker can also die for reasons outside the item (memory pressure from
@@ -1788,7 +1797,15 @@ class Pipeline:
             )
             for i, (path, name) in enumerate(items)
         ]
-        outputs = self._map(_analyze_one, jobs, "analyse", progress, cancel, self._analysis_crashed)
+        outputs = self._map(
+            _analyze_one,
+            jobs,
+            "analyse",
+            progress,
+            cancel,
+            self._analysis_crashed,
+            [_size(path) if i < len(files) else 0 for i, (path, _) in enumerate(items)],
+        )
         if late:
             self._late_detection(outputs, progress, cancel)
 
@@ -1925,10 +1942,16 @@ class Pipeline:
         else:
             names = top_level_names(analysis.documents, entities, table)
 
+        # Entities of each document, with their rank in ``entities``: a tree's list keeps
+        # the batch order without scanning every entity of the batch for each file.
+        by_document: dict[str, list[tuple[int, Entity]]] = {}
+        for rank, e in enumerate(entities):
+            by_document.setdefault(e.document_id, []).append((rank, e))
         jobs: list[tuple[Any, ...]] = []
         for doc in analysis.documents:
-            tree = {d.id for d in doc.walk()}
-            doc_entities = [e for e in entities if e.document_id in tree]
+            ranked = [item for d in doc.walk() for item in by_document.get(d.id, ())]
+            ranked.sort(key=lambda item: item[0])
+            doc_entities = [e for _, e in ranked]
             # Document-local values (job titles) are only searched in their own file.
             here = {e.cluster_id for e in doc_entities if e.cluster_id in local}
             sensitive = batch_wide + sorted(
@@ -1952,7 +1975,10 @@ class Pipeline:
                     ),
                 )
             )
-        outputs = self._map(_write_and_verify, jobs, "ecriture", progress, cancel, _write_crashed)
+        sizes = [_size(job[0].document.source) for job in jobs]
+        outputs = self._map(
+            _write_and_verify, jobs, "ecriture", progress, cancel, _write_crashed, sizes
+        )
         results: list[DocumentResult] = []
         for job, out in zip(jobs, outputs, strict=True):
             doc = job[0].document

@@ -108,7 +108,7 @@ class RapidOcrEngine:
     #: Second pass on rotated strips (vertical text).
     rotated = True
 
-    def __init__(self, latin: tuple[Path, Path] | None = None) -> None:
+    def __init__(self, latin: tuple[Path, Path] | None = None, threads: int = 0) -> None:
         import onnxruntime as ort
         from rapidocr_onnxruntime import RapidOCR
 
@@ -117,6 +117,8 @@ class RapidOcrEngine:
         if disable is not None:
             disable()
         kwargs: dict[str, Any] = {"text_score": MIN_LINE_SCORE}
+        if threads > 0:  # else ONNX Runtime's default
+            kwargs["intra_op_num_threads"] = threads
         if latin is not None:
             kwargs["rec_model_path"] = str(latin[0])
             kwargs["rec_keys_path"] = str(latin[1])
@@ -279,7 +281,9 @@ def create_engine(config: Config) -> OcrEngine | None:
     if not config.ocr_enabled:
         return None
     try:
-        engine = RapidOcrEngine(latin_model_files())
+        from anonyma.threads import model_threads
+
+        engine = RapidOcrEngine(latin_model_files(), model_threads())
     except ImportError:
         log.warning("OCR engine unavailable: rapidocr_onnxruntime not installed")
         return None

@@ -179,10 +179,12 @@ class Verifier:
             ("table", tuple(sensitive), frozenset(allowed_keys)),
             lambda: self._table(sensitive, allowed_keys),
         )
-        ocr_table = _cached(
-            ("ocr", tuple(sensitive), frozenset(allowed_keys)),
-            lambda: self._ocr_table(sensitive, allowed_keys),
-        )
+        ocr_key = ("ocr", tuple(sensitive), frozenset(allowed_keys))
+
+        def ocr_table() -> MultiMatcher[tuple[str, int]]:
+            # Built on the first OCR segment only: most outputs have none.
+            return _cached(ocr_key, lambda: self._ocr_table(sensitive, allowed_keys))
+
         subs = _cached(("subs", frozenset(substitutes)), lambda: _substitutes(substitutes))
         # Values the user kept may contain masked values (a whitelisted e-mail holding a
         # masked surname): text inside them is not a residue.
@@ -238,8 +240,8 @@ class Verifier:
                         # sure (it was masked next to its person): to review.
                         sure = entity_type not in DOCUMENT_LOCAL_TYPES
                         hits.append((m.start, m.end, entity_type, source, sure))
-                if segment.context.kind is SegmentKind.OCR and len(ocr_table):
-                    for om in leftmost_longest(ocr_table.find(skeleton(segment.text))):
+                if segment.context.kind is SegmentKind.OCR and len(ocr_table()):
+                    for om in leftmost_longest(ocr_table().find(skeleton(segment.text))):
                         if not _inside(om.start, om.end, spans):
                             ocr_type, length = om.payloads[0]
                             sure = length >= CERTAIN_OCR_LENGTH

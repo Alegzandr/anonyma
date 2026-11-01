@@ -100,7 +100,8 @@ class GlinerDetector(Detector):
         ]
 
     def _model(self) -> object:
-        from anonyma.gliner_onnx import GlinerOnnx, default_threads
+        from anonyma.gliner_onnx import GlinerOnnx
+        from anonyma.threads import model_threads
 
         spec = model_spec(self.config)
         if spec is None:
@@ -108,7 +109,9 @@ class GlinerDetector(Detector):
         path = model_dir(spec)
         if path is None:
             raise RuntimeError("GLiNER model files missing")
-        threads = self.config.gliner_threads or default_threads(self.config.workers)
+        # The configured count, else a share of the CPUs in a worker pool (the
+        # runtime's default when this process runs alone).
+        threads = self.config.gliner_threads or model_threads()
         key = (str(path), spec.extra.get("onnx", "model.onnx"), threads)
         with _lock:
             if key not in _models:

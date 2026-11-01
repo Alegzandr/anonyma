@@ -742,12 +742,16 @@ def link_by_place(
         in_root.setdefault(root, set()).add(person_id)
         in_record.setdefault((doc, record), set()).add(person_id)
 
+    # Who bears each word, built once: a batch holds thousands of people and partial
+    # mentions (given name, surname, or one part of a compound given name).
+    bearing: dict[str, set[str]] = {}
+    for cid, p in full.items():
+        given = p.given_key
+        for word in {given, p.surname_key, *given.split("-")}:
+            bearing.setdefault(word, set()).add(cid)
+
     def bearers(word_key: str) -> set[str]:
-        return {
-            cid
-            for cid, p in full.items()
-            if word_key in (p.given_key, p.surname_key) or word_key in p.given_key.split("-")
-        }
+        return bearing.get(word_key, set())
 
     moved: set[str] = set()
     for e in entities:

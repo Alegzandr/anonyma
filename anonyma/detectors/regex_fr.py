@@ -217,7 +217,35 @@ def _column_number(letters: str) -> int:
     return n
 
 
-def _row_label_hint(segment: Segment, row_labels: dict[tuple[str, int, int], str]) -> str | None:
+class RowLabels:
+    """Field-name cells seen so far in a document: ``(sheet, row, column) -> hint``
+    (column 0 keeps the first column of each row), and the label columns of each row,
+    so that a row's label count costs nothing on sheets of 100,000 cells."""
+
+    __slots__ = ("columns", "hints")
+
+    def __init__(self) -> None:
+        self.hints: dict[tuple[str, int, int], str] = {}
+        self.columns: dict[tuple[str, int], set[int]] = {}
+
+    def setdefault(self, key: tuple[str, int, int], value: str) -> str:
+        if key not in self.hints:
+            self[key] = value
+        return self.hints[key]
+
+    def get(self, key: tuple[str, int, int]) -> str | None:
+        return self.hints.get(key)
+
+    def __setitem__(self, key: tuple[str, int, int], value: str) -> None:
+        self.hints[key] = value
+        if key[2] > 0:
+            self.columns.setdefault(key[:2], set()).add(key[2])
+
+    def labels(self, sheet: str, row: int) -> int:
+        return len(self.columns.get((sheet, row), ()))
+
+
+def _row_label_hint(segment: Segment, row_labels: RowLabels) -> str | None:
     """Hint given by the cell just left of ``segment`` when it holds a field name and
     starts its row (vertical layout « Nom | Jean Dupont »); records ``segment`` if it
     is one (``row_labels`` also keeps, at column 0, the first column of each row).
@@ -236,7 +264,7 @@ def _row_label_hint(segment: Segment, row_labels: dict[tuple[str, int, int], str
         row_labels[(sheet, row, col)] = own
         return None
     hint = row_labels.get((sheet, row, col - 1))
-    labels = sum(1 for k in row_labels if k[:2] == (sheet, row) and k[2] > 0)
+    labels = row_labels.labels(sheet, row)
     if hint is None or col - 1 != first or labels > 1:
         return None
     return hint
@@ -331,7 +359,7 @@ class RegexDetector(Detector):
         found: list[Entity] = []
         previous = ""
         #: Field-name cells (« Nom » in A1): (sheet, row, column) -> hint.
-        row_labels: dict[tuple[str, int, int], str] = {}
+        row_labels = RowLabels()
         for segment in segments:
             if not segment.text.strip() or skip_segment(segment):
                 continue

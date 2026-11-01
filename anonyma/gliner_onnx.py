@@ -370,7 +370,8 @@ class GlinerOnnx:
 
 def default_threads(workers: int) -> int:
     """Intra-op threads for one model instance given the number of worker processes."""
-    cpus = os.cpu_count() or 1
+    from anonyma.threads import share
+
     if workers <= 0:
-        workers = max(1, min(cpus, 8) - 1)
-    return max(1, cpus // workers)
+        workers = max(1, min(os.cpu_count() or 1, 8) - 1)
+    return share(workers)
