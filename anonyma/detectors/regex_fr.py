@@ -38,8 +38,15 @@ from anonyma.detectors._rules import (
 from anonyma.detectors.opaque import IdWhitelist
 from anonyma.fieldhints import field_hint, hint_of
 from anonyma.logs import get_logger
-from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
-from anonyma.names import is_functional_name
+from anonyma.models import (
+    Detector,
+    Entity,
+    EntityType,
+    Profile,
+    Segment,
+    SegmentKind,
+)
+from anonyma.names import given_like, is_functional_name
 from anonyma.registry import register_detector
 from anonyma.textutils import normalize
 
@@ -83,21 +90,62 @@ _REFERENCE_KEYWORD = regex.compile(
     r"(?<![a-z0-9])(?P<kw>dossier|affaire|reference|ref|rg|ticket|contrat|police|sinistre"
     r"|client|adherent|matricule|passeport|passport|cni|carte d'identite|permis"
     r"|titre de sejour|facture|commande|devis|patient|ipp|nda)"
-    r"(?:[ \t]+(?:de|du|n[°o]|numero|:|#)\.?)*[ \t]*(?:n[°ºo]\.?|numero|:|#)?[ \t]*$"
+    r"(?:[ \t_]+(?:de|du|n[°o]|numero|:|#)\.?)*[ \t_]*(?:n[°ºo]\.?|numero|:|#)?[ \t_]*$"
 )
 #: Letters first, then groups of letters and digits (``FAC-2026-166002``,
 #: ``CAS-11478-QRV7QP``, ``CTR-4297539``), in capitals.
-_REFERENCE_SHAPE = regex.compile(r"^[A-Z]{1,6}(?:[\-/_.]?[A-Z0-9]+)+$")
+_REFERENCE_SHAPE = regex.compile(r"^(?P<prefix>[A-Z]{1,4})(?:[\-/_.]?[A-Z0-9]+)+$")
+#: The reference-shaped run around a span (``FAC-2026-743117`` in a file name).
+_REFERENCE_RUN = regex.compile(r"[A-Za-z0-9][A-Za-z0-9\-/.]*[A-Za-z0-9]")
 
 
 def business_reference(text: str, start: int, end: int) -> bool:
     """``text[start:end]`` is an invoice, order, quote, ticket, case or contract
     reference introduced by its keyword (« facture FAC-2026-166002 »)."""
     value = text[start:end]
-    if not _REFERENCE_SHAPE.match(value) or sum(c.isdigit() for c in value) < 4:
+    shape = _REFERENCE_SHAPE.match(value)
+    if shape is None or sum(c.isdigit() for c in value) < 4:
         return False
+    if len(shape.group("prefix")) == 4 and given_like(shape.group("prefix")):
+        return False  # « PAUL-2026-0042 »: a name, not a document prefix
     m = _REFERENCE_KEYWORD.search(normalize(text[max(0, start - 40) : start]))
     return m is not None and m.group("kw") in BUSINESS_REFERENCE_KEYWORDS
+
+
+def kept_reference(config: Config, ids: IdWhitelist, text: str, start: int, end: int) -> bool:
+    """Whether a mention of any detector lies in a reference the user keeps: one
+    allowed by ``--identifiant-autorise``, or a business reference with
+    ``--conserver-identifiants`` (« Facture_FAC-2026-743117.pdf »). Besides the
+    reference the mention may only hold its keyword (« Facture FAC-2026-639133 »): a
+    name next to it is still masked."""
+    covered = [False] * (end - start)
+    found = False
+    for m in _REFERENCE_RUN.finditer(text, max(0, start - 40), min(len(text), end + 40)):
+        if m.end() <= start or m.start() >= end:
+            continue
+        run_end = m.end()
+        ext = _EXTENSION.search(m.group())
+        if ext is not None:
+            run_end = m.start() + ext.start()  # « FAC-2026-743117.pdf »
+        value = text[m.start() : run_end]
+        kept = ids.allows(value) or (
+            not config.mask_opaque_ids and business_reference(text, m.start(), run_end)
+        )
+        if not kept:
+            continue
+        found = True
+        for k in range(max(start, m.start()), min(end, m.end())):
+            covered[k - start] = True
+    if not found:
+        return False
+    rest = "".join(" " if c else text[start + k] for k, c in enumerate(covered))
+    return all(
+        normalize(w) in BUSINESS_REFERENCE_KEYWORDS or normalize(w) in ("n", "no", "numero")
+        for w in regex.findall(r"[^\W\d_]+|\d+", rest)
+    )
+
+
+_EXTENSION = regex.compile(r"\.[A-Za-z][A-Za-z0-9]{1,4}$")
 
 
 #: Score of values typed by their column / key (:mod:`anonyma.fieldhints`).
@@ -678,4 +726,4 @@ def _shadowed(
     )
 
 
-__all__ = ["DETECTOR_NAME", "RegexDetector"]
+__all__ = ["DETECTOR_NAME", "RegexDetector", "business_reference", "kept_reference"]

@@ -234,8 +234,14 @@ NUMERIC_MIN_DIGITS: dict[str, int] = {
 }
 
 
+#: An elided article or pronoun glued to its word (« l'arrêt », « qu'il »): left out,
+#: the word is read alone (« O'Brien » stays one word).
+_ELISION = re.compile(r"(?<![^\W\d_])(?:[ldjmnstc]|qu)['’](?=[^\W\d_])", re.IGNORECASE)
+_WORD_RUN = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
+
+
 def _words(value: str) -> list[str]:
-    return re.findall(r"[^\W\d_]+(?:['’][^\W\d_]+)*", value)
+    return _WORD_RUN.findall(_ELISION.sub(" ", value))
 
 
 #: Grammatical words that never carry a name on their own.
@@ -261,6 +267,26 @@ FUNCTION_WORDS = frozenset(
         "of",
         "and",
         "an",
+        # Determiners and possessives (« Notre technicien »).
+        "notre",
+        "votre",
+        "nos",
+        "vos",
+        "mon",
+        "ma",
+        "mes",
+        "ton",
+        "ta",
+        "tes",
+        "son",
+        "sa",
+        "ses",
+        "leur",
+        "leurs",
+        "ce",
+        "cet",
+        "cette",
+        "ces",
     ]
 )
 

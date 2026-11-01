@@ -34,6 +34,8 @@ from anonyma import outputs as output_record
 from anonyma import paths, registry
 from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
+from anonyma.detectors.opaque import IdWhitelist
+from anonyma.detectors.regex_fr import kept_reference
 from anonyma.errors import failure_reason
 from anonyma.frenchtext import NBSP, grouped, plural
 from anonyma.logs import get_logger
@@ -81,6 +83,7 @@ from anonyma.resolver import (
     link_by_place,
     propagate,
     resolve,
+    searched_variant,
 )
 from anonyma.structure import PROPERTY as STRUCTURE
 from anonyma.textsearch import MultiMatcher, leftmost_longest
@@ -619,6 +622,10 @@ def detect_tree(
     detectors = early + late
     hook = _item_progress
     atomic = AtomicIndex()
+    # References the user keeps (« --conserver-identifiants », « --identifiant-autorise »)
+    # stay whole whatever detector reads a name or a number inside them.
+    ids = IdWhitelist(config.opaque_id_whitelist or [])
+    keeping = bool(ids) or not config.mask_opaque_ids
     for doc in root.walk():
         # Unreadable items still get their name analysed: it shows up in reports.
         segments = (
@@ -661,8 +668,10 @@ def detect_tree(
                 if e.score < config.min_score:
                     continue
                 # No detector may cut a GUID, a hash or a token (:mod:`anonyma.atomic`).
-                span = atomic.fit(text, e.start, e.end)
+                span = atomic.fit_typed(text, e.start, e.end, e.entity_type)
                 if span is None:
+                    continue
+                if keeping and kept_reference(config, ids, text, span[0], span[1]):
                     continue
                 e.start, e.end = span
                 e.value = text[e.start : e.end]
@@ -1799,6 +1808,7 @@ class Pipeline:
                 for cid, c in active.items()
                 if cid not in local
                 for v in c.variants
+                if searched_variant(c, v)  # a word masked where found only: not a value
             }
         )
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)

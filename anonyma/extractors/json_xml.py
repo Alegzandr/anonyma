@@ -49,7 +49,7 @@ from anonyma.models import (
 )
 from anonyma.registry import register_extractor
 from anonyma.structure import PROPERTY as STRUCTURE
-from anonyma.structure import is_structural, vocabulary
+from anonyma.structure import is_structural, schema_valued, vocabulary
 
 _SIMPLE_KEY = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*")
 
@@ -108,6 +108,8 @@ class JsonExtractor(Extractor):
             else:
                 kind = SegmentKind.BODY
                 label = with_key_hint(token.path, key_hints.get(token.path))
+            if token.kind == "string" and schema_valued(_nearest_key(token.keys), value):
+                continue  # « systemuser » under a lookup annotation: schema, kept as is
             if token.kind == "string" and looks_like_html(value):
                 # An HTML body (Dataverse ``description``): read as HTML, entities
                 # decoded, markup and styles left out, data: URIs as children.

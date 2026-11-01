@@ -67,6 +67,29 @@ def is_structural(name: str) -> bool:
     )
 
 
+#: Annotations whose value names a table, a relation or a type of the schema
+#: (``_ownerid_value@Microsoft.Dynamics.CRM.lookuplogicalname: systemuser``,
+#: ``…associatednavigationproperty: ownerid_email``, ``@odata.type``).
+_SCHEMA_VALUED = re.compile(
+    r"(?:lookuplogicalname|associatednavigationproperty|logicalname|odata\.type)$",
+    re.IGNORECASE | re.ASCII,
+)
+
+
+def schema_valued(key: str, value: str) -> bool:
+    """A value that is schema because of its key: an entity or relation name under a
+    lookup annotation (``systemuser``, ``contact``, ``ownerid_email``). Such values are
+    neither exposed to detection nor rewritten."""
+    value = value.strip()
+    return (
+        bool(_SCHEMA_VALUED.search(key))
+        and bool(_ANNOTATION.search(key) or key.startswith("@"))
+        and 0 < len(value) <= MAX_NAME_LENGTH
+        and _IDENTIFIER.fullmatch(value) is not None
+        and not _EMAIL.fullmatch(value)
+    )
+
+
 def is_structural_token(value: str) -> bool:
     """A value that can only be structure (an OData annotation, ``_x_value``,
     ``@odata.etag``, ``$metadata``): never searched as an original value."""
@@ -86,4 +109,11 @@ def vocabulary(names: Iterable[str]) -> frozenset[str]:
     return frozenset(out)
 
 
-__all__ = ["PROPERTY", "is_structural", "is_structural_token", "vocabulary", "words"]
+__all__ = [
+    "PROPERTY",
+    "is_structural",
+    "is_structural_token",
+    "schema_valued",
+    "vocabulary",
+    "words",
+]

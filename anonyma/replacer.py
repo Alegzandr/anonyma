@@ -39,6 +39,7 @@ from anonyma import checksums, threadindex
 from anonyma import substitutes as fk
 from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
+from anonyma.data import first_name
 from anonyma.models import (
     Document,
     Entity,
@@ -54,6 +55,7 @@ from anonyma.names import (
     PARTICLES,
     PersonName,
     civility_of,
+    given_like,
     is_initial,
     match_login_template,
     parse_person,
@@ -475,6 +477,14 @@ class _Realistic:
             # A shifted date may equal another date of the batch: the offset is what
             # hides them, and every rendering of an instant must follow it.
             return True
+        # Parts of the original kept on purpose (``service-client@`` of a function
+        # mailbox) are no reuse of a name.
+        own: set[str] = set()
+        if cluster.entity_type == EntityType.EMAIL:
+            for v in cluster.variants:
+                local = v.strip("<> ").split("@")[0]
+                if generic_local(local):
+                    own.update(normalize(p) for p in re.split(r"[-._+]", local) if p)
         for substitute in result.values():
             key = normalize(substitute)
             if key in self.forbidden or key in self.used:
@@ -484,7 +494,11 @@ class _Realistic:
             # Parts too: « Renaud-sur-François », ``monique.girard@…``, ``@elodie_david``
             # must not reuse « Renaud », « Girard », « Élodie ».
             parts = [p for t in tokens_of(substitute) for p in (t, *re.split(r"[-._@]", t))]
-            if any(normalize(p.strip(".")) in self.forbidden_tokens for p in parts):
+            if any(
+                normalize(p.strip(".")) in self.forbidden_tokens
+                for p in parts
+                if normalize(p.strip(".")) not in own
+            ):
                 return False
         return True
 
@@ -647,6 +661,10 @@ def _email(
             # A function mailbox (offres@, contact@) names no one: it stays one, so
             # that its display name (« Promo Cartouches ») reads as before.
             fake_local = local
+        if fake_local is None and not owner and _mailbox_word(local):
+            # « Projets IRVE <irve@…> »: a team mailbox gets no person-shaped local
+            # part (the verifier would read « irma.mathieu » next to it as a person).
+            fake_local = f"boite{rng.randint(10, 99)}"
         if fake_local is None:
             fake_local = fk.fake_local_part(rng)
             if any(c.isdigit() for c in local):
@@ -664,6 +682,13 @@ def _email(
         else:
             out[variant] = fake_local_part
     return out
+
+
+def _mailbox_word(local: str) -> bool:
+    """A local part that is one short word or acronym naming no one (``irve``,
+    ``sav``, ``dsi``): no given name, no initial-and-surname login."""
+    key = local.casefold()
+    return key.isalpha() and len(key) <= 5 and not given_like(key) and first_name(key) is None
 
 
 def _phone(

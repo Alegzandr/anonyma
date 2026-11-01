@@ -15,11 +15,12 @@ from pathlib import Path
 
 from anonyma.config import Config
 from anonyma.data import first_name, is_common_word
+from anonyma.detectors._custom import ACRONYMS
 from anonyma.detectors._filters import mid_sentence, ml_text, plausible, skip_segment
 from anonyma.logs import get_logger
 from anonyma.model_catalog import DEFAULT_GLINER, ModelKind, ModelSpec, get_spec
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
-from anonyma.names import civility_of
+from anonyma.names import civility_of, is_functional_name
 from anonyma.registry import register_detector
 from anonyma.textutils import normalize
 
@@ -140,6 +141,9 @@ class GlinerDetector(Detector):
                     start, end = _tight(text, span.start, span.end)
                     if entity_type == EntityType.PERSON:
                         start = _skip_leading_words(text, start, end)
+                    if filename and entity_type in _NAME_TYPES:
+                        # « RIB_chateau-lescure »: the document type stays readable.
+                        start = _skip_document_words(text, start, end)
                     value = segment.text[start:end]
                     score = span.score
                     if filename and score < FILENAME_MIN_SCORE:
@@ -153,7 +157,7 @@ class GlinerDetector(Detector):
                         filename=filename,
                         ocr=ocr,
                         capitalized_mid_sentence=capitalized,
-                    ):
+                    ) or not in_context(entity_type, text, start, end):
                         continue
                     kept.append(
                         Entity(
@@ -172,8 +176,10 @@ class GlinerDetector(Detector):
         return found
 
 
-#: A job title identifies someone only next to them: same paragraph, this close.
-JOB_TITLE_WINDOW = 150
+#: A job title identifies someone only next to them: this close, across at most one
+#: line break (a wrapped sentence), or on the line just before or after the
+#: person's in a signature block.
+JOB_TITLE_WINDOW = 120
 #: An alphanumeric run (letters, digits).
 _ALNUM_RUN = re.compile(r"[^\W_]+")
 
@@ -207,10 +213,68 @@ def job_titles_near_people(text: str, entities: list[Entity]) -> list[Entity]:
             continue
         for p in people:
             lo, hi = (p.end, e.start) if p.end <= e.start else (e.end, p.start)
-            if hi - lo <= JOB_TITLE_WINDOW and not _PARAGRAPH_BREAK.search(text, lo, max(lo, hi)):
+            between = text[lo : max(lo, hi)]
+            breaks = between.count("\n")
+            if (breaks <= 1 and hi - lo <= JOB_TITLE_WINDOW) or (
+                breaks == 1 and _line_neighbours(text, p, e)
+            ):
                 out.append(e)
                 break
     return out
+
+
+def _line_neighbours(text: str, a: Entity, b: Entity) -> bool:
+    """``a`` and ``b`` on consecutive lines, each line short (a signature block:
+    « Karim Ouchène » / « Délégué à la protection des données »)."""
+    first, second = (a, b) if a.start <= b.start else (b, a)
+    line_start = text.rfind("\n", 0, first.start) + 1
+    line_end = text.find("\n", second.end)
+    lines = text[line_start : line_end if line_end >= 0 else len(text)].split("\n")
+    return len(lines) == 2 and all(len(line.strip()) <= SIGNATURE_LINE for line in lines)
+
+
+#: Longest line of a signature block (name, title, organisation).
+SIGNATURE_LINE = 90
+
+
+#: Words naming a product, an offer or a programme: the capitalized words after them
+#: (« Borne Hexa Charge 22 kW », « offre Hexa Flex 24 », « programme Advenir ») are
+#: a catalogue name, not a person, an organisation or a place.
+PRODUCT_CUES = frozenset(
+    {
+        "offre", "offres", "borne", "bornes", "pack", "forfait", "formule", "gamme", "produit",
+        "modele", "option", "abonnement", "programme", "dispositif", "application", "logiciel",
+        "plateforme", "solution", "tarif", "garantie",
+    }
+)  # fmt: skip
+_UNIT = re.compile(r"\d\s*(?:k?w|kva|kwh|mwh|wh|go|mo|ghz|mhz|cv|km|%)\b", re.I)
+_PREVIOUS_WORD = re.compile(r"([^\W\d_]+)[\s(«\"']*$")
+#: Name types a model may confuse with products and identifiers.
+_NAME_TYPES = frozenset({EntityType.PERSON, EntityType.ORGANIZATION, EntityType.LOCATION})
+
+
+def in_context(entity_type: str, text: str, start: int, end: int) -> bool:
+    """Whether a model name span survives its surroundings: not a catalogue name
+    after (or starting with) a product cue, not a product with a power or a size, not
+    the prefix of an identifier (``CRM:0004104``, ``DEV-2026-6304``), not a team."""
+    if entity_type not in _NAME_TYPES:
+        return True
+    value = text[start:end]
+    words = value.split()
+    if not words:
+        return False
+    if normalize(words[0]) in PRODUCT_CUES and len(words) > 1:
+        return False
+    previous = _PREVIOUS_WORD.search(text, max(0, start - 30), start)
+    if previous is not None and normalize(previous.group(1)) in PRODUCT_CUES:
+        return False
+    digits = any(c.isdigit() for c in value)
+    if _UNIT.search(value) or (entity_type == EntityType.PERSON and digits):
+        return False
+    after = text[end : end + 2]
+    if len(words) == 1 and after[:1] in ":-_/#" and after[1:2].isdigit():
+        return False
+    return not is_functional_name(value)
 
 
 #: Words a model span may start with that never belong to the name.
@@ -238,6 +302,18 @@ def _skip_leading_words(text: str, start: int, end: int) -> int:
 _WORD = re.compile(r"[^\W\d_]+(?:['’\-][^\W\d_]+)*\.?")
 
 
+def _skip_document_words(text: str, start: int, end: int) -> int:
+    """``RIB chateau-lescure`` -> ``chateau-lescure`` in a file name: leading
+    ordinary words and document acronyms (RIB, CV, PV) are the type of the file. A
+    span of ordinary words only is kept whole (« riviere » may be a surname)."""
+    for w in _WORD.finditer(text, start, end):
+        word = w.group().rstrip(".")
+        if word.upper() in ACRONYMS or (is_common_word(word) and first_name(word) is None):
+            continue
+        return w.start()
+    return start
+
+
 def _tight(text: str, start: int, end: int) -> tuple[int, int]:
     """Strip surrounding spaces and punctuation (``# Projet`` -> ``Projet``)."""
     while start < end and not (text[start].isalnum() or text[start] in "@+"):
@@ -247,4 +323,12 @@ def _tight(text: str, start: int, end: int) -> tuple[int, int]:
     return start, end
 
 
-__all__ = ["LABELS", "GlinerDetector", "job_titles_near_people", "model_dir", "model_spec"]
+__all__ = [
+    "LABELS",
+    "PRODUCT_CUES",
+    "GlinerDetector",
+    "in_context",
+    "job_titles_near_people",
+    "model_dir",
+    "model_spec",
+]

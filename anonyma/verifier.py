@@ -53,6 +53,8 @@ from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
 from anonyma.data import is_common_word
 from anonyma.detectors._custom import STOP_WORDS
+from anonyma.detectors.opaque import IdWhitelist
+from anonyma.detectors.regex_fr import kept_reference
 from anonyma.models import (
     Detector,
     Document,
@@ -66,11 +68,11 @@ from anonyma.models import (
     Severity,
     VerificationResult,
 )
-from anonyma.names import PARTICLES, civility_of, needs_capital
+from anonyma.names import PARTICLES, ROLE_WORDS, civility_of, is_functional_name, needs_capital
 from anonyma.policy import keeps
 from anonyma.rawscan import RawScanner, raw_residues
 from anonyma.replacer import BLACKOUT_CHAR
-from anonyma.resolver import NAME_TYPES, cluster_forms
+from anonyma.resolver import DOCUMENT_LOCAL_TYPES, NAME_TYPES, cluster_forms
 from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import normalize, normalize_with_map, strip_accents
 
@@ -151,6 +153,9 @@ class Verifier:
         self.config = config
         #: Detectors flagged ``verify = False`` (slow, non-deterministic LLM) are skipped.
         self.detectors = [d for d in detectors if d.verify]
+        #: References kept on purpose are no residues (« --conserver-identifiants »).
+        self.ids = IdWhitelist(config.opaque_id_whitelist or [])
+        self.keeping = bool(self.ids) or not config.mask_opaque_ids
 
     def verify(
         self,
@@ -229,7 +234,10 @@ class Verifier:
                 for m in leftmost_longest(table.find(segment.text, prepared=prepared)):
                     if not _inside(m.start, m.end, spans):
                         entity_type, source = m.payloads[0]
-                        hits.append((m.start, m.end, entity_type, source, True))
+                        # A job title left elsewhere in its file describes nobody for
+                        # sure (it was masked next to its person): to review.
+                        sure = entity_type not in DOCUMENT_LOCAL_TYPES
+                        hits.append((m.start, m.end, entity_type, source, sure))
                 if segment.context.kind is SegmentKind.OCR and len(ocr_table):
                     for om in leftmost_longest(ocr_table.find(skeleton(segment.text))):
                         if not _inside(om.start, om.end, spans):
@@ -274,9 +282,15 @@ class Verifier:
                     if found is None or entity.score < self.config.min_score:
                         continue
                     segment = found
-                    span = atomic.fit(segment.text, entity.start, entity.end)
+                    span = atomic.fit_typed(
+                        segment.text, entity.start, entity.end, entity.entity_type
+                    )
                     if span is None:
                         continue
+                    if self.keeping and kept_reference(
+                        self.config, self.ids, segment.text, span[0], span[1]
+                    ):
+                        continue  # « Facture_FAC-2026-743117.pdf »: kept on purpose
                     entity.start, entity.end = span
                     value = segment.text[entity.start : entity.end]
                     if normalize(value) in allowed_keys:
@@ -296,8 +310,14 @@ class Verifier:
                             reason=DETECTOR_HIT,
                             detector=entity.detector,
                             value=value,
+                            # « Projets IRVE » next to a substitute address reads as
+                            # a person only through that address: not certain.
                             certain=detector.deterministic
-                            and entity.score >= CERTAIN_DETECTOR_SCORE,
+                            and entity.score >= CERTAIN_DETECTOR_SCORE
+                            and not (
+                                entity.entity_type == EntityType.PERSON
+                                and is_functional_name(value)
+                            ),
                         )
                     )
         result.residues = neutral_places(result.residues, kinds)
@@ -402,6 +422,10 @@ def _substitutes(substitutes: set[str]) -> MultiMatcher[str]:
             words = sub.split()
             if len(words) > 1:
                 subs.add("".join(words), sub)
+            # The local part of a substitute address (« irma.mathieu ») read alone.
+            local = sub.strip("<> ").split("@")[0] if "@" in sub else ""
+            if len(local) >= 5:
+                subs.add(local, sub)
     return subs
 
 
@@ -593,8 +617,14 @@ def _neutral_outside(
         key = normalize(word)
         if civility_of(word) is not None or key in PARTICLES or key in STOP_WORDS:
             continue
+        if key in ROLE_WORDS or key in _LINK_SCHEMES:
+            continue  # « Service Client » around a substitute, ``mailto:`` before one
         return False
     return True
+
+
+#: URL schemes glued to a substitute by a model span (``mailto:EMAIL_001@…``).
+_LINK_SCHEMES = frozenset({"mailto", "tel", "callto", "sip", "http", "https", "www"})
 
 
 __all__ = [
