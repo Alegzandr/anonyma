@@ -176,9 +176,10 @@ class GlinerDetector(Detector):
         return found
 
 
-#: A job title identifies someone only next to them: on the person's line, this
-#: close, or on the line just before or after it (a signature block).
-JOB_TITLE_WINDOW = 80
+#: A job title identifies someone only next to them: this close, across at most one
+#: line break (a wrapped sentence), or on the line just before or after the
+#: person's in a signature block.
+JOB_TITLE_WINDOW = 120
 #: An alphanumeric run (letters, digits).
 _ALNUM_RUN = re.compile(r"[^\W_]+")
 
@@ -214,7 +215,7 @@ def job_titles_near_people(text: str, entities: list[Entity]) -> list[Entity]:
             lo, hi = (p.end, e.start) if p.end <= e.start else (e.end, p.start)
             between = text[lo : max(lo, hi)]
             breaks = between.count("\n")
-            if (breaks == 0 and hi - lo <= JOB_TITLE_WINDOW) or (
+            if (breaks <= 1 and hi - lo <= JOB_TITLE_WINDOW) or (
                 breaks == 1 and _line_neighbours(text, p, e)
             ):
                 out.append(e)
