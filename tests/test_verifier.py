@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from anonyma import checksums
 from anonyma.config import Config
 from anonyma.detectors.regex_fr import RegexDetector
 from anonyma.models import (
@@ -269,3 +270,26 @@ def test_residue_places_never_echo_the_value() -> None:
         assert "uintavalle" not in residue.location.casefold()
     assert result.residues[0].segment_label == "attribut ou clé"
     assert result.residues[0].location == "[nom masqué]/note.txt"
+
+
+def test_substitute_code_spaced_by_ocr_is_a_substitute() -> None:
+    """OCR spaces the digits of a substitute SIREN its own way (``123 456789``): a
+    certain detector hit, yet the replacer's own value, not a residue."""
+    body = "73282932"
+    siren = body + checksums.luhn_check_digit(body)
+    grouped = f"{siren[:3]} {siren[3:6]} {siren[6:]}"
+    other = "41287562"
+    other += checksums.luhn_check_digit(other)
+
+    def read(text: str) -> Document:
+        doc = output()
+        doc.segments = [Segment("s0", text, (0,), SegmentContext(SegmentKind.OCR, "page 1"))]
+        return doc
+
+    detectors = [RegexDetector(Config())]
+    result = verify(
+        read(f"divers. Siren {siren[:3]} {siren[3:]} - TVA"), [], {grouped}, (), detectors
+    )
+    assert result.clean, [(r.reason, r.detector) for r in result.residues]
+    # Any other SIREN read there stays a residue.
+    assert not verify(read(f"divers. Siren {other} - TVA"), [], {grouped}, (), detectors).clean

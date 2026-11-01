@@ -359,6 +359,8 @@ class Verifier:
                     )
                     if not certain and plan.holds(value):
                         continue  # a substitute written another way (« groupe_courtois »)
+                    if plan.is_code(value):
+                        continue  # a substitute code spaced another way by OCR
                     kinds.append(segment.context.kind)
                     result.residues.append(
                         Residue(
@@ -492,6 +494,14 @@ class _Plan:
         self.words = {
             k for s in substitutes for w in _NAME_WORD.findall(s) if len(k := _compact_name(w)) >= 3
         }
+
+    def is_code(self, value: str) -> bool:
+        """Whether ``value`` is a substitute code (SIREN, IBAN, phone number...) read
+        with other separators: OCR groups digits its own way. An original value never
+        becomes a substitute, and a code holds no ordinary word, so even a certain
+        detector hit on it is no residue."""
+        key = _compact_name(value)
+        return len(key) >= 6 and any(c.isdigit() for c in key) and key in self.keys
 
     def holds(self, value: str) -> bool:
         key = _compact_name(value)
