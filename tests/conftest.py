@@ -22,6 +22,18 @@ def portable_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     yield home
 
 
+@pytest.fixture(autouse=True)
+def plain_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Output as a redirected terminal gets it, on every CI: Typer forces colours (ANSI
+    codes in help and errors) when ``GITHUB_ACTIONS``, ``FORCE_COLOR`` or ``PY_COLORS``
+    is set, and reads that once, at import."""
+    import typer.rich_utils
+
+    for name in ("GITHUB_ACTIONS", "FORCE_COLOR", "PY_COLORS", "TTY_COMPATIBLE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(typer.rich_utils, "FORCE_TERMINAL", None)
+
+
 class _BlankOcr:
     """An OCR engine that reads no text on any image."""
 

@@ -1144,4 +1144,9 @@ def test_redirected_run_prints_heartbeat_not_a_bar(
     json.loads(result.stdout)  # stdout: the JSON object only
     assert "Analyse : 0/2 fichiers…" in result.stderr
     assert "Écriture et vérification : 2/2 fichiers, terminé" in result.stderr
-    assert "━" not in result.stderr and "uintavalle" not in result.stderr
+    # No progress bar (the summary table may use the same box-drawing character).
+    progress = [
+        line for line in result.stderr.splitlines() if line.startswith(("Analyse", "Écriture"))
+    ]
+    assert progress and not any("━" in line for line in progress)
+    assert "uintavalle" not in result.stderr

@@ -186,6 +186,9 @@ def test_libreoffice_status_says_what_is_used(
     monkeypatch.setattr(libreoffice, "standard_locations", lambda: [])
     monkeypatch.setattr(libreoffice.shutil, "which", lambda name: None)
     page.use_libreoffice.setChecked(True)
+    # Edited, so that the status is recomputed with the patched lookups (an empty field
+    # left empty emits no change, and CI machines have a LibreOffice installed).
+    page.libreoffice_path.setText("x")
     page.libreoffice_path.setText("")
     status = page.libreoffice_status.text()
     assert status.startswith("Aucun LibreOffice trouvé")
