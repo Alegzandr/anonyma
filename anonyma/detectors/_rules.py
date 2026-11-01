@@ -23,11 +23,17 @@ from anonyma.models import EntityType, SegmentKind
 #: Separators allowed inside numbers (space, tab, dot, hyphen, no-break spaces).
 SEP = r"[ \t.\-\u00a0\u202f]"
 SP = r"[ \t\u00a0\u202f]"
-#: Separators seen inside IBANs (also inside RIB-style groupings).
-IBAN_SEP = r"[ \t.\-\u00a0\u202f]"
+#: Separators seen inside IBANs (also inside RIB-style groupings): one or two
+#: punctuation/space characters, or a wide run of spaces (bank statements and RIB
+#: forms lay the groups out in columns).
+IBAN_SEP = r"(?:[ \t.\-\u00a0\u202f]{1,2}|" + SP + r"{3,12})"
 #: Classic IBAN layout (groups of four): bounds a checksum-invalid IBAN candidate.
 IBAN_STRICT = regex.compile(
-    r"[A-Z]{2}\d{2}(?:" + SP + r"?[A-Z0-9]{4}){2,7}(?:" + SP + r"?[A-Z0-9]{1,4})?(?![A-Za-z0-9])",
+    r"[A-Z]{2}\d{2}(?:"
+    + SP
+    + r"{0,12}[A-Z0-9]{4}){2,7}(?:"
+    + SP
+    + r"{0,12}[A-Z0-9]{1,4})?(?![A-Za-z0-9])",
     regex.IGNORECASE,
 )
 
@@ -272,6 +278,25 @@ STREET_TYPES = (
     r"chauss[ée]e|zone|za|zi|zac|parc|port|mail|cour|digue|lev[ée]e|côte|cote|corniche|"
     r"sente|vc|chem|street|st|road|rd|lane|ln|drive|dr"
 )
+#: One address complement: building, flat, staircase, door, floor, dwelling.
+_COMPLEMENT_ITEM = (
+    rf"(?:(?i:b[âa]t(?:iment)?\.?){SP}*[A-Z0-9]{{1,4}}(?![\w])"
+    rf"|(?i:appartement|appart\.?|appt\.?|apt\.?|logement|lgt\.?){SP}*(?i:n[°ºo]\.?{SP}*)?"
+    rf"[A-Z]?\d{{1,4}}[A-Z]?(?![\w])"
+    rf"|(?i:escalier|esc\.?){SP}*[A-Z0-9]{{1,3}}(?![\w])"
+    # A door is named by a code holding a digit: the word alone in a sentence is none.
+    rf"|(?i:porte){SP}*(?i:n[°ºo]\.?{SP}*)?[A-Z]{{0,2}}\d{{1,4}}[A-Z]?(?![\w])"
+    rf"|\d{{1,2}}(?i:e|er|ème|eme|è){SP}+(?i:[ée]tage)(?![\w])"
+    rf"|(?i:[ée]tage){SP}+\d{{1,2}}(?![\w]))"
+)
+#: A plot number: a complement only next to another one (alone, an invoice lot).
+_COMPLEMENT_LOT = rf"(?i:lot){SP}*(?i:n[°ºo]\.?{SP}*)?\d{{1,4}}(?![\w])"
+_COMPLEMENT_SEP = rf"{SP}*[,/\-–]?{SP}*"
+#: Address complements, chained on one line (building, then flat, door, floor...).
+ADDRESS_COMPLEMENT = (
+    rf"(?:{_COMPLEMENT_LOT}{_COMPLEMENT_SEP})?{_COMPLEMENT_ITEM}"
+    rf"(?:{_COMPLEMENT_SEP}(?:{_COMPLEMENT_ITEM}|{_COMPLEMENT_LOT}))*"
+)
 #: Street types not ambiguous enough to be used without a house number.
 STRICT_STREET_TYPES = (
     r"rue|avenue|boulevard|impasse|all[ée]e|chemin|quai|square|r[ée]sidence|lotissement|"
@@ -439,7 +464,7 @@ RULES: tuple[Rule, ...] = (
         # the match to the longest valid prefix (see ``IBAN_STRICT`` for invalid ones).
         "iban",
         EntityType.IBAN,
-        r"(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:" + IBAN_SEP + r"{0,2}[A-Z0-9]){10,30}(?![A-Za-z0-9])",
+        r"(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:" + IBAN_SEP + r"?[A-Z0-9]){10,30}(?![A-Za-z0-9])",
         1.0,
         context=("iban", "rib", "compte", "bancaire", "virement", "banque", "bank", "account"),
         validator=checksums.iban_valid,

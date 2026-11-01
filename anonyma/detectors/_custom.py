@@ -22,7 +22,7 @@ from typing import Any
 import regex
 
 from anonyma.data import first_name, is_common_word
-from anonyma.detectors._rules import SP, STREET_TYPES, STRICT_STREET_TYPES
+from anonyma.detectors._rules import ADDRESS_COMPLEMENT, SP, STREET_TYPES, STRICT_STREET_TYPES
 from anonyma.models import EntityType
 from anonyma.names import CIVILITIES, PARTICLES, civility_of
 from anonyma.textutils import normalize
@@ -441,6 +441,30 @@ def _label_word(text: str, token: _Token) -> bool:
     return token.key in _FOOTER_WORDS or bool(_FIELD_COLON.match(text, token.end))
 
 
+#: Country names that are also given names: after a brand in capitals they name the
+#: company's branch in that country, not a person.
+_COUNTRY_GIVEN = frozenset({"france"})
+
+
+def _branch_brand(text: str, tokens: list[_Token], i: int) -> bool:
+    """Whether ``tokens[i]`` is a brand in capitals followed, on the same line, by a
+    country name that is also a given name. A given name as the brand keeps the
+    person reading."""
+    if i + 1 >= len(tokens):
+        return False
+    brand, country = tokens[i], tokens[i + 1]
+    return (
+        brand.is_upper
+        and len(brand.bare) <= 15
+        and brand.key not in STOP_WORDS
+        and country.is_cap
+        and country.key in _COUNTRY_GIVEN
+        and bool(_GAP.match(text[brand.end : country.start]))
+        and not _ends_sentence(brand)
+        and not _given(brand, 200)
+    )
+
+
 def _upper_surname(token: _Token) -> bool:
     return (
         token.is_upper
@@ -809,6 +833,9 @@ class PersonRecognizer(CustomRecognizer):
         i = 0
         while i < n:
             tok = tokens[i]
+            if _branch_brand(text, tokens, i):
+                i += 2  # a brand's branch: an organization (OrganizationRecognizer)
+                continue
             # SURNAME Given (capitals first, French administrative order)
             if (
                 tok.is_upper
@@ -951,7 +978,9 @@ _STREET_NAME_WORD = (
 #: Gap between address words: spaces, or one line break (text wrapped in a PDF block
 #: or a narrow column). A wrapped street name never continues with a number.
 _WRAP = rf"(?:{SP}+|{SP}*\r?\n{SP}*)"
-_NAME_GAP = rf"(?:{SP}+|{SP}*\r?\n{SP}*(?=[^\d\s]))"
+#: A wrapped street name never goes on with a line opening with an address
+#: complement: that line is a complement of its own.
+_NAME_GAP = rf"(?:{SP}+|{SP}*\r?\n{SP}*(?=[^\d\s])(?!{ADDRESS_COMPLEMENT}))"
 _ADDRESS_STRICT = regex.compile(
     rf"(?<![\w,])(?P<num>{_NUM}){SP}*,?{_WRAP}(?i:{STREET_TYPES})\.?{_WRAP}"
     rf"(?P<name>{_STREET_NAME_WORD}(?:{_NAME_GAP}{_STREET_NAME_WORD}){{0,7}})"
@@ -985,17 +1014,7 @@ _ZONE = regex.compile(
 _CP_CITY = regex.compile(
     rf"(?<![\w])(?P<cp>{_CP})(?:{SP}+|(?=[{UPPER}][{LOWER}]))(?P<city>{_CITY})", regex.MULTILINE
 )
-#: Address complements (« Bât. C, appartement 34 », « esc. 2, 3e étage »).
-_COMPLEMENT_ITEM = (
-    rf"(?:(?i:b[âa]t(?:iment)?\.?){SP}*[A-Z0-9]{{1,3}}(?![\w])"
-    rf"|(?i:appartement|appart\.?|appt\.?|apt\.?){SP}*(?i:n[°ºo]\.?{SP}*)?\d{{1,4}}(?![\w])"
-    rf"|(?i:escalier|esc\.?){SP}*[A-Z0-9]{{1,3}}(?![\w])"
-    rf"|\d{{1,2}}(?i:e|er|ème|eme|è){SP}+(?i:[ée]tage)(?![\w])"
-    rf"|(?i:[ée]tage){SP}+\d{{1,2}}(?![\w]))"
-)
-_COMPLEMENT = regex.compile(
-    rf"(?<![\w]){_COMPLEMENT_ITEM}(?:{SP}*[,/\-–]?{SP}*{_COMPLEMENT_ITEM})*", regex.MULTILINE
-)
+_COMPLEMENT = regex.compile(rf"(?<![\w]){ADDRESS_COMPLEMENT}", regex.MULTILINE)
 #: English order: number, name, street type (« 221 Larkspur Crescent »).
 _ADDRESS_EN = regex.compile(
     rf"(?<![\w,])\d{{1,5}}{SP}+(?:[{UPPER}][{LOWER}'’\-]+{SP}+){{1,3}}"
@@ -1206,6 +1225,11 @@ class OrganizationRecognizer(CustomRecognizer):
             out.append(_result(EntityType.ORGANIZATION, m.start(), end, score))
         for start, end in _signature_orgs(text):
             out.append(_result(EntityType.ORGANIZATION, start, end, 0.7, rule="signature"))
+        tokens = _tokens(text)
+        for i in range(len(tokens) - 1):
+            if _branch_brand(text, tokens, i):
+                start, end = tokens[i].start, tokens[i + 1].start + len(tokens[i + 1].bare)
+                out.append(_result(EntityType.ORGANIZATION, start, end, 0.85, rule="filiale"))
         return out
 
 

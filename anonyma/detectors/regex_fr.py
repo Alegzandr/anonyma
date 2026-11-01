@@ -351,11 +351,11 @@ class RegexDetector(Detector):
                 continue
             words = compiled.context_words
             if words is not None and not (compiled.context and compiled.context.search(label)):
-                flat = normalize(text) if flat is None else flat
+                flat = normalize(previous + "\n" + text) if flat is None else flat
                 if not words.search(flat):
                     continue  # no context word anywhere: every match would be dropped
             for start, end in compiled.spans(text):
-                item = self._post(compiled, text, label, start, end)
+                item = self._post(compiled, text, label, start, end, previous)
                 if item is not None:
                     raw.append(item)
         # Another reading of OCR text (glued words split), with the source offsets of
@@ -406,28 +406,35 @@ class RegexDetector(Detector):
         ]
 
     def _has_context(
-        self, compiled: _Compiled, text: str, label: str, start: int, end: int
+        self, compiled: _Compiled, text: str, label: str, start: int, end: int, previous: str = ""
     ) -> bool:
         pattern = compiled.context
         if pattern is None:
             return False
         rule = compiled.rule
-        window = (
-            normalize(text[max(0, start - rule.before) : start])
-            + " | "
-            + normalize(text[end : end + rule.after])
-        )
+        before = text[max(0, start - rule.before) : start]
+        if start < rule.before and previous:
+            # A text block cut from the one before it (a PDF block, an OCR line): the
+            # window runs on into the end of that block.
+            before = previous[-(rule.before - start) :] + "\n" + before
+        window = normalize(before) + " | " + normalize(text[end : end + rule.after])
         return bool(pattern.search(window) or (label and pattern.search(label)))
 
     def _post(
-        self, compiled: _Compiled, text: str, label: str, start: int, end: int
+        self,
+        compiled: _Compiled,
+        text: str,
+        label: str,
+        start: int,
+        end: int,
+        previous: str = "",
     ) -> tuple[str, int, int, float, dict[str, str]] | None:
         rule = compiled.rule
         if rule.trim_trailing:
             end = _trim(text, start, end)
         if end <= start:
             return None
-        context = self._has_context(compiled, text, label, start, end)
+        context = self._has_context(compiled, text, label, start, end, previous)
         valid: bool | None = None
         if rule.validator is not None:
             valid = rule.validator(text[start:end])

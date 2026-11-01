@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from anonyma import registry
+from anonyma import checksums, registry
 from anonyma.config import Config
 from anonyma.models import (
     Detector,
@@ -16,6 +16,7 @@ from anonyma.models import (
     ManualEntity,
     Profile,
     Regime,
+    ReplacementMode,
     ReviewDecisions,
     Segment,
     Severity,
@@ -972,3 +973,46 @@ def test_worker_pool_always_spawns() -> None:
 
     with worker_pool(1) as pool:
         assert pool._mp_context.get_start_method() == "spawn"
+
+
+def test_rib_fields_follow_their_iban(tmp_path: Path, canary_config: Config) -> None:
+    """A RIB form writes the account number on its own next to the IBAN (laid out
+    in columns): both are masked, the account number by the matching part of the
+    fake IBAN, and so is the account number in the file name."""
+    account = "00012345678"
+    bank, branch = "30001", "00794"
+    bban = bank + branch + account + checksums.rib_key(bank, branch, account)
+    iban = "FR" + checksums.iban_check_digits("FR", bban) + bban
+    columns = "       ".join(iban[k : k + 4] for k in range(0, len(iban), 4))
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / f"rib_{account}.txt").write_text(
+        f"Banque\n{bank}\nGuichet\n{branch}\nN° compte\n{account}\nClé\n{bban[-2:]}\n"
+        f"IBAN (International Bank Account Number)\n{columns}\n",
+        encoding="utf-8",
+    )
+    canary_config.mode = ReplacementMode.REALISTIC
+    result = Pipeline(canary_config).run([src], tmp_path / "out")
+    [doc] = result.results
+    assert doc.status is DocumentStatus.ANONYMIZED and doc.output_path is not None
+    assert account not in doc.output_path.name
+    text = doc.output_path.read_text(encoding="utf-8")
+    assert account not in text and columns not in text
+    fake = checksums.compact(text.split("Number)\n")[1])
+    assert checksums.iban_valid(fake) and fake != iban
+    assert f"N° compte\n{fake[14:25]}\n" in text
+
+
+def test_organization_core_is_masked_alone(tmp_path: Path, canary_config: Config) -> None:
+    """An organization named with its branch country is named by its core alone
+    elsewhere in the document: both are masked."""
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "a.txt").write_text(
+        "Assureur : ZORVEX France\nLe directeur de ZORVEX vous écrit.\n", encoding="utf-8"
+    )
+    result = Pipeline(canary_config).run([src], tmp_path / "out")
+    [doc] = result.results
+    assert doc.output_path is not None
+    text = doc.output_path.read_text(encoding="utf-8")
+    assert "ZORVEX" not in text, text

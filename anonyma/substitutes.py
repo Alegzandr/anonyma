@@ -24,6 +24,7 @@ from faker import Faker
 from anonyma import checksums
 from anonyma.data import first_name, first_names
 from anonyma.data.communes import communes
+from anonyma.detectors._rules import ADDRESS_COMPLEMENT
 from anonyma.names import PersonName, initials_of, is_initial, login_of, login_parts
 
 PUBLIC_MAIL_DOMAINS = frozenset(
@@ -729,9 +730,39 @@ def _postcode_like(original: str, postcode: str) -> str:
     return reshape(original, postcode) if any(c.isspace() for c in original) else postcode
 
 
+_COMPLEMENT = re.compile(rf"\s*{ADDRESS_COMPLEMENT}\s*")
+_COMPLEMENT_CODE = re.compile(r"\w*\d\w*|(?<!\w)[A-Z](?!\w)")
+
+
+def fake_complement(original: str, rng: random.Random) -> str:
+    """An address complement keeps its words and gets other codes: digits and capital
+    letters of each code change, ordinal suffixes and keywords stay."""
+
+    def code(m: re.Match[str]) -> str:
+        text = m.group()
+        out = []
+        for i, c in enumerate(text):
+            if c.isdigit():
+                # A number never gains a leading zero (a floor, a door number).
+                lead = c != "0" and (i == 0 or not text[i - 1].isdigit())
+                out.append(rng.choice(string.digits[1:] if lead else string.digits))
+            else:
+                out.append(rng.choice(string.ascii_uppercase) if c.isupper() else c)
+        return "".join(out)
+
+    for _ in range(8):
+        fake = _COMPLEMENT_CODE.sub(code, original)
+        if fake != original:
+            return fake
+    return fake
+
+
 def fake_address(original: str, rng: random.Random) -> str:
     """Street (number + street name) and/or postcode + city, separators kept. The
-    postcode and city are a real pair; a postcode alone becomes a real postcode."""
+    postcode and city are a real pair; a postcode alone becomes a real postcode; a
+    complement alone (building, door...) keeps its words with other codes."""
+    if _COMPLEMENT.fullmatch(original):
+        return fake_complement(original, rng)
     fake = faker_fr()
     fake.seed_instance(rng.getrandbits(32))
     text = original

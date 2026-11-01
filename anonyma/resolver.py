@@ -1000,6 +1000,23 @@ def _grouped(compact: str, size: int = 4) -> str:
     return " ".join(compact[i : i + size] for i in range(0, len(compact), size))
 
 
+#: Countries whose IBAN wraps a French RIB: bank (5), branch (5), account (11), key (2).
+RIB_COUNTRIES = frozenset({"FR", "MC"})
+
+
+def rib_forms(iban: str) -> Iterator[str]:
+    """The RIB written inside a French IBAN (compact form): the whole RIB, glued or
+    in its four fields, and the account number alone. A RIB form lays these fields
+    out on their own next to the IBAN; the bank and
+    branch codes alone name a branch, nobody, and are left."""
+    if len(iban) != 27 or iban[:2] not in RIB_COUNTRIES:
+        return
+    bank, branch, account, key = iban[4:9], iban[9:14], iban[14:25], iban[25:]
+    yield bank + branch + account + key
+    yield f"{bank} {branch} {account} {key}"
+    yield account
+
+
 _DAY_MONTH = re.compile(r"^\d{1,2}/\d{1,2}$")
 
 
@@ -1040,6 +1057,8 @@ def cluster_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
             yield glued, False
     if entity_type == EntityType.PERSON:
         yield from _person_forms(cluster)
+    elif entity_type == EntityType.ORGANIZATION:
+        yield from _organization_cores(cluster)
     elif entity_type == EntityType.EMAIL:
         # The local part alone, unless it names a function (``offres@`` must not mask
         # « vos offres commerciales »); an ordinary word only when capitalized.
@@ -1057,8 +1076,27 @@ def cluster_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
             yield compact, False
             if entity_type in (EntityType.IBAN, EntityType.CREDIT_CARD):
                 yield _grouped(compact), False
+                yield from ((form, False) for form in rib_forms(compact))
             elif entity_type == EntityType.SIREN and len(compact) == 9:
                 yield _grouped(compact, 3), False
+
+
+def _organization_cores(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
+    """The distinctive core of an organization named with a designator or a legal
+    form, a branch's country: the
+    document names it alone as well. Only a core that cannot be an ordinary word is
+    searched: an acronym in capitals or a word absent from the lexicon."""
+    if cluster.uncertain:
+        return
+    from anonyma.substitutes import split_organization
+
+    for variant in cluster.variants:
+        core = split_organization(variant)[1].strip()
+        if core == variant.strip() or " " in core or len(core) < MIN_PROPAGATION_LENGTH:
+            continue
+        acronym = core.isupper() and core.isalpha()
+        if acronym or (len(core) >= 4 and not is_common_word(core)):
+            yield core, True
 
 
 #: Multi-word names also searched without their spaces: OCR often glues the words of

@@ -210,3 +210,14 @@ def test_cities_and_postcodes_are_real() -> None:
     address = sub(table, kept, "8 rue Haute, 69003 Lyon")
     m = re.fullmatch(r"\d+ .+, (\d{5}) (.+)", address)
     assert m is not None and (m.group(1), m.group(2)) in PAIRS
+
+
+def test_address_complement_keeps_its_words() -> None:
+    rng = random.Random(3)
+    for original in ("LOT 47 - BAT D", "PORTE C210", "esc. 2, 3e étage"):
+        fake = fk.fake_address(original, rng)
+        assert fake != original
+        assert re.sub(r"[A-Z0-9]", "#", fake.replace("étage", "")) == re.sub(
+            r"[A-Z0-9]", "#", original.replace("étage", "")
+        ), "same words, same code shapes"
+        assert not re.search(r"(?<!\d)0\d", fake), "no leading zero"

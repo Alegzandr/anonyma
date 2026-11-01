@@ -1217,11 +1217,24 @@ def _reshaped(make: Callable[[_Realistic, str, random.Random], str]) -> Generato
     ) -> dict[str, str]:
         base = known or make(st, cluster.canonical, rng)
         compact = checksums.compact(base)
-        out = {v: fk.reshape(v, compact) for v in cluster.variants}
+        original = checksums.compact(cluster.canonical)
+        out = {v: fk.reshape(v, _part_of(v, original, compact)) for v in cluster.variants}
         out[""] = base
         return out
 
     return generate
+
+
+def _part_of(variant: str, original: str, fake: str) -> str:
+    """The characters of ``fake`` matching ``variant``: all of them, or, for a part of
+    the original code written alone (the account number of a RIB next to its IBAN),
+    the same part of the fake one, so the RIB stays consistent with the fake IBAN."""
+    compact = checksums.compact(variant)
+    if len(compact) < len(original) and len(fake) == len(original):
+        at = original.find(compact)
+        if at > 0:
+            return fake[at : at + len(compact)]
+    return fake
 
 
 def _siren(st: _Realistic, original: str, rng: random.Random) -> str:

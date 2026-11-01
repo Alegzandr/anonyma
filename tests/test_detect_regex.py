@@ -451,6 +451,8 @@ IBAN_LAYOUTS = {
     "tirets": lambda i: "-".join(i[k : k + 4] for k in range(0, len(i), 4)),
     "doubles espaces": lambda i: "  ".join(i[k : k + 4] for k in range(0, len(i), 4)),
     "points": lambda i: ".".join(i[k : k + 4] for k in range(0, len(i), 4)),
+    # RIB forms lay the groups out in columns (one text line, wide runs of spaces).
+    "colonnes": lambda i: "       ".join(i[k : k + 4] for k in range(0, len(i), 4)),
 }
 
 
@@ -466,6 +468,9 @@ def test_iban_invalid_candidate_stays_bounded(detector: RegexDetector) -> None:
     grouped = " ".join(broken[k : k + 4] for k in range(0, len(broken), 4))
     values = found(detector, f"virement sur le compte {grouped} et sa date", "IBAN")
     assert values == [grouped]
+    columns = "       ".join(broken[k : k + 4] for k in range(0, len(broken), 4))
+    values = found(detector, f"IBAN\n{columns}       Domiciliation", "IBAN")
+    assert values == [columns]
 
 
 def test_nir_with_dots_and_glued_word(detector: RegexDetector) -> None:
@@ -593,3 +598,42 @@ def test_label_after_other_header_cells_types_nothing(detector: RegexDetector) -
         return Segment(ref, text, (), SegmentContext(SegmentKind.CELL, ref))
 
     assert not detector.detect([cell("A1", "date"), cell("B1", "auteur"), cell("C1", "note")], "d")
+
+
+def test_address_complements_of_a_lodging(detector: RegexDetector) -> None:
+    """Plot, building and door complements on their own lines, after a street whose
+    wrapped name must not swallow the complement line."""
+    text = "12 RUE DES TILLEULS\nLOT 47 - BAT D\nPORTE C210\n12345 VALBOURG"
+    values = found(detector, text, "ADRESSE")
+    assert "12 RUE DES TILLEULS" in values
+    assert "LOT 47 - BAT D" in values
+    assert "PORTE C210" in values
+    # A door without a code and a lot alone are ordinary words.
+    assert found(detector, "Fermez la porte A en sortant.", "ADRESSE") == []
+    assert found(detector, "Livraison du lot 3 avant mars.", "ADRESSE") == []
+
+
+def test_brand_branch_is_an_organization(detector: RegexDetector) -> None:
+    """A brand in capitals followed by a country name that is also a given name is
+    the brand's branch, not a surname and a given name."""
+    text = "Votre assureur ZORVEX France IARD, 1 rue X."
+    assert found(detector, text, "ORGANISATION") == ["ZORVEX France"]
+    assert found(detector, text, "PERSONNE") == []
+    # A given name in capitals before it keeps the person reading.
+    assert found(detector, "Signé : PAUL France", "ORGANISATION") == []
+
+
+def test_contract_number_under_a_heading_block(detector: RegexDetector) -> None:
+    """A number laid out a few lines below its « contract » heading, the heading in
+    a text block of its own (PDF blocks)."""
+    segments = [
+        Segment("a", "Votre contrat", (), SegmentContext(SegmentKind.BODY, "")),
+        Segment(
+            "b",
+            "Assurance Auto\nFormule Plus\n98765432101",
+            (),
+            SegmentContext(SegmentKind.BODY, ""),
+        ),
+    ]
+    values = [e.value for e in detector.detect(segments, "d") if e.entity_type == "NUMERO_DOSSIER"]
+    assert values == ["98765432101"]
