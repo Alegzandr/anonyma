@@ -849,12 +849,10 @@ _PROFILE_DETECTOR = {Profile.STANDARD: "gliner", Profile.FULL: "llm"}
 
 
 def engine_available(detector: str) -> bool:
-    """Whether this build ships the library a model-based detector runs on (a model
-    may be installed while its engine is not: llama-cpp-python left out...)."""
-    import importlib.util
+    """Whether this build ships the library a model-based detector runs on."""
+    from anonyma import model_setup
 
-    modules = {"gliner": ("onnxruntime", "tokenizers"), "llm": ("llama_cpp",)}
-    return all(importlib.util.find_spec(m) is not None for m in modules.get(detector, ()))
+    return model_setup.engine_available(detector)
 
 
 def runnable_profile(profile: Profile) -> Profile:
@@ -2033,6 +2031,83 @@ def models_list(as_json: ModelsJsonOpt = False) -> None:
         for status in statuses:
             spec = status.spec
             out.print(f"• {spec.id} : {spec.license}, révision {spec.revision}", soft_wrap=True)
+
+
+@models_app.command("installer")
+def models_setup(
+    sources: Annotated[
+        list[Path] | None,
+        typer.Argument(
+            help="Sans réseau : dossier (models d'un autre poste, clé USB…) où prendre les "
+            "fichiers au lieu de les télécharger.",
+            metavar="[DOSSIER]",
+            show_default=False,
+        ),
+    ] = None,
+    yes: Annotated[bool, typer.Option("--oui", "-y", help="Ne pas demander confirmation.")] = False,
+) -> None:
+    """Installer les modèles adaptés à ce poste, mettre à jour les modèles périmés et
+    supprimer ceux qui ne servent plus."""
+    from rich.progress import (
+        BarColumn,
+        DownloadColumn,
+        Progress,
+        TextColumn,
+        TimeRemainingColumn,
+        TransferSpeedColumn,
+    )
+
+    from anonyma import model_setup
+    from anonyma.hardware import format_bytes
+
+    manager = _manager()
+    setup = model_setup.plan(manager)
+    if setup.ready:
+        out.print("Les modèles de ce poste sont installés et à jour.")
+        raise typer.Exit()
+    for spec in setup.install:
+        out.print(f"• À installer : {spec.title} ({format_bytes(sum(f.size for f in spec.files))})")
+    for name in setup.obsolete:
+        out.print(f"• À supprimer (ne sert plus) : {name}")
+    if sources:
+        result = model_setup.import_from(manager, setup, list(sources))
+    else:
+        if (
+            setup.install
+            and not yes
+            and not confirm_or_fail(
+                "Autoriser l'accès réseau vers Hugging Face pour ces téléchargements ?",
+                default=True,
+            )
+        ):
+            fail("Installation annulée.", EXIT_PARTIAL)
+        try:
+            with Progress(
+                TextColumn("{task.description}"),
+                BarColumn(),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                TimeRemainingColumn(),
+                console=err,
+            ) as bar:
+                task = bar.add_task("", total=setup.download_bytes or None)
+                offsets: dict[str, int] = {}
+                before = 0
+                for spec in setup.install:
+                    offsets[spec.id] = before
+                    before += sum(f.size for f in spec.files)
+
+                def progress(spec: Any, done: int, _total: int) -> None:
+                    bar.update(task, completed=offsets[spec.id] + done, description=spec.title)
+
+                result = model_setup.run(manager, setup, progress=progress)
+        except KeyboardInterrupt:
+            fail("Installation interrompue ; relancez la commande pour la reprendre.", EXIT_PARTIAL)
+    for message in result.errors:
+        err.print(f"[red]{_markup_escape(message)}[/]", soft_wrap=True)
+    if not result.ok:
+        raise typer.Exit(EXIT_PARTIAL)
+    out.print("[green]Modèles installés et à jour.[/]")
 
 
 #: Terminal width from which ``modeles liste`` shows licences and revisions as columns.

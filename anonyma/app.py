@@ -107,6 +107,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dialogs.warning(window, context.load_error)
     window.updates.report_previous(update_state)
     QTimer.singleShot(1500, window.updates.check_on_startup)
+    QTimer.singleShot(2000, window.models.start_automatic)
     return app.exec()
 
 

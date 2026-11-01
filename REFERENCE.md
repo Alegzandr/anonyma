@@ -91,9 +91,11 @@ passe en local : aucune donnée ne quitte le poste.
   résidu s'ouvre à son emplacement dans le fichier produit, un double-clic sur un fichier
   ouvre son aperçu, et « Corriger et réappliquer » ramène à l'aperçu puis remplace les
   fichiers produits précédemment.
-- **Modèles** : matériel détecté et modèles installés (téléchargement à votre demande).
-  Anonyma choisit seul le profil de détection (selon le matériel et les modèles
-  installés), les modèles, l'OCR, le nombre de processus et LibreOffice.
+- **Modèles** : état de l'installation automatique des modèles de ce poste, et matériel
+  détecté. Anonyma choisit seul le profil de détection (selon le matériel et les modèles
+  installés), les modèles, l'OCR, le nombre de processus et LibreOffice. Sans
+  connexions automatiques (Réglages), « Installer maintenant » ; sans réseau,
+  « Importer depuis un dossier… » (le dossier `models` d'un autre poste, par exemple).
 - **Réglages** : seulement ce qui dépend de vos besoins, enregistré dans
   `data/config.json`, en onglets : Remplacement (mode, régime, noms neutres, table de
   correspondance), Listes (valeurs à ne jamais masquer, valeurs à toujours masquer, listes
@@ -245,7 +247,7 @@ vérifiés et peut être partagé tel quel) ; ils ne doivent pas être diffusés
 Sans console interactive (script, agent, tâche planifiée), une commande qui a besoin de la
 phrase secrète échoue aussitôt (code 2) si `ANONYMA_PASSPHRASE` n'est pas définie, au lieu
 d'attendre une saisie ; de même pour une confirmation (`modeles telecharger`,
-`modeles supprimer`) sans l'option `--oui`.
+`modeles supprimer`, `modeles installer`) sans l'option `--oui`.
 
 ### Automatisation (`--json`)
 
@@ -373,9 +375,27 @@ cours (« fichier en cours : 1 240/7 217 segments · modèle de langue »).
 
 ## Modèles
 
-Les modèles d'IA ne sont pas livrés dans l'archive :
+Les modèles d'IA ne sont pas livrés dans l'archive. Anonyma décide seul de ceux dont
+le poste a besoin, selon sa mémoire, ses processeurs et les moteurs de la version :
+
+| Machine | Modèles installés |
+|---|---|
+| toute machine | OCR alphabet latin (accents des images et PDF numérisés) |
+| 6 Go de mémoire et plus | + GLiNER (noms, organisations, lieux) |
+| profil Complet (16 Go, 8 processeurs, moteur llama-cpp présent) | + le plus grand modèle de langue qui tient en mémoire |
+
+Au démarrage de l'interface (si les connexions automatiques sont permises dans les
+Réglages), il télécharge en arrière-plan ce qui manque, réinstalle un modèle dont les
+fichiers ne correspondent plus au catalogue (nouvelle révision après une mise à jour,
+fichier altéré), puis, une fois tout en place, supprime les modèles qui ne servent plus
+(autre taille de modèle de langue, modèle retiré du catalogue). Un échec (pas de
+réseau, licence refusée) laisse les modèles en place ; le démarrage suivant reprend
+le téléchargement là où il s'était arrêté. Le traitement fonctionne pendant ce temps
+avec ce qui est déjà installé.
 
 ```sh
+anonyma-cli modeles installer                # même logique, en ligne de commande
+anonyma-cli modeles installer /media/cle/models   # sans réseau : depuis un dossier
 anonyma-cli modeles liste                    # catalogue, état (installé, vérifié…), licence, révision
 anonyma-cli modeles telecharger <identifiant>
 anonyma-cli modeles supprimer <identifiant>
@@ -393,8 +413,11 @@ SHA-256**, puis installés d'un bloc dans `models/<identifiant>/`. Un téléchar
 interrompu (coupure, Ctrl+C) reprend là où il s'était arrêté. Il passe par le proxy
 du système ou celui des réglages (voir **Proxy**, plus haut).
 
-**Machine sans accès à Internet.** Téléchargez les fichiers du dépôt Hugging Face sur
-une autre machine (à la révision indiquée par `modeles liste`), copiez-les puis :
+**Machine sans accès à Internet.** Le plus simple : copiez le dossier `models` d'un
+poste où Anonyma les a installés, puis « Importer depuis un dossier… » (page Modèles)
+ou `anonyma-cli modeles installer <dossier>`. Sinon, téléchargez les fichiers du dépôt
+Hugging Face sur une autre machine (à la révision indiquée par `modeles liste`),
+copiez-les puis :
 
 ```sh
 anonyma-cli modeles importer <identifiant> /media/cle-usb/modele/

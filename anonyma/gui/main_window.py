@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QStackedWidget,
+    QStatusBar,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QVBoxLayout,
@@ -97,8 +98,21 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(self.footer)
         root.addWidget(side)
 
+        # The status bar belongs to the page column: the side column runs to the
+        # bottom edge of the window (QMainWindow's own bar spans the full width).
+        main = QWidget()
+        main_layout = QVBoxLayout(main)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         self.stack = QStackedWidget()
-        root.addWidget(self.stack, 1)
+        main_layout.addWidget(self.stack, 1)
+        self.status_bar = QStatusBar()
+        self.status_bar.setObjectName("PageStatusBar")
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(18, 0, 0, 0)  # aligned with the pages' margin
+        status_row.addWidget(self.status_bar)
+        main_layout.addLayout(status_row)
+        root.addWidget(main, 1)
         self.setCentralWidget(central)
 
         self.processing = ProcessingPage(self.controller)
@@ -227,7 +241,7 @@ class MainWindow(QMainWindow):
         # « Traitement » already says it in its banner: only other pages need the news.
         if self.current_page() in ("processing", "review"):
             return
-        self.statusBar().showMessage(typo("Traitement terminé : le rapport est disponible."), 8000)
+        self.status_bar.showMessage(typo("Traitement terminé : le rapport est disponible."), 8000)
 
     def _phase_changed(self, phase: str) -> None:
         """The status bar only speaks while something runs, and only away from
@@ -238,9 +252,9 @@ class MainWindow(QMainWindow):
         }
         message = messages.get(phase) if self.current_page() != "processing" else None
         if message:
-            self.statusBar().showMessage(message)
+            self.status_bar.showMessage(message)
         else:
-            self.statusBar().clearMessage()
+            self.status_bar.clearMessage()
 
     # -- geometry (kept in Config.ui, never in QSettings) -----------------------------------
 
@@ -261,7 +275,9 @@ class MainWindow(QMainWindow):
     # -- closing -------------------------------------------------------------------------------
 
     def busy(self) -> bool:
-        return self.controller.busy or self.models.busy() or self.updates.busy()
+        """A batch or an update download runs. The automatic model installation does
+        not count: closing interrupts it and the next start resumes it."""
+        return self.controller.busy or self.updates.busy()
 
     @override
     def closeEvent(self, event: QCloseEvent) -> None:

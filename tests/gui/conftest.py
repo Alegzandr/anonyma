@@ -16,7 +16,7 @@ from anonyma.config import Config
 from anonyma.gui import dialogs, theme
 from anonyma.gui.context import AppContext
 from anonyma.gui.main_window import MainWindow
-from anonyma.model_catalog import ModelFile, ModelKind, ModelSpec
+from anonyma.model_catalog import ModelFile, ModelKind, ModelSpec, get_spec
 from anonyma.model_manager import ModelError, ModelManager, ModelStatus
 from anonyma.models import Detector, Entity, Profile, Segment
 
@@ -96,7 +96,8 @@ class FakeModelManager(ModelManager):
         return list(self.specs)
 
     def status(self, model_id: str) -> ModelStatus:
-        spec = next(s for s in self.specs if s.id == model_id)
+        spec = next((s for s in self.specs if s.id == model_id), None) or get_spec(model_id)
+        assert spec is not None
         installed = model_id in self.installed
         return ModelStatus(
             spec,
@@ -131,6 +132,15 @@ class FakeModelManager(ModelManager):
     def remove(self, model_id: str) -> None:
         self.calls.append(("remove", model_id))
         self.installed.discard(model_id)
+
+    def installed_folders(self) -> list[str]:
+        return sorted(self.installed)
+
+    def remove_folder(self, name: str) -> None:
+        self.remove(name)
+
+    def clean_staging(self, keep: Sequence[ModelSpec]) -> None:
+        pass
 
 
 @pytest.fixture

@@ -94,13 +94,24 @@ def _set_button_icon(b: QPushButton, icon_name: str) -> None:
 
 def _retint_buttons() -> None:
     """Re-tint every themed button icon (dark icons vanish on the dark theme otherwise)."""
+    import gc
+
     from PySide6.QtWidgets import QApplication
 
-    for widget in QApplication.allWidgets():
-        if isinstance(widget, QPushButton):
-            name = widget.property(_ICON_PROPERTY)
-            if name:
-                widget.setIcon(icons.icon(str(name), _icon_colour(widget)))
+    # allWidgets() is a list of raw pointers: a garbage collection during the loop
+    # (wrappers are created as it goes) may delete a closed, Python-owned widget still
+    # in the list, and the loop would then touch freed memory.
+    collecting = gc.isenabled()
+    gc.disable()
+    try:
+        for widget in QApplication.allWidgets():
+            if isinstance(widget, QPushButton):
+                name = widget.property(_ICON_PROPERTY)
+                if name:
+                    widget.setIcon(icons.icon(str(name), _icon_colour(widget)))
+    finally:
+        if collecting:
+            gc.enable()
 
 
 def _tab_focus(b: QPushButton) -> QPushButton:

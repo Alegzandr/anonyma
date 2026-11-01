@@ -635,6 +635,54 @@ class ModelManager:
                 shutil.rmtree(partial, ignore_errors=True)
             log.info("model %s removed", spec.id)
 
+    def installed_folders(self) -> list[str]:
+        """Model folders under ``models/``: catalogue ids, and folders carrying a
+        manifest (a model an older version installed and the catalogue dropped).
+        Hidden folders, the Hugging Face cache and anything else are left alone."""
+        known = {spec.id for spec in model_catalog.CATALOG}
+        try:
+            entries = sorted(self.root.iterdir())
+        except OSError:
+            return []
+        return [
+            entry.name
+            for entry in entries
+            if entry.is_dir()
+            and not entry.name.startswith(".")
+            and entry.name != "hf"
+            and (entry.name in known or (entry / MANIFEST).is_file())
+        ]
+
+    def remove_folder(self, name: str) -> None:
+        """Remove an installed model folder, catalogued or not (see ``installed_folders``)."""
+        if name not in self.installed_folders():
+            return
+        if model_catalog.get_spec(name) is not None:
+            self.remove(name)
+            return
+        with self._lock:
+            trash = self.root / f".{name}.removing"
+            shutil.rmtree(trash, ignore_errors=True)
+            try:
+                os.replace(self.root / name, trash)
+            except OSError as exc:
+                raise ModelError(_IN_USE) from exc
+            shutil.rmtree(trash, ignore_errors=True)
+            log.info("model folder removed")
+
+    def clean_staging(self, keep: Sequence[ModelSpec]) -> None:
+        """Drop partial downloads except those of ``keep`` at their current revision."""
+        names = {f"{spec.id}-{spec.revision[:12] or 'latest'}" for spec in keep}
+        staging = self.root / STAGING
+        if not staging.is_dir():
+            return
+        with self._lock:
+            for entry in staging.iterdir():
+                if entry.name not in names:
+                    shutil.rmtree(entry, ignore_errors=True)
+            with contextlib.suppress(OSError):
+                staging.rmdir()  # only when empty
+
     def partial_bytes(self, model_id: str) -> int:
         """Bytes already downloaded for an unfinished download (resume)."""
         spec = self._spec(model_id)

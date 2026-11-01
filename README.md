@@ -100,9 +100,11 @@ plus il est lent.
 | Standard | Conseillé, à partir de 6 Go de mémoire. Ajoute un modèle d'IA qui repère les noms de personnes, de lieux et d'organisations. |
 | Complet | Machine puissante. Ajoute un modèle de langue, plus fin mais bien plus lent. |
 
-Par défaut, Anonyma choisit le profil selon votre machine. Les modèles d'IA se
-téléchargent depuis la page **Modèles**, uniquement à votre demande. Le profil Complet
-n'est pas disponible dans la version portable : il y fonctionne comme Standard.
+Anonyma choisit le profil selon votre machine et installe seul les modèles d'IA qui
+lui conviennent, en arrière-plan au démarrage : rien à choisir. Après une mise à jour,
+il remplace les modèles périmés et supprime ceux qui ne servent plus. La page
+**Modèles** montre où en est l'installation. Le profil Complet n'est pas disponible
+dans la version portable : il y fonctionne comme Standard.
 
 **Remplacement** : comment les données sont remplacées.
 - **Réaliste** (par défaut) : `Jean Dupont` devient un autre nom vraisemblable, les
@@ -138,9 +140,11 @@ votre entreprise…) et les valeurs à toujours masquer (vos clients, vos projet
 
 - **Vos documents ne quittent jamais la machine.** Anonyma bloque toute connexion
   pendant le traitement.
-- Les seules connexions possibles sont le téléchargement d'un modèle, que vous demandez,
-  et les mises à jour (recherche au démarrage, puis téléchargement si vous acceptez).
-  La recherche n'envoie aucune donnée, et vous pouvez la couper dans les Réglages.
+- Les seules connexions possibles se font au démarrage : les modèles d'IA adaptés à
+  votre machine (Hugging Face) et les mises à jour (recherche, puis téléchargement si
+  vous acceptez). Elles n'envoient aucune donnée, et vous pouvez les couper dans les
+  Réglages : les modèles s'installent alors à votre demande, ou depuis un dossier sans
+  réseau (page **Modèles**).
 - Les originaux ne sont jamais modifiés.
 - Les journaux et les rapports ne contiennent aucune donnée d'origine.
 

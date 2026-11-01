@@ -42,9 +42,11 @@ through a file the tool silently skipped.
 ## Positioning
 
 - **Fully local, provably offline for documents**: outbound connections are blocked inside
-  the process; the only network actions are a model download the user explicitly triggers
-  and the startup update check of the portable build (one GitHub API request carrying no
-  document or setting, can be switched off in Réglages). Both go through the proxy of
+  the process; the only network actions happen at startup: downloading the models this
+  machine needs (Hugging Face, chosen by the application from the hardware) and the
+  update check of the portable build (one GitHub API request). Neither carries any
+  document or setting, and both can be switched off in Réglages (models are then
+  installed on request, or imported from a folder offline). Both go through the proxy of
   the workstation (system settings, PAC script on Windows) or the one set in Réglages,
   and trust the system certificates, so they work on corporate PCs. No telemetry.
 - **Verification is part of the product, not an option**: every output is re-read by

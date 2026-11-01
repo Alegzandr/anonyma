@@ -334,11 +334,12 @@ class SettingsPage(QWidget):
         self.theme.setMaximumWidth(200)
         self.theme.currentIndexChanged.connect(self._theme_changed)
         self._row(f, "T&hème", self.theme)
-        self.check_updates = QCheckBox("Rechercher une mise à jour au démarrage")
+        self.check_updates = QCheckBox("Mettre à jour Anonyma et ses modèles au démarrage")
         self.check_updates.setObjectName("CheckUpdates")
         self.check_updates.setToolTip(
-            "Seule connexion automatique d'Anonyma : une requête vers GitHub pour connaître "
-            "la dernière version. Aucune donnée de document n'est envoyée."
+            "Seules connexions automatiques d'Anonyma : la dernière version sur GitHub et "
+            "les modèles d'IA adaptés à ce poste sur Hugging Face. Aucune donnée de "
+            "document n'est envoyée."
         )
         self._row(f, "Mises à jour", self.check_updates)
         self.proxy = QLineEdit()

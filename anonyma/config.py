@@ -85,8 +85,9 @@ class Config:
     ui: dict[str, Any] = field(default_factory=dict)
     #: Seconds allowed for one LibreOffice conversion (legacy doc/xls/ppt).
     libreoffice_timeout: float = 180.0
-    #: Ask GitHub for a newer release at GUI startup (portable build only): the one
-    #: automatic network access of the application, see ``anonyma/updater.py``.
+    #: Automatic network access at GUI startup: ask GitHub for a newer release
+    #: (portable build only, ``anonyma/updater.py``) and download the models this
+    #: machine needs (``anonyma/model_setup.py``). Off: both only on user request.
     check_updates: bool = True
     #: Proxy of the update check and of model downloads, ``http://host:port`` (user
     #: and password allowed). Empty = the proxy of the system (``anonyma/network.py``).

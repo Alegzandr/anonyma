@@ -41,9 +41,10 @@ before you consider a change done. On Windows, keep pytest's base temp short
 - **Never leak sensitive data**: no original value, file name or exception message that
   may contain one in logs, reports or `Issue` messages. Sensitive model fields are
   `repr=False`; use `logs.fingerprint(value)` for correlation.
-- **Offline**: `netguard` blocks outbound connections; only a user-triggered model download
-  and the startup update check of the portable build (`anonyma/updater.py`, GitHub
-  releases, `Config.check_updates`) run inside `netguard.allow_network()`, with clients
+- **Offline**: `netguard` blocks outbound connections; only model downloads (the automatic
+  model setup at GUI startup, `anonyma/model_setup.py`, or a user request) and the startup
+  update check of the portable build (`anonyma/updater.py`, GitHub releases) run inside
+  `netguard.allow_network()`; both automatic ones obey `Config.check_updates`, with clients
   from `anonyma/network.py` (proxy of `Config.proxy` or of the system, system certificate
   store). Do not add other network calls, telemetry or new downloads at runtime.
 - **Original format is the contract**: each output keeps its input format, folder tree and
@@ -74,6 +75,7 @@ before you consider a change done. On Windows, keep pytest's base temp short
 | `anonyma/resolver.py`, `replacer.py`, `substitutes.py` | batch-wide clustering/propagation, substitution plan, realistic substitutes |
 | `anonyma/verifier.py` | re-reads outputs; what it finds goes to the corrective pass of `Pipeline.apply`, then certain residue → quarantine, statistical signal → « À revoir » |
 | `anonyma/store.py` | encrypted mapping table (pseudonymisation) |
+| `anonyma/model_setup.py` | which models this machine needs (hardware, shipped engines); installs, refreshes outdated, removes obsolete |
 | `anonyma/config.py`, `paths.py`, `netguard.py`, `logs.py` | settings, portable folders, network guard, value-free logging |
 | `anonyma/updater.py`, `gui/update.py` | update check against GitHub releases, verified download, self-replacing installer |
 | `anonyma/network.py` | HTTP clients of the two network accesses: proxy (settings, environment, Windows/macOS settings, PAC via WinHTTP), system certificates |

@@ -1,4 +1,11 @@
-"""« Modèles » page: hardware, recommendations, catalogue, download and import."""
+"""« Modèles » page: what the application installed for this machine, and how far it got.
+
+Nothing to choose here: ``model_setup`` decides which models this computer needs from
+its hardware, downloads them at startup (when automatic connections are allowed),
+replaces those an update of Anonyma made obsolete and removes the ones no longer
+used. The page shows that state; its only actions are retrying, installing on demand
+when automatic connections are off, and an offline import from a folder.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import override
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -16,14 +23,13 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QProgressBar,
-    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from anonyma import hardware
+from anonyma import hardware, model_setup
 from anonyma.frenchtext import typo
 from anonyma.gui import dialogs
 from anonyma.gui.context import AppContext
@@ -33,7 +39,6 @@ from anonyma.gui.widgets import (
     BADGE_ROLE,
     BadgeDelegate,
     Banner,
-    EmptyState,
     button,
     left_header,
     muted,
@@ -41,10 +46,14 @@ from anonyma.gui.widgets import (
     primary_button,
 )
 from anonyma.model_catalog import ModelKind, ModelSpec
-from anonyma.model_manager import ModelStatus
+from anonyma.models import Profile
 
-KIND_LABELS = {ModelKind.GLINER: "GLiNER", ModelKind.LLM: "Modèle de langue", ModelKind.OCR: "OCR"}
-COLUMNS = ("Modèle", "Type", "Taille", "Licence", "État")
+KIND_LABELS = {
+    ModelKind.GLINER: "Reconnaissance des noms",
+    ModelKind.LLM: "Modèle de langue",
+    ModelKind.OCR: "Lecture des images",
+}
+COLUMNS = ("Modèle", "Rôle", "Taille", "État")
 
 #: ONNX Runtime execution providers -> French label.
 PROVIDER_LABELS = {
@@ -68,27 +77,24 @@ def spec_size(spec: ModelSpec) -> int:
     return sum(f.size for f in spec.files)
 
 
-def status_text(status: ModelStatus | None) -> tuple[str, str]:
-    if status is None:
-        return "Inconnu", "neutral"
-    if status.installed and status.verified:
-        return "Installé · vérifié", "success"
-    if status.installed:
-        return "Installé · non vérifié", "warning"
-    # The common case: plain muted text, no badge.
-    return "Non installé", ""
-
-
 class ModelsPage(QWidget):
+    #: Emitted when the installed models changed (the next batch detects more).
+    models_changed = Signal()
+
     def __init__(self, context: AppContext, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.context = context
         self.runner = TaskRunner(self)
-        self.specs: list[ModelSpec] = []
-        self.statuses: dict[str, ModelStatus] = {}
-        self._download: Task | None = None
-        self._cancel_download = False
-        self._busy_model = ""
+        self.setup: model_setup.SetupPlan | None = None
+        self.info: hardware.HardwareInfo | None = None
+        self.profile: Profile | None = None
+        self._task: Task | None = None
+        self._cancel = False
+        #: Model id -> French state shown while the setup runs.
+        self._states: dict[str, tuple[str, str]] = {}
+        self._loaded = False
+        #: French messages of the last failed attempt (network down, folder in use...).
+        self._last_errors: list[str] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -97,126 +103,97 @@ class ModelsPage(QWidget):
         self.banner = Banner()
         layout.addWidget(self.banner)
 
-        top = QHBoxLayout()
-        hw_box = QGroupBox("Matériel")
+        state_box = QGroupBox("Installation")
+        state_layout = QVBoxLayout(state_box)
+        self.headline = QLabel("Vérification des modèles…")
+        self.headline.setObjectName("ModelsHeadline")
+        self.headline.setWordWrap(True)
+        state_layout.addWidget(self.headline)
+        self.detail = muted("")
+        state_layout.addWidget(self.detail)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 1000)
+        self.progress.setTextVisible(False)
+        self.progress.hide()
+        state_layout.addWidget(self.progress)
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        self.install_button = primary_button("Installer maintenant", "download")
+        self.install_button.clicked.connect(lambda: self.start(download=True))
+        self.cancel_button = button("Interrompre")
+        self.cancel_button.clicked.connect(self.cancel_download)
+        self.import_button = button("Importer depuis un dossier…")
+        self.import_button.setToolTip(
+            "Sans réseau : choisissez le dossier models d'un autre poste où Anonyma est "
+            "installé, ou une clé USB contenant les fichiers des modèles."
+        )
+        self.import_button.clicked.connect(self.import_folder)
+        actions.addWidget(self.install_button)
+        actions.addWidget(self.cancel_button)
+        actions.addStretch(1)
+        actions.addWidget(self.import_button)
+        state_layout.addLayout(actions)
+        layout.addWidget(state_box)
+
+        list_box = QGroupBox("Modèles de ce poste")
+        list_layout = QVBoxLayout(list_box)
+        self.table = QTableWidget(0, len(COLUMNS))
+        self.table.setObjectName("ModelTable")
+        self.table.setHorizontalHeaderLabels(list(COLUMNS))
+        self.table.verticalHeader().hide()
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(True)
+        left_header(self.table)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col, width in ((1, 200), (2, 90), (3, 190)):
+            self.table.setColumnWidth(col, width)
+        self.table.setItemDelegateForColumn(3, BadgeDelegate(self.table))
+        list_layout.addWidget(self.table, 1)
+        list_layout.addWidget(
+            muted(
+                "Anonyma choisit les modèles selon la mémoire et le processeur de ce poste, "
+                "les télécharge au démarrage depuis Hugging Face (licence et intégrité "
+                "vérifiées), remplace ceux qu'une mise à jour rend périmés et supprime "
+                "ceux qui ne servent plus. Les documents, eux, ne quittent jamais le poste."
+            )
+        )
+        layout.addWidget(list_box)
+
+        hw_box = QGroupBox("Ce poste")
         self.hw_form = QFormLayout(hw_box)
         self.hw_labels: dict[str, QLabel] = {}
         for key, label in (
             ("ram", "Mémoire vive"),
             ("cpu", "Processeurs"),
             ("gpu", "Carte graphique"),
-            ("vram", "Mémoire graphique"),
             ("providers", "Accélération"),
-            ("notes", "Remarques"),
+            ("profile", "Détection"),
         ):
             value = QLabel("…")
             value.setWordWrap(True)
             value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.hw_labels[key] = value
             self.hw_form.addRow(label, value)
-        top.addWidget(hw_box, 1)
-        rec_box = QGroupBox("Recommandation")
-        rec_layout = QVBoxLayout(rec_box)
-        self.profile_label = QLabel("…")
-        self.profile_label.setWordWrap(True)
-        self.llm_label = QLabel("…")
-        self.llm_label.setWordWrap(True)
-        rec_layout.addWidget(self.profile_label)
-        rec_layout.addWidget(self.llm_label)
-        rec_layout.addStretch(1)
-        self.refresh_hw_button = button("Détecter à nouveau")
-        self.refresh_hw_button.clicked.connect(self.refresh_hardware)
-        rec_layout.addWidget(self.refresh_hw_button, 0, Qt.AlignmentFlag.AlignRight)
-        top.addWidget(rec_box, 1)
-        layout.addLayout(top)
-
-        catalogue = QGroupBox("Catalogue")
-        cat_layout = QVBoxLayout(catalogue)
-        cat_layout.addWidget(
-            muted(
-                "Le téléchargement n'a lieu qu'à votre demande ; avec la recherche de mises "
-                "à jour, c'est la seule connexion d'Anonyma (par le proxy du système ou "
-                "celui des Réglages). Sans réseau, importez les fichiers du modèle depuis "
-                "un support amovible."
-            )
-        )
-        self.cat_stack = QStackedWidget()
-        self.empty = EmptyState(
-            "Catalogue vide",
-            "Aucun modèle n'est encore référencé dans cette version. Le profil « Léger » "
-            "fonctionne sans aucun modèle.",
-        )
-        self.table = QTableWidget(0, len(COLUMNS))
-        self.table.setObjectName("ModelTable")
-        self.table.setHorizontalHeaderLabels(list(COLUMNS))
-        self.table.verticalHeader().hide()
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.setAlternatingRowColors(True)
-        left_header(self.table)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((1, 140), (2, 90), (3, 130), (4, 170)):
-            self.table.setColumnWidth(col, width)
-        self.table.setItemDelegateForColumn(4, BadgeDelegate(self.table))
-        self.table.itemSelectionChanged.connect(self._update_buttons)
-        self.cat_stack.addWidget(self.empty)
-        self.cat_stack.addWidget(self.table)
-        cat_layout.addWidget(self.cat_stack, 1)
-        self.description = muted("")
-        cat_layout.addWidget(self.description)
-
-        progress_row = QHBoxLayout()
-        self.progress_label = muted("")
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 1)
-        self.progress.setValue(0)
-        self.progress.setTextVisible(False)
-        self.progress.hide()
-        progress_row.addWidget(self.progress_label, 1)
-        progress_row.addWidget(self.progress, 2)
-        cat_layout.addLayout(progress_row)
-
-        self.actions_box = QWidget()
-        actions = QHBoxLayout(self.actions_box)
-        actions.setContentsMargins(0, 0, 0, 0)
-        self.download_button = primary_button("Télécharger…", "download")
-        self.cancel_button = button("Annuler le téléchargement")
-        self.import_files_button = button("Importer des fichiers…")
-        self.import_folder_button = button("Importer un dossier…")
-        self.remove_button = button("Supprimer")
-        self.remove_button.setProperty("danger", True)
-        self.download_button.clicked.connect(self.download_selected)
-        self.cancel_button.clicked.connect(self.cancel_download)
-        self.import_files_button.clicked.connect(self.import_files)
-        self.import_folder_button.clicked.connect(self.import_folder)
-        self.remove_button.clicked.connect(self.remove_selected)
-        actions.addWidget(self.download_button)
-        actions.addWidget(self.cancel_button)
-        actions.addStretch(1)
-        actions.addWidget(self.import_files_button)
-        actions.addWidget(self.import_folder_button)
-        actions.addWidget(self.remove_button)
-        cat_layout.addWidget(self.actions_box)
-        layout.addWidget(catalogue, 1)
-
-        self._loaded = False
-        self._recommended_llm = ""
-        self._update_buttons()
+        layout.addWidget(hw_box)
+        layout.addStretch(1)
+        self._update_actions()
 
     # -- lifecycle -------------------------------------------------------------------
 
     @override
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
-        if not self._loaded:
-            self._loaded = True
-            self.refresh_hardware()
-            self.refresh_catalog()
+        if not self._loaded and not self.busy():
+            self.refresh()
 
     def busy(self) -> bool:
         return self.runner.running()
+
+    def downloading(self) -> bool:
+        return self._task is not None
 
     def _run(
         self,
@@ -224,273 +201,263 @@ class ModelsPage(QWidget):
         ok: Callable[[object], None],
         ko: Callable[[str, str], None] | None = None,
         progress: Callable[[object], None] | None = None,
-        cancelled: Callable[[], None] | None = None,
     ) -> Task:
         task = self.runner.create(fn)
         task.succeeded.connect(ok)
         task.failed.connect(ko or self._failed)
         if progress is not None:
             task.progress.connect(progress)
-        if cancelled is not None:
-            task.cancelled.connect(cancelled)
         task.start()
         return task
 
     def _failed(self, message: str, _type: str) -> None:
-        self.banner.show_message(message, "error")
-        self._busy_model = ""
+        self._task = None
         self.progress.hide()
-        self.progress_label.setText("")
-        self._update_buttons()
+        self.banner.show_message(message, "error")
+        self.refresh()
 
-    # -- hardware ----------------------------------------------------------------------
+    # -- state -----------------------------------------------------------------------
 
-    def refresh_hardware(self) -> None:
-        self.refresh_hw_button.setEnabled(False)
+    def _compute(self) -> tuple[hardware.HardwareInfo, model_setup.SetupPlan, Profile]:
+        """Worker thread: hardware, what ``models/`` still needs, the profile served."""
+        info = hardware.detect_hardware()
+        setup = model_setup.plan(self.context.model_manager, info)
+        return info, setup, self.context.config_copy().effective_profile()
 
-        def work(_report: Report) -> tuple[hardware.HardwareInfo, object, str | None]:
-            info = hardware.detect_hardware()
-            return info, hardware.recommend_profile(info), hardware.recommend_llm(info)
+    def refresh(self) -> None:
+        """Re-read the hardware and ``models/`` and show what is (still) needed."""
+        self._loaded = True
+        self._run(lambda _r: self._compute(), self._show)
 
-        def ko(message: str, type_name: str) -> None:
-            self.refresh_hw_button.setEnabled(True)
-            for label in self.hw_labels.values():
-                label.setText("—")
-            self.profile_label.setText(typo("Détection du matériel impossible : " + message))
-
-        self._run(work, self._show_hardware, ko)
-
-    def _show_hardware(self, value: object) -> None:
-        self.refresh_hw_button.setEnabled(True)
+    def _show(self, value: object) -> None:
         assert isinstance(value, tuple)
-        info, profile, llm = value
-        assert isinstance(info, hardware.HardwareInfo)
+        self.info, self.setup, self.profile = value
+        self._show_hardware()
+        self._show_models()
+        self._update_actions()
+
+    def _show_hardware(self) -> None:
+        info = self.info
+        if info is None:
+            return
         self.hw_labels["ram"].setText(
             format_bytes(info.ram_bytes) if info.ram_bytes else "Inconnue"
         )
         self.hw_labels["cpu"].setText(str(info.cpu_count))
-        self.hw_labels["gpu"].setText(info.gpu_name or "Aucune détectée")
-        self.hw_labels["vram"].setText(format_bytes(info.vram_bytes) if info.vram_bytes else "—")
+        gpu = info.gpu_name or "Aucune détectée"
+        if info.vram_bytes:
+            gpu += f" ({format_bytes(info.vram_bytes)})"
+        self.hw_labels["gpu"].setText(gpu)
         self.hw_labels["providers"].setText(providers_label(info.providers))
-        self.hw_labels["notes"].setText(" ".join(info.notes) or "—")
-        label = PROFILE_SHORT.get(profile, str(profile))
-        self.profile_label.setText(typo(f"Profil conseillé : <b>{label}</b>"))
-        self._recommended_llm = str(llm or "")
-        if self.specs:
-            self._show_catalog((self.specs, self.statuses))
-        if llm:
-            spec = next((s for s in self.specs if s.id == llm), None)
-            name = spec.title if spec else str(llm)
-            self.llm_label.setText(typo(f"Modèle de langue conseillé : <b>{name}</b>"))
-        else:
-            self.llm_label.setText(typo("Modèle de langue conseillé : aucun pour cette machine."))
+        if self.profile is not None:
+            self.hw_labels["profile"].setText(PROFILE_SHORT.get(self.profile, str(self.profile)))
 
-    # -- catalogue ------------------------------------------------------------------------
-
-    def refresh_catalog(self) -> None:
-        manager = self.context.model_manager
-
-        def work(_report: Report) -> tuple[list[ModelSpec], dict[str, ModelStatus]]:
-            specs = manager.catalog()
-            statuses: dict[str, ModelStatus] = {}
-            for spec in specs:
-                try:
-                    statuses[spec.id] = manager.status(spec.id)
-                except Exception:  # one broken entry must not hide the others
-                    continue
-            return specs, statuses
-
-        self._run(work, self._show_catalog)
-
-    def _show_catalog(self, value: object) -> None:
-        assert isinstance(value, tuple)
-        self.specs, self.statuses = value
-        selected = self.selected_spec()
-        self.table.setRowCount(len(self.specs))
-        for row, spec in enumerate(self.specs):
-            status = self.statuses.get(spec.id)
-            text, level = status_text(status)
-            size = status.size_on_disk if status and status.size_on_disk else spec_size(spec)
-            name = spec.title or spec.id
-            if spec.id == self._recommended_llm:
-                name += " (conseillé)"
-            cells = [
-                name,
-                KIND_LABELS.get(spec.kind, str(spec.kind)),
-                format_bytes(size),
-                spec.license or "—",
-                text,
-            ]
-            for col, cell in enumerate(cells):
-                item = QTableWidgetItem(cell)
-                if col == 0:
-                    item.setData(Qt.ItemDataRole.UserRole, spec.id)
-                    item.setToolTip(spec.description or spec.repo_id)
-                if col == 4 and level:
-                    item.setData(BADGE_ROLE, level)
-                self.table.setItem(row, col, item)
-            if selected is not None and spec.id == selected.id:
-                self.table.selectRow(row)
-        self.cat_stack.setCurrentWidget(self.table if self.specs else self.empty)
-        self.actions_box.setVisible(bool(self.specs))
-        self._update_buttons()
-
-    def selected_spec(self) -> ModelSpec | None:
-        rows = self.table.selectionModel().selectedRows()
-        if not rows:
-            return None
-        item = self.table.item(rows[0].row(), 0)
-        model_id = item.data(Qt.ItemDataRole.UserRole) if item else None
-        return next((s for s in self.specs if s.id == model_id), None)
-
-    def _update_buttons(self) -> None:
-        spec = self.selected_spec()
-        status = self.statuses.get(spec.id) if spec else None
-        working = bool(self._busy_model)
-        installed = bool(status and status.installed)
-        self.download_button.setEnabled(spec is not None and not working and not installed)
-        if spec is None:
-            tip = "Sélectionnez d'abord un modèle dans le catalogue."
-        elif installed:
-            tip = "Ce modèle est déjà installé."
-        elif working:
-            tip = "Une opération est en cours."
-        else:
-            tip = "Télécharger ce modèle depuis Hugging Face, à votre demande."
-        self.download_button.setToolTip(tip)
-        self.import_files_button.setEnabled(spec is not None and not working)
-        self.import_folder_button.setEnabled(spec is not None and not working)
-        self.remove_button.setEnabled(bool(status and status.installed) and not working)
-        self.cancel_button.setVisible(self._download is not None)
-        self.description.setText((spec.description or spec.repo_id) if spec is not None else "")
-
-    # -- actions ----------------------------------------------------------------------------
-
-    def download_selected(self) -> None:
-        spec = self.selected_spec()
-        if spec is None or self._busy_model:
+    def _show_models(self) -> None:
+        setup = self.setup
+        if setup is None:
             return
-        size = format_bytes(spec_size(spec))
-        if not dialogs.confirm(
-            self,
-            f"Télécharger « {spec.title or spec.id} » ({size}) depuis Hugging Face ?\n\n"
-            "Anonyma va se connecter au réseau uniquement pour ce téléchargement. La licence "
-            f"déclarée ({spec.license or 'inconnue'}) est vérifiée avant le transfert, puis "
-            "l'intégrité de chaque fichier est contrôlée.",
-            title="Téléchargement d'un modèle",
-            ok_label="Télécharger",
-        ):
-            return
-        manager = self.context.model_manager
-        self._cancel_download = False
-        self._busy_model = spec.id
-
-        def work(report: Report) -> Path:
-            return manager.download(
-                spec.id,
-                progress=lambda done, total: report((done, total)),
-                cancel=lambda: self._cancel_download,
+        todo = {spec.id for spec in setup.install}
+        rows: list[tuple[str, str, str, str, str]] = []
+        for spec in setup.wanted:
+            text, level = self._states.get(spec.id) or (
+                ("À installer", "warning") if spec.id in todo else ("Installé", "success")
             )
+            rows.append(
+                (
+                    spec.title or spec.id,
+                    KIND_LABELS.get(spec.kind, str(spec.kind)),
+                    format_bytes(spec_size(spec)),
+                    text,
+                    level,
+                )
+            )
+        for name in setup.obsolete:
+            rows.append((name, "Ne sert plus", "—", "Sera supprimé", "neutral"))
+        self.table.setRowCount(len(rows))
+        for row, cells in enumerate(rows):
+            for col, cell in enumerate(cells[:4]):
+                item = QTableWidgetItem(cell)
+                if col == 3 and cells[4]:
+                    item.setData(BADGE_ROLE, cells[4])
+                self.table.setItem(row, col, item)
+        self.table.resizeRowsToContents()
+        height = self.table.horizontalHeader().height() + 2 * self.table.frameWidth()
+        height += sum(self.table.rowHeight(r) for r in range(self.table.rowCount()))
+        self.table.setFixedHeight(height)
 
-        def ok(_value: object) -> None:
-            self._download = None
-            self._busy_model = ""
-            self.progress.hide()
-            self.progress_label.setText("")
-            self.banner.show_message(f"Modèle « {spec.title or spec.id} » installé.", "success")
-            self.refresh_catalog()
-
-        def ko(message: str, type_name: str) -> None:
-            self._download = None
-            if self._cancel_download or type_name == "CancelledError":
-                self._busy_model = ""
-                self.progress.hide()
-                self.progress_label.setText("")
-                self.banner.show_message("Téléchargement annulé.", "info")
-                self._update_buttons()
+    def _update_actions(self) -> None:
+        setup = self.setup
+        working = self._task is not None
+        self.cancel_button.setVisible(working)
+        needs = setup is not None and bool(setup.install)
+        self.install_button.setVisible(needs and not working)
+        self.install_button.setText("Réessayer" if self._last_errors else "Installer maintenant")
+        self.import_button.setVisible(needs and not working)
+        if working:
+            return
+        self.progress.hide()
+        if setup is None:
+            self.headline.setText("Vérification des modèles…")
+            self.detail.setText("")
+        elif not setup.install:
+            self.headline.setText(typo("Les modèles de ce poste sont installés et à jour."))
+            self.detail.setText("")
+        else:
+            size = format_bytes(setup.download_bytes)
+            self.headline.setText(typo(f"Modèles à installer : {size} à télécharger."))
+            if self._last_errors:
+                self.detail.setText(typo(" ".join(self._last_errors)))
+            elif not self.context.config.check_updates:
+                self.detail.setText(
+                    typo(
+                        "Les connexions automatiques sont désactivées dans les Réglages : "
+                        "installez-les maintenant, ou importez-les depuis un dossier sans "
+                        "réseau. En attendant, la détection fonctionne avec ce qui est installé."
+                    )
+                )
             else:
-                self._failed(message, type_name)
+                self.detail.setText(
+                    typo(
+                        "L'installation reprendra au prochain démarrage. En attendant, la "
+                        "détection fonctionne avec ce qui est installé."
+                    )
+                )
 
-        self.progress.setRange(0, 0)
-        self.progress.show()
-        self.progress_label.setText("Connexion…")
-        self._download = self._run(
-            work, ok, ko, self._download_progress, lambda: ko("", "CancelledError")
-        )
-        self._update_buttons()
+    # -- automatic setup ---------------------------------------------------------------
 
-    def _download_progress(self, payload: object) -> None:
+    def start_automatic(self) -> None:
+        """Startup: install what this machine needs (network only when automatic
+        connections are allowed) and remove what no longer serves."""
+        self.start(download=self.context.config.check_updates)
+
+    def start(self, *, download: bool) -> None:
+        if self._task is not None:
+            return
+        self._loaded = True
+        self._cancel = False
+        self._last_errors = []
+        self._states = {}
+        manager = self.context.model_manager
+
+        def work(report: Report) -> model_setup.SetupResult:
+            info, setup, profile = self._compute()
+            report(("plan", info, setup, profile))
+            if setup.ready:
+                return model_setup.SetupResult()
+            result = model_setup.run(
+                manager,
+                setup,
+                download=download,
+                progress=lambda spec, done, total: report(("progress", spec, done, total)),
+                cancel=lambda: self._cancel,
+            )
+            return result
+
+        self._task = self._run(work, self._finished, progress=self._on_progress)
+        self._update_actions()
+
+    def _on_progress(self, payload: object) -> None:
         if not isinstance(payload, tuple):
             return
-        done, total = payload
-        if total > 0:
-            self.progress.setRange(0, 1000)
-            self.progress.setValue(int(done / total * 1000))
-            self.progress_label.setText(
-                typo(f"Téléchargement : {format_bytes(done)} sur {format_bytes(total)}")
-            )
+        if payload[0] == "plan":
+            _kind, self.info, self.setup, self.profile = payload
+            setup = self.setup
+            assert isinstance(setup, model_setup.SetupPlan)
+            self._show_hardware()
+            if setup.install and self._task is not None:
+                self.headline.setText(typo("Installation des modèles de ce poste…"))
+                self.detail.setText(
+                    typo(
+                        "La détection fonctionne déjà avec ce qui est installé ; elle "
+                        "s'enrichit dès qu'un modèle est prêt."
+                    )
+                )
+                self.progress.setRange(0, 0)
+                self.progress.show()
+            self._show_models()
+            return
+        _kind, spec, done, total = payload
+        assert isinstance(spec, ModelSpec)
+        setup = self.setup
+        if setup is None:
+            return
+        for other in setup.install:
+            if other.id == spec.id:
+                break
+            self._states[other.id] = ("Installé", "success")
+        before = 0
+        for other in setup.install:
+            if other.id == spec.id:
+                break
+            before += spec_size(other)
+        overall = setup.download_bytes
+        if total and done >= total:
+            self._states[spec.id] = ("Vérification…", "info")
         else:
-            self.progress.setRange(0, 0)
-            self.progress_label.setText(typo(f"Téléchargement : {format_bytes(done)}"))
+            percent = int(done * 100 / total) if total else 0
+            self._states[spec.id] = (f"Téléchargement : {percent} %", "info")
+        if overall:
+            self.progress.setRange(0, 1000)
+            self.progress.setValue(min(1000, int((before + done) * 1000 / overall)))
+        self.detail.setText(
+            typo(
+                f"{spec.title} : {format_bytes(done)} sur {format_bytes(total or spec_size(spec))}"
+            )
+        )
+        self._show_models()
+
+    def _finished(self, value: object) -> None:
+        self._task = None
+        result = value
+        assert isinstance(result, model_setup.SetupResult)
+        self._states = {}
+        self._last_errors = list(result.errors)
+        if result.installed or result.removed:
+            self.models_changed.emit()
+        if result.cancelled:
+            self.banner.show_message("Installation interrompue : elle reprendra plus tard.", "info")
+        elif result.installed and result.ok:
+            self.banner.show_message("Modèles installés : la détection est complète.", "success")
+        self.refresh()
 
     def cancel_download(self) -> None:
-        if self._download is not None:
-            self._cancel_download = True
-            self.progress_label.setText("Annulation…")
+        if self._task is not None:
+            self._cancel = True
+            self.detail.setText("Interruption…")
 
-    def _import(self, files: list[Path]) -> None:
-        spec = self.selected_spec()
-        if spec is None or not files:
-            return
-        manager = self.context.model_manager
-        self._busy_model = spec.id
-        self.progress.setRange(0, 0)
-        self.progress.show()
-        self.progress_label.setText("Import et vérification des fichiers…")
-
-        def ok(_value: object) -> None:
-            self._busy_model = ""
-            self.progress.hide()
-            self.progress_label.setText("")
-            self.banner.show_message(f"Modèle « {spec.title or spec.id} » importé.", "success")
-            self.refresh_catalog()
-
-        self._run(lambda _r: manager.import_files(spec.id, files), ok)
-        self._update_buttons()
-
-    def import_files(self) -> None:
-        if self.selected_spec() is None:
-            return
-        files = dialogs.open_files(
-            self, "Importer les fichiers du modèle", start=self.context.last_dir("modeles")
-        )
-        self.context.remember_selection("modeles", files)
-        self._import(files)
+    # -- offline import ------------------------------------------------------------------
 
     def import_folder(self) -> None:
-        if self.selected_spec() is None:
+        if self._task is not None or self.setup is None:
             return
         folder = dialogs.open_folder(
-            self, "Importer le dossier du modèle", self.context.last_dir("modeles")
+            self, "Dossier contenant les modèles", self.context.last_dir("modeles")
         )
         self.context.remember_selection("modeles", folder)
-        if folder is not None:
-            self._import([folder])
-
-    def remove_selected(self) -> None:
-        spec = self.selected_spec()
-        if spec is None or self._busy_model:
+        if folder is None:
             return
-        if not dialogs.confirm(
-            self,
-            f"Supprimer le modèle « {spec.title or spec.id} » de ce poste ?",
-            ok_label="Supprimer",
-        ):
+        self._import([folder])
+
+    def _import(self, sources: list[Path]) -> None:
+        setup = self.setup
+        if setup is None:
             return
         manager = self.context.model_manager
+        self.progress.setRange(0, 0)
+        self.progress.show()
+        self.headline.setText("Import et vérification des fichiers…")
 
-        def ok(_value: object) -> None:
-            self.banner.show_message("Modèle supprimé.", "success")
-            self.refresh_catalog()
+        def ok(value: object) -> None:
+            self._task = None
+            assert isinstance(value, model_setup.SetupResult)
+            self._last_errors = []
+            if value.installed or value.removed:
+                self.models_changed.emit()
+            if value.errors:
+                self.banner.show_message(typo(" ".join(value.errors)), "warning")
+            else:
+                self.banner.show_message("Modèles importés et vérifiés.", "success")
+            self.refresh()
 
-        self._run(lambda _r: manager.remove(spec.id), ok)
+        self._task = self._run(lambda _r: model_setup.import_from(manager, setup, sources), ok)
+        self._update_actions()
