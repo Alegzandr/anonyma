@@ -461,8 +461,11 @@ def test_stored_person_takes_the_case_of_each_mention() -> None:
         return {e.value: table.substitute_for(e) for e in kept}
 
     [upper] = run("FONTAINE Régis").values()
-    surname, given = upper.split(" ", 1)
-    assert surname.isupper()
+    # The surname may hold several words (« LE GOFF Leonard »): all upper case.
+    words = upper.split(" ")
+    cut = next(i for i, w in enumerate(words) if not w.isupper())
+    surname, given = " ".join(words[:cut]), " ".join(words[cut:])
+    assert surname and given
     again = run("Régis Fontaine", "Régis FONTAINE", "Régis")
     assert again["Régis Fontaine"] == f"{given} {surname.title()}"
     assert again["Régis FONTAINE"] == f"{given} {surname}"
