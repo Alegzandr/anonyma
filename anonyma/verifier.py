@@ -193,6 +193,7 @@ class Verifier:
             return _cached(ocr_key, lambda: self._ocr_table(sensitive, allowed_keys))
 
         subs = _cached(("subs", frozenset(substitutes)), lambda: _substitutes(substitutes))
+        plan = _cached(("plan", frozenset(substitutes)), lambda: _Plan(substitutes))
         # Values the user kept may contain masked values (a whitelisted e-mail holding a
         # masked surname): text inside them is not a residue.
         kept = frozenset([*allowed, *self.config.whitelist])
@@ -319,6 +320,17 @@ class Verifier:
                         continue  # a model's « name » without any proper-name word
                     if keeps(entity.entity_type, value, self.config):
                         continue
+                    # « Projets IRVE » next to a substitute address reads as a person
+                    # only through that address: not certain.
+                    certain = (
+                        detector.deterministic
+                        and entity.score >= CERTAIN_DETECTOR_SCORE
+                        and not (
+                            entity.entity_type == EntityType.PERSON and is_functional_name(value)
+                        )
+                    )
+                    if not certain and plan.holds(value):
+                        continue  # a substitute written another way (« groupe_courtois »)
                     kinds.append(segment.context.kind)
                     result.residues.append(
                         Residue(
@@ -328,14 +340,7 @@ class Verifier:
                             reason=DETECTOR_HIT,
                             detector=entity.detector,
                             value=value,
-                            # « Projets IRVE » next to a substitute address reads as
-                            # a person only through that address: not certain.
-                            certain=detector.deterministic
-                            and entity.score >= CERTAIN_DETECTOR_SCORE
-                            and not (
-                                entity.entity_type == EntityType.PERSON
-                                and is_functional_name(value)
-                            ),
+                            certain=certain,
                             fragments=tuple(parts) if overlap else (),
                         )
                     )
@@ -429,6 +434,27 @@ def _cached[T](key: object, build: Callable[[], T]) -> T:
             _CACHE.pop(next(iter(_CACHE)))
         _CACHE[key] = build()
     return _CACHE[key]  # type: ignore[return-value]
+
+
+def _compact_name(text: str) -> str:
+    return "".join(c for c in skeleton(text) if c.isalnum())
+
+
+class _Plan:
+    """The substitutes of the plan, compared without case, accents or separators: a
+    detector hit that is one of them, or part of one, written with other separators or
+    another case (``Groupe_Courtois`` in a file name, ``GROUPE COURTOIS``) is the
+    replacer's own value, never a residue."""
+
+    def __init__(self, substitutes: set[str]) -> None:
+        self.keys = {k for k in (_compact_name(s) for s in substitutes) if len(k) >= 3}
+        self.joined = "|".join(sorted(self.keys))
+
+    def holds(self, value: str) -> bool:
+        key = _compact_name(value)
+        if len(key) < 3:
+            return False
+        return key in self.keys or (len(key) >= 6 and key in self.joined)
 
 
 def _substitutes(substitutes: set[str]) -> MultiMatcher[str]:
