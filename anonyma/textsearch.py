@@ -48,6 +48,7 @@ _EXTENSIONS = frozenset(
         "htm", "xml", "json", "mp3", "mp4", "wav", "mov",
     }
 )  # fmt: skip
+FILE_EXTENSIONS = _EXTENSIONS
 
 
 def in_identifier(text: str, start: int, end: int) -> bool:
@@ -171,6 +172,7 @@ def leftmost_longest[T](matches: Iterable[Match[T]]) -> list[Match[T]]:
 
 
 __all__ = [
+    "FILE_EXTENSIONS",
     "Match",
     "MultiMatcher",
     "boundary_ok",

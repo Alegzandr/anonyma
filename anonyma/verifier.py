@@ -80,7 +80,7 @@ from anonyma.policy import keeps
 from anonyma.rawscan import RawScanner, raw_residues
 from anonyma.replacer import BLACKOUT_CHAR
 from anonyma.resolver import DOCUMENT_LOCAL_TYPES, NAME_TYPES, cluster_forms
-from anonyma.textsearch import MultiMatcher, leftmost_longest
+from anonyma.textsearch import FILE_EXTENSIONS, MultiMatcher, leftmost_longest
 from anonyma.textutils import normalize, normalize_with_map, strip_accents
 
 ORIGINAL_VALUE = "original_value"
@@ -449,12 +449,28 @@ class _Plan:
     def __init__(self, substitutes: set[str]) -> None:
         self.keys = {k for k in (_compact_name(s) for s in substitutes) if len(k) >= 3}
         self.joined = "|".join(sorted(self.keys))
+        #: Words of the substitutes (« Hubert » of « Cyril Hubert »).
+        self.words = {
+            k for s in substitutes for w in _NAME_WORD.findall(s) if len(k := _compact_name(w)) >= 3
+        }
 
     def holds(self, value: str) -> bool:
         key = _compact_name(value)
         if len(key) < 3:
             return False
-        return key in self.keys or (len(key) >= 6 and key in self.joined)
+        if key in self.keys or (len(key) >= 6 and key in self.joined):
+            return True
+        # « Point Groupe Lefebvre » of a file name, « Hubert Avocats »: words of
+        # substitutes around ordinary words. Original values never become substitute
+        # words, and the original-value search runs apart from this.
+        words = [w for w in _NAME_WORD.findall(value) if not w.isdigit()]
+        found = False
+        for word in words:
+            if _compact_name(word) in self.words:
+                found = True
+            elif not (is_common_word(word) or normalize(word) in STOP_WORDS):
+                return False
+        return found
 
 
 def _substitutes(substitutes: set[str]) -> MultiMatcher[str]:
@@ -673,8 +689,9 @@ def _significant(token: str) -> bool:
     key = normalize(word)
     if civility_of(word) is not None or key in PARTICLES or key in STOP_WORDS:
         return False
-    # « Service Client » around a substitute, ``mailto:`` before one
-    return key not in ROLE_WORDS and key not in _LINK_SCHEMES
+    # « Service Client » around a substitute, ``mailto:`` before one, the extension
+    # after one in a file name (``Groupe Lefebvre.eml``)
+    return key not in ROLE_WORDS and key not in _LINK_SCHEMES and key not in FILE_EXTENSIONS
 
 
 #: URL schemes glued to a substitute by a model span (``mailto:EMAIL_001@…``).
