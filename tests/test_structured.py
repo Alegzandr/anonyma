@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from anonyma import threadindex
 from anonyma.atomic import atomic_spans, trimmed
 from anonyma.config import Config
 from anonyma.extractors._embedded import (
@@ -140,7 +141,10 @@ def test_dataverse_attachment_is_anonymized(config: Config, tmp_path: Path) -> N
     # Schema and identifiers untouched.
     assert _keys(out) == _keys(page)
     assert record["activityid"] == DATAVERSE_ACTIVITY
-    assert record["conversationindex"] == DATAVERSE_INDEX
+    # A thread index is rebuilt, never kept: it holds the real start date.
+    index = record["conversationindex"]
+    assert index != DATAVERSE_INDEX and threadindex.decode(index) is not None
+    assert len(index) == len(DATAVERSE_INDEX) and index.isupper()
     assert record["_ownerid_value@Microsoft.Dynamics.CRM.lookuplogicalname"] == "systemuser"
     # The attachment was anonymized and re-encoded the same way (76 columns, CRLF).
     body = record["email_activity_mime_attachment"][0]["body"]
@@ -375,7 +379,9 @@ def test_guids_survive_the_pipeline(config: Config, tmp_path: Path) -> None:
     top = result.results[0]  # type: ignore[attr-defined]
     assert top.output_name.endswith(f"{guid}.txt")
     out = top.output_path.read_text(encoding="utf-8")
-    assert f"X-D365-ActivityId: {guid}" in out and DATAVERSE_INDEX in out
+    assert f"X-D365-ActivityId: {guid}" in out and DATAVERSE_INDEX not in out
+    [rebuilt] = [line.split(": ", 1)[1] for line in out.splitlines() if line.startswith("Thread")]
+    assert threadindex.decode(rebuilt) is not None  # still a valid index
     assert "Quintavalle" not in out and "06 12 34 56 78" not in out
 
 

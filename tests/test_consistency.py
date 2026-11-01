@@ -10,6 +10,7 @@ import email
 import json
 import re
 from datetime import datetime, timedelta
+from email.header import decode_header, make_header
 from email.message import Message
 from email.policy import compat32
 from email.utils import getaddresses, parsedate_to_datetime
@@ -240,6 +241,7 @@ def test_forms_of_one_person_share_one_substitute(tmp_path: Path, canary_config:
     mail = outputs["m.eml"]
     assert mail is not None
     [(name, address)] = getaddresses([str(_mail(mail)["From"])])
-    words = set(re.split(r"[.\-_]", address.split("@")[0]))
-    shown = {strip_accents(w).casefold() for w in re.split(r"[\s\-]+", name)}
-    assert words <= shown, (name, address)  # a form of the substitute shown as name
+    words = [w for w in re.split(r"[.\-_]", address.split("@")[0]) if w]
+    name = str(make_header(decode_header(name)))  # RFC 2047 when accented
+    shown = re.sub(r"[^a-z]", "", strip_accents(name).casefold())
+    assert words and all(w in shown for w in words), (name, address)  # a form of the name

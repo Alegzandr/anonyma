@@ -11,6 +11,11 @@ one real-world entity into a cluster:
 * e-mail addresses whose local part is derived from a known person
   (``jdupont@``, ``jean.dupont@``) are linked to it (``attributes["person"]``).
 
+``link_by_place`` then attributes what the batch-wide index left alone because
+several people share it: a lone given name or surname goes to the only person
+bearing it in its record or file, an address written after a display name to that
+person.
+
 Cluster ids are stable: an entity whose ``cluster_id`` is already known keeps it,
 and new clusters get an id derived (with a per-process secret) from their key.
 
