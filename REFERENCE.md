@@ -228,7 +228,8 @@ vérifiés et peut être partagé tel quel) ; ils ne doivent pas être diffusés
 
 Sans console interactive (script, agent, tâche planifiée), une commande qui a besoin de la
 phrase secrète échoue aussitôt (code 2) si `ANONYMA_PASSPHRASE` n'est pas définie, au lieu
-d'attendre une saisie.
+d'attendre une saisie ; de même pour une confirmation (`modeles telecharger`,
+`modeles supprimer`) sans l'option `--oui`.
 
 ### Automatisation (`--json`)
 
@@ -362,7 +363,11 @@ anonyma-cli modeles telecharger <identifiant>
 anonyma-cli modeles supprimer <identifiant>
 ```
 
-Le téléchargement d'un modèle est toujours déclenché explicitement. Avant de télécharger, Anonyma lit la licence publiée sur Hugging Face et
+Le téléchargement d'un modèle est toujours déclenché explicitement et demande
+confirmation (sauf avec `--oui`, comme la suppression). Sans console interactive pour
+répondre, la commande échoue aussitôt (code 2) en suggérant `--oui` ; une réponse
+« non » l'arrête avec le code 1 : le code 0 signifie toujours que l'opération a eu lieu.
+Avant de télécharger, Anonyma lit la licence publiée sur Hugging Face et
 refuse le modèle si elle est non commerciale (`cc-by-nc…`, « recherche uniquement »…),
 non identifiée (`other`, `unknown`) ou différente de celle du catalogue. Les fichiers
 sont téléchargés à la révision figée par le catalogue, **vérifiés par empreinte

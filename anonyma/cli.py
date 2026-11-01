@@ -628,6 +628,21 @@ def read_passphrase(*, confirm: bool) -> str:
     return value
 
 
+def confirm_or_fail(question: str, *, default: bool) -> bool:
+    """Ask a yes/no question; without a console to answer it, fail at once (code 2)
+    instead of reading an empty answer, so that a script never mistakes a skipped
+    operation for a done one. Ctrl+C or end of input counts as « non »."""
+    if not _interactive():
+        fail(
+            "Confirmation requise, mais aucune console interactive pour la saisir : "
+            "ajoutez l'option --oui."
+        )
+    try:
+        return bool(typer.confirm(question, default=default, err=True))
+    except typer.Abort:
+        return False
+
+
 def _interactive() -> bool:
     """Whether a user can answer a prompt (standard input is a terminal)."""
     try:
@@ -2038,7 +2053,7 @@ def models_download(
         f"{spec.title} — dépôt {spec.repo_id}, licence {spec.license}, "
         f"{format_bytes(size) if size else 'taille inconnue'}."
     )
-    if not yes and not typer.confirm(
+    if not yes and not confirm_or_fail(
         "Autoriser l'accès réseau vers Hugging Face pour ce téléchargement ?", default=True
     ):
         fail("Téléchargement annulé.", EXIT_PARTIAL)
@@ -2101,8 +2116,8 @@ def models_remove(
 ) -> None:
     """Supprimer un modèle installé (et ses téléchargements partiels)."""
     _spec_or_fail(model_id)
-    if not yes and not typer.confirm(f"Supprimer le modèle « {model_id} » ?", default=False):
-        raise typer.Exit(EXIT_OK)
+    if not yes and not confirm_or_fail(f"Supprimer le modèle « {model_id} » ?", default=False):
+        fail("Suppression annulée.", EXIT_PARTIAL)
     from anonyma.model_manager import ModelError
 
     try:
