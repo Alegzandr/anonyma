@@ -939,3 +939,31 @@ def test_worker_stderr_goes_to_the_log_as_exception_type_only(
         sink.write('  File "queues.py", line 104, in get\n')
         sink.write("OSError: [WinError 6] secret-value\n")
     assert [r.getMessage() for r in caplog.records] == ["worker process error: OSError"]
+
+
+def test_worker_logging_replaces_an_inherited_rotating_handler(portable_home: Path) -> None:
+    import logging
+
+    from anonyma import logs
+
+    root = logging.getLogger("anonyma")
+    saved = list(root.handlers)
+    try:
+        for h in saved:
+            root.removeHandler(h)
+        logs.setup_logging()  # the main process's rotating file
+        logs.setup_logging(worker=True)  # a worker that inherited it must only append
+        assert [type(h).__name__ for h in root.handlers] == ["_AppendHandler"]
+    finally:
+        for h in list(root.handlers):
+            root.removeHandler(h)
+            h.close()
+        for h in saved:
+            root.addHandler(h)
+
+
+def test_worker_pool_always_spawns() -> None:
+    from anonyma.pipeline import worker_pool
+
+    with worker_pool(1) as pool:
+        assert pool._mp_context.get_start_method() == "spawn"

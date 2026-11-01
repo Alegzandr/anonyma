@@ -68,8 +68,12 @@ def setup_logging(level: int = logging.INFO, *, worker: bool = False) -> None:
     root = logging.getLogger("anonyma")
     if not any(isinstance(h, logging.NullHandler) for h in logging.root.handlers):
         logging.root.addHandler(logging.NullHandler())
-    if root.handlers:
+    if root.handlers and not worker:
         return
+    if worker:
+        # A worker only ever appends: never keep a rotating handler it may have inherited.
+        for existing in list(root.handlers):
+            root.removeHandler(existing)
     root.setLevel(level)
     path = paths.logs_dir() / LOG_NAME
     handler: logging.Handler

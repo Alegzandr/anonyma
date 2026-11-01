@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import math
+import multiprocessing
 import os
 import re
 import shutil
@@ -329,7 +330,12 @@ def worker_pool(workers: int) -> Iterator[ProcessPoolExecutor]:
     code) hangs the batch after its last result. Here, pending jobs are cancelled,
     workers get :data:`POOL_EXIT_TIMEOUT` seconds to exit, and the ones left are
     terminated (every result has been collected by then)."""
-    pool = ProcessPoolExecutor(workers, initializer=_worker_init)
+    # Always "spawn" (Linux defaults to "fork"): this process runs threads (progress,
+    # ONNX Runtime, the language model) and a forked copy of a lock held by one of them
+    # never gets released; workers also start with their own logging and caches.
+    pool = ProcessPoolExecutor(
+        workers, mp_context=multiprocessing.get_context("spawn"), initializer=_worker_init
+    )
     try:
         yield pool
     finally:

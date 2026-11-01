@@ -179,7 +179,7 @@ def test_libreoffice_status_says_what_is_used(
     window: MainWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     page = window.settings
-    exe = tmp_path / "LibreOffice" / "program" / "soffice.exe"
+    exe = tmp_path / "LibreOffice" / "program" / libreoffice._executable_names()[0]
     exe.parent.mkdir(parents=True)
     exe.write_bytes(b"")
     monkeypatch.setattr(libreoffice, "bundled_locations", lambda: [])
