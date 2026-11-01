@@ -165,3 +165,17 @@ def test_settings_page_shows_only_user_choices(window: MainWindow) -> None:
     assert tabs == ["Remplacement", "Listes", "Organisations", "Avancé", "Application"]
     for gone in ("profile", "min_score", "paranoid", "workers", "ocr", "libreoffice_path"):
         assert not hasattr(page, gone)
+
+
+def test_proxy_setting(window: MainWindow) -> None:
+    page = window.settings
+    assert page.proxy.text() == ""  # empty: the proxy of the system
+    page.proxy.setText("proxy.exemple.fr:8080")
+    assert page.dirty
+    assert page.save()
+    saved = Config.load(window.context.config_path)
+    assert saved.proxy == "http://proxy.exemple.fr:8080"
+    assert window.context.model_manager.proxy == saved.proxy
+    page.proxy.setText("proxy.exemple.fr")  # no port
+    assert not page.save()
+    assert Config.load(window.context.config_path).proxy == "http://proxy.exemple.fr:8080"

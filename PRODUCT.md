@@ -44,7 +44,9 @@ through a file the tool silently skipped.
 - **Fully local, provably offline for documents**: outbound connections are blocked inside
   the process; the only network actions are a model download the user explicitly triggers
   and the startup update check of the portable build (one GitHub API request carrying no
-  document or setting, can be switched off in Réglages). No telemetry.
+  document or setting, can be switched off in Réglages). Both go through the proxy of
+  the workstation (system settings, PAC script on Windows) or the one set in Réglages,
+  and trust the system certificates, so they work on corporate PCs. No telemetry.
 - **Verification is part of the product, not an option**: every output is re-read by
   independent means; a recovered original value sends the file to `<output>_quarantaine/` (a sibling of the output folder), never to
   the "Anonymisé" count.

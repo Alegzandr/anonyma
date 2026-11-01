@@ -97,7 +97,7 @@ def test_check_is_blocked_without_the_network_window(monkeypatch: pytest.MonkeyP
     class Client:
         def __enter__(self) -> Client:
             calls.append("open")
-            assert netguard._allowed > 0
+            assert netguard.is_allowed()
             return self
 
         def __exit__(self, *_a: object) -> None:
@@ -106,7 +106,7 @@ def test_check_is_blocked_without_the_network_window(monkeypatch: pytest.MonkeyP
         def get(self, _url: str) -> Any:
             raise OSError("hors ligne")
 
-    monkeypatch.setattr(updater, "_client", lambda _t: Client())
+    monkeypatch.setattr(updater, "_client", lambda *_a: Client())
     with pytest.raises(updater.UpdateError, match="vérifier"):
         updater.check_latest()
     assert calls == ["open"]
@@ -151,7 +151,7 @@ def test_download_checks_the_digest(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         def stream(self, _method: str, _url: str) -> Response:
             return Response()
 
-    monkeypatch.setattr(updater, "_client", lambda _t: Client())
+    monkeypatch.setattr(updater, "_client", lambda *_a: Client())
     good = updater.Release(
         "9.0.0", "", "a.zip", "https://x/a.zip", len(body), hashlib.sha256(body).hexdigest()
     )

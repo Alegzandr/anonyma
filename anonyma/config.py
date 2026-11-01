@@ -82,6 +82,9 @@ class Config:
     #: Ask GitHub for a newer release at GUI startup (portable build only): the one
     #: automatic network access of the application, see ``anonyma/updater.py``.
     check_updates: bool = True
+    #: Proxy of the update check and of model downloads, ``http://host:port`` (user
+    #: and password allowed). Empty = the proxy of the system (``anonyma/network.py``).
+    proxy: str = field(default="", repr=False)
 
     # -- detection ---------------------------------------------------------------
     #: GLiNER span threshold (lower = more recall).
@@ -167,6 +170,9 @@ class Config:
             raise ValueError("Le nombre de processus ne peut pas être négatif.")
         if self.organization_policy not in ORGANIZATION_POLICIES:
             raise ValueError("Politique des organisations inconnue.")
+        from anonyma.network import normalize_proxy
+
+        self.proxy = normalize_proxy(self.proxy)
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:

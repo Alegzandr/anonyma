@@ -98,7 +98,7 @@ passe en local : aucune donnée ne quitte le poste.
   `data/config.json`, en onglets : Remplacement (mode, régime, noms neutres, table de
   correspondance), Listes (valeurs à ne jamais masquer, valeurs à toujours masquer, listes
   métier), Organisations, Avancé (libellés GLiNER, numéros de dossier internes) et
-  Application (thème, mises à jour). Anonyma s'y souvient aussi du dernier dossier de
+  Application (thème, mises à jour, proxy). Anonyma s'y souvient aussi du dernier dossier de
   sortie et du dernier dossier parcouru par chaque sélecteur.
 - **Mises à jour** : au démarrage, la version portable demande à GitHub si une version
   plus récente est publiée et la propose. Si vous acceptez, elle télécharge l'archive de
@@ -108,6 +108,21 @@ passe en local : aucune donnée ne quitte le poste.
   signale (étapes consignées dans `data/logs/mise-a-jour.log`). « Ignorer cette version » ne la
   propose plus ; la case « Rechercher une mise à jour au démarrage » (Réglages) coupe
   cette vérification.
+- **Proxy** (mises à jour et téléchargement des modèles, rien d'autre) : champ vide,
+  Anonyma prend le proxy du système, comme un navigateur : d'abord les variables
+  `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` et leurs exceptions `NO_PROXY`, puis sous
+  Windows les paramètres Internet (détection automatique, script de configuration PAC,
+  proxy manuel et ses exceptions, résolus par Windows), sous macOS les préférences
+  réseau ; sans proxy, connexion directe. Rempli (Réglages > Application > Proxy, ou
+  `anonyma-cli config definir proxy http://proxy.entreprise.fr:8080`), il remplace le
+  proxy du système ; `http://identifiant:mot-de-passe@hôte:port` pour un proxy qui
+  demande une authentification simple (Basic). Ce mot de passe est enregistré en clair
+  dans `data/config.json`, masqué par `config afficher` et jamais écrit dans les journaux.
+  L'authentification Windows intégrée (NTLM, Kerberos) n'est pas prise en charge : un
+  refus du proxy est signalé comme tel. Les certificats sont vérifiés avec le magasin
+  du système (Windows, macOS) : un certificat d'entreprise qui inspecte le trafic est
+  accepté s'il y est installé ; sous Linux, `SSL_CERT_FILE` peut désigner ce
+  certificat.
 
 Statuts d'un fichier : **Anonymisé** (vérifié, rien à signaler ; **Pseudonymisé** en
 pseudonymisation) ; **À revoir**, rare (vérifié, mais un résidu possible subsiste après
@@ -375,7 +390,8 @@ refuse le modèle si elle est non commerciale (`cc-by-nc…`, « recherche uniqu
 non identifiée (`other`, `unknown`) ou différente de celle du catalogue. Les fichiers
 sont téléchargés à la révision figée par le catalogue, **vérifiés par empreinte
 SHA-256**, puis installés d'un bloc dans `models/<identifiant>/`. Un téléchargement
-interrompu (coupure, Ctrl+C) reprend là où il s'était arrêté.
+interrompu (coupure, Ctrl+C) reprend là où il s'était arrêté. Il passe par le proxy
+du système ou celui des réglages (voir **Proxy**, plus haut).
 
 **Machine sans accès à Internet.** Téléchargez les fichiers du dépôt Hugging Face sur
 une autre machine (à la révision indiquée par `modeles liste`), copiez-les puis :
@@ -421,7 +437,11 @@ ré-identifiés.
 - **Aucun accès réseau pour les documents** : toute connexion sortante est bloquée dans
   le processus, sauf pendant un téléchargement de modèle demandé par l'utilisateur et la
   vérification des mises à jour au démarrage (une requête vers l'API GitHub, sans aucune
-  donnée de document ni de réglage ; désactivable dans Réglages). Aucune télémétrie.
+  donnée de document ni de réglage ; désactivable dans Réglages) suivie, si vous
+  l'acceptez, du téléchargement de la nouvelle version. Ces connexions passent par le
+  proxy du système ou des réglages ; pour le trouver, Windows peut lire le script PAC de
+  l'entreprise ou chercher le proxy sur le réseau local (détection automatique), à ces
+  moments seulement. Aucune télémétrie.
 - **Originaux intacts** : les fichiers sources ne sont jamais modifiés ; le dossier de
   sortie doit être distinct des entrées.
 - **Fichiers temporaires** : uniquement dans `data/tmp/`, supprimés en fin de lot et au

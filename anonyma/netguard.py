@@ -5,7 +5,11 @@ Once :func:`install` is called, any outbound socket connection, datagram
 ``gethostbyaddr``, ``getnameinfo``) raises :class:`NetworkBlockedError` unless it
 happens inside ``with allow_network():`` **in the same thread**: a download opening
 the window never lets another thread (a worker, a plugin) reach the network. Only
-the model manager opens that window, after an explicit user action.
+two callers open that window: the model manager, after an explicit user action, and
+the updater (startup check of the portable build, download the user accepted). Both
+go through ``anonyma/network.py`` (proxy, system certificates). The proxy lookup of
+Windows (automatic detection, PAC script) runs inside WinHTTP, not through Python
+sockets, and only from those two callers.
 """
 
 from __future__ import annotations
@@ -141,8 +145,8 @@ def is_installed() -> bool:
 
 @contextmanager
 def allow_network() -> Iterator[None]:
-    """Temporarily allow outbound connections in the calling thread (model
-    downloads only)."""
+    """Temporarily allow outbound connections in the calling thread (model download,
+    update check and download)."""
     _local.depth = int(getattr(_local, "depth", 0)) + 1
     previous = os.environ.get("HF_HUB_OFFLINE")
     os.environ["HF_HUB_OFFLINE"] = "0"

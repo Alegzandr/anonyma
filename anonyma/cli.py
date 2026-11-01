@@ -1913,9 +1913,14 @@ def _reidentify_files(items: list[tuple[Path, str]], output: Path, mapping: dict
 
 
 def _manager() -> Any:
+    from anonyma.config import Config
     from anonyma.model_manager import ModelManager
 
-    return ModelManager()
+    try:
+        proxy = Config.load().proxy
+    except (OSError, ValueError, TypeError):
+        proxy = ""  # an unreadable settings file must not prevent a download
+    return ModelManager(proxy=proxy)
 
 
 def _status_label(status: Any, partial: int) -> str:
@@ -2221,9 +2226,12 @@ def formats() -> None:
 def config_show(config_file: ConfigOpt = None) -> None:
     """Afficher la configuration (JSON)."""
     from anonyma import paths
+    from anonyma.network import redact_proxy
 
     config = load_config(config_file)
-    typer.echo(json.dumps(config.to_dict(), indent=2, ensure_ascii=False, default=str))
+    data = config.to_dict()
+    data["proxy"] = redact_proxy(config.proxy)
+    typer.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
     _print_path(err, "Fichier", config_file or paths.config_path())
 
 
@@ -2280,6 +2288,7 @@ def config_set(
 ) -> None:
     """Modifier une valeur de la configuration et l'enregistrer."""
     from anonyma.config import ArchiveLimits, Config
+    from anonyma.network import redact_proxy
 
     config = load_config(config_file) if config_file is None or config_file.exists() else Config()
     data = config.to_dict()
@@ -2312,7 +2321,8 @@ def config_set(
     except (ValueError, TypeError) as exc:
         fail(f"Valeur invalide pour {key} : {translate_error(str(exc))}")
     updated.save(config_file)
-    out.print(f"{key} = {json.dumps(container[name], ensure_ascii=False, default=str)}")
+    shown = redact_proxy(updated.proxy) if name == "proxy" else container[name]
+    out.print(f"{key} = {json.dumps(shown, ensure_ascii=False, default=str)}")
 
 
 # ---------------------------------------------------------------------------

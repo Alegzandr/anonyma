@@ -43,8 +43,9 @@ before you consider a change done. On Windows, keep pytest's base temp short
   `repr=False`; use `logs.fingerprint(value)` for correlation.
 - **Offline**: `netguard` blocks outbound connections; only a user-triggered model download
   and the startup update check of the portable build (`anonyma/updater.py`, GitHub
-  releases, `Config.check_updates`) run inside `netguard.allow_network()`. Do not add
-  other network calls, telemetry or new downloads at runtime.
+  releases, `Config.check_updates`) run inside `netguard.allow_network()`, with clients
+  from `anonyma/network.py` (proxy of `Config.proxy` or of the system, system certificate
+  store). Do not add other network calls, telemetry or new downloads at runtime.
 - **Original format is the contract**: each output keeps its input format, folder tree and
   layout (msg stays msg, legacy Office via bundled LibreOffice, PST as a folder of eml,
   file and folder names anonymised). Changing an output format is a regression.
@@ -75,6 +76,7 @@ before you consider a change done. On Windows, keep pytest's base temp short
 | `anonyma/store.py` | encrypted mapping table (pseudonymisation) |
 | `anonyma/config.py`, `paths.py`, `netguard.py`, `logs.py` | settings, portable folders, network guard, value-free logging |
 | `anonyma/updater.py`, `gui/update.py` | update check against GitHub releases, verified download, self-replacing installer |
+| `anonyma/network.py` | HTTP clients of the two network accesses: proxy (settings, environment, Windows/macOS settings, PAC via WinHTTP), system certificates |
 | `anonyma/gui/` | Qt Widgets app; French enum labels in `gui/labels.py`, styling in `gui/theme.py` |
 | `anonyma/data/` | compact lexicons built offline by `packaging/build_detection_data.py` |
 | `packaging/` | PyInstaller spec, portable build, LibreOffice bundling, icons, licences |

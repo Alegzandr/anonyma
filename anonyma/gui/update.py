@@ -191,7 +191,8 @@ class UpdateManager(QObject):
         """Ask GitHub for a newer release in the background (silent on failure)."""
         if not self.window.context.config.check_updates or not updater.can_self_update():
             return
-        task = self.runner.create(lambda _report: updater.check_latest())
+        proxy = self.window.context.config.proxy
+        task = self.runner.create(lambda _report: updater.check_latest(proxy=proxy))
         task.succeeded.connect(self._checked)
         task.failed.connect(lambda _message, _type: None)  # offline: nothing to say
         task.start()
@@ -229,11 +230,16 @@ class UpdateManager(QObject):
         progress.show()
         self._progress = progress
 
+        proxy = self.window.context.config.proxy
+
         def work(report: Report) -> tuple[str, object]:
             # UpdateError messages are French and value-free: hand them to the UI as is.
             try:
                 staged = updater.prepare(
-                    release, lambda done, total: report((done, total)), lambda: self._cancelled
+                    release,
+                    lambda done, total: report((done, total)),
+                    lambda: self._cancelled,
+                    proxy=proxy,
                 )
             except updater.UpdateCancelledError:
                 return ("annule", None)

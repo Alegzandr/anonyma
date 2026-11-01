@@ -28,7 +28,9 @@ def managed(config: Config) -> Config:
 
 
 #: Config fields that do not influence detection (changing them needs no new analysis).
-NON_DETECTION_FIELDS = frozenset({"ui", "mode", "regime", "store_path", "workers", "check_updates"})
+NON_DETECTION_FIELDS = frozenset(
+    {"ui", "mode", "regime", "store_path", "workers", "check_updates", "proxy"}
+)
 
 #: ``Config.ui`` key of the folders remembered per file chooser.
 LAST_DIRS_KEY = "last_dirs"
@@ -81,13 +83,15 @@ class AppContext(QObject):
     @property
     def model_manager(self) -> ModelManager:
         if self._model_manager is None:
-            self._model_manager = ModelManager()
+            self._model_manager = ModelManager(proxy=self._config.proxy)
         return self._model_manager
 
     def update_config(self, config: Config, *, save: bool = True) -> None:
         """Replace the configuration (validated) and persist it. Raises ValueError."""
         config.validate()
         self._config = config
+        if self._model_manager is not None:
+            self._model_manager.proxy = config.proxy
         if save:
             config.save(self.config_path)
         self.config_changed.emit()

@@ -134,9 +134,10 @@ class ModelsPage(QWidget):
         cat_layout = QVBoxLayout(catalogue)
         cat_layout.addWidget(
             muted(
-                "Le téléchargement est la seule action réseau d'Anonyma, toujours à votre "
-                "demande. Sans réseau, importez les fichiers du modèle depuis un support "
-                "amovible."
+                "Le téléchargement n'a lieu qu'à votre demande ; avec la recherche de mises "
+                "à jour, c'est la seule connexion d'Anonyma (par le proxy du système ou "
+                "celui des Réglages). Sans réseau, importez les fichiers du modèle depuis "
+                "un support amovible."
             )
         )
         self.cat_stack = QStackedWidget()
@@ -355,7 +356,7 @@ class ModelsPage(QWidget):
         elif working:
             tip = "Une opération est en cours."
         else:
-            tip = "Télécharger ce modèle (seule action réseau d'Anonyma)."
+            tip = "Télécharger ce modèle depuis Hugging Face, à votre demande."
         self.download_button.setToolTip(tip)
         self.import_files_button.setEnabled(spec is not None and not working)
         self.import_folder_button.setEnabled(spec is not None and not working)

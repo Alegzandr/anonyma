@@ -387,6 +387,20 @@ def test_config_set_and_show(tmp_path: Path) -> None:
     assert json.loads(result.stdout)["workers"] == 3
 
 
+def test_config_proxy_password_hidden(tmp_path: Path) -> None:
+    conf = tmp_path / "c.json"
+    proxy = "http://agent:s3cret@proxy.exemple.fr:8080"
+    result = invoke("config", "definir", "proxy", proxy, "--config", conf)
+    assert result.exit_code == 0
+    assert "s3cret" not in result.output
+    assert Config.load(conf).proxy == proxy
+    shown = invoke("config", "afficher", "--config", conf)
+    assert json.loads(shown.stdout)["proxy"] == "http://agent:***@proxy.exemple.fr:8080"
+    result = invoke("config", "definir", "proxy", "proxy.exemple.fr", "--config", conf)
+    assert result.exit_code == 2  # no port
+    assert "Proxy" in result.output
+
+
 def test_config_set_errors(tmp_path: Path) -> None:
     conf = tmp_path / "c.json"
     result = invoke("config", "definir", "inexistant", "1", "--config", conf)

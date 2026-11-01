@@ -166,7 +166,7 @@ EXCLUDES = [
     "PySide6.QtSerialPort",
     "PySide6.QtWebSockets",
     "PySide6.QtHttpServer",
-    # The application never opens a socket through Qt (updates and downloads use httpx).
+    # The application never opens a socket through Qt (updates and downloads use httpx2).
     "PySide6.QtNetwork",
 ]
 

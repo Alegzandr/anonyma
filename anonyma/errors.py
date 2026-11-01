@@ -6,6 +6,7 @@ exception type is no help to a user either (« BadZipFile »): it goes to the lo
 
 from __future__ import annotations
 
+import ssl
 import zipfile
 import zlib
 from pathlib import Path
@@ -44,7 +45,26 @@ def failure_reason(exc: BaseException, source: Path | None = None) -> str:
 
 
 def network_reason(exc: BaseException) -> str:
-    """Why a network operation (model download) failed, in French."""
+    """Why a network operation (update, model download) failed, in French."""
+    chain: list[BaseException] = []
+    current: BaseException | None = exc
+    while current is not None and current not in chain:
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    names = {type(e).__name__ for e in chain}
+    if "ProxyError" in names:
+        return (
+            "proxy injoignable ou refusé : vérifiez son adresse et, s'il en demande, "
+            "l'identifiant et le mot de passe"
+        )
+    if any(isinstance(e, ssl.SSLCertVerificationError) for e in chain):
+        return "certificat du serveur non reconnu par ce poste"
+    if names & {"ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout"}:
+        return "délai de connexion dépassé"
+    if names & {"ConnectError", "ReadError", "WriteError", "RemoteProtocolError"}:
+        return "connexion impossible ou interrompue"
+    if "HTTPStatusError" in names:
+        return "réponse refusée par le serveur"
     if isinstance(exc, TimeoutError):
         return "délai de connexion dépassé"
     if isinstance(exc, ConnectionError):

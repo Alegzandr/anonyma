@@ -56,6 +56,7 @@ from anonyma.gui.widgets import (
 )
 from anonyma.logs import get_logger
 from anonyma.models import EntityType, Regime, ReplacementMode
+from anonyma.network import normalize_proxy
 from anonyma.policy import (
     POLICY_ALL,
     POLICY_BLACKLIST,
@@ -330,6 +331,22 @@ class SettingsPage(QWidget):
             "la dernière version. Aucune donnée de document n'est envoyée."
         )
         self._row(f, "Mises à jour", self.check_updates)
+        self.proxy = QLineEdit()
+        self.proxy.setObjectName("Proxy")
+        self.proxy.setPlaceholderText("Automatique (réglages du système)")
+        self.proxy.setToolTip(
+            "Utilisé seulement pour les mises à jour et le téléchargement des modèles. "
+            "Laissez vide : Anonyma reprend le proxy de Windows ou de macOS, comme le "
+            "navigateur. Sinon, adresse donnée par votre service informatique, "
+            "ex. http://proxy.entreprise.fr:8080 (ou http://identifiant:mot-de-passe@…)."
+        )
+        self._row(
+            f,
+            "&Proxy",
+            self.proxy,
+            "À remplir seulement si les mises à jour ou les téléchargements échouent sur "
+            "un poste d'entreprise.",
+        )
 
         buttons = QHBoxLayout()
         self.dirty_label = muted("")
@@ -347,6 +364,7 @@ class SettingsPage(QWidget):
         for check in (self.neutral_filenames, self.check_updates):
             check.toggled.connect(self._mark_dirty)
         self.store_path.textChanged.connect(self._mark_dirty)
+        self.proxy.textChanged.connect(self._mark_dirty)
         for text in (
             self.whitelist,
             self.case_patterns,
@@ -474,6 +492,7 @@ class SettingsPage(QWidget):
                 self._add_row(self.custom_labels, label, entity_type)
             self.case_patterns.setPlainText("\n".join(config.case_number_patterns))
             self.check_updates.setChecked(config.check_updates)
+            self.proxy.setText(config.proxy)
             self._select(self.theme, str(config.ui.get("theme", theme.DEFAULT_THEME)))
             self.opaque_id_whitelist.setPlainText("\n".join(config.opaque_id_whitelist))
             self.neutral_filenames.setChecked(config.neutral_filenames)
@@ -526,6 +545,7 @@ class SettingsPage(QWidget):
             raise ValueError("Numéros de dossier : " + " ; ".join(m for _, m in errors) + ".")
         config.case_number_patterns = patterns
         config.check_updates = self.check_updates.isChecked()
+        config.proxy = normalize_proxy(self.proxy.text())
         config.ui["theme"] = str(self.theme.currentData())
         opaque = _lines(self.opaque_id_whitelist)
         errors = validate_patterns([p[3:] for p in opaque if p.startswith("re:")])

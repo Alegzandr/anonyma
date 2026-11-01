@@ -9,7 +9,8 @@ Layout under ``paths.models_dir()``::
 
 Network access only happens in :meth:`ModelManager.check_license` and
 :meth:`ModelManager.download`, both explicit user actions, inside
-``netguard.allow_network()``. Downloads go through the Hugging Face session
+``netguard.allow_network()``, through the proxy of the settings or of the system
+(``anonyma/network.py``). Downloads go through the Hugging Face session
 (``huggingface_hub.get_session``) with HTTP ``Range`` requests so an interrupted
 or cancelled download resumes where it stopped, at the pinned revision. Every
 file is checked against its SHA-256 before the model folder is swapped in
@@ -30,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
-from anonyma import model_catalog, netguard, paths
+from anonyma import model_catalog, netguard, network, paths
 from anonyma.errors import network_reason
 from anonyma.logs import get_logger
 from anonyma.model_catalog import ModelSpec
@@ -235,22 +236,55 @@ class HfTransport:
             yield RemoteStream(offset, total, response.iter_bytes(_CHUNK))
 
 
+HF_ENDPOINT = "https://huggingface.co"
 _hf_lock = threading.Lock()
 _hf_online = 0
 _hf_saved_offline = True
+#: Proxy of huggingface_hub's shared client (None = direct); unset before the first use.
+_hf_proxy: tuple[str | None] | None = None
+
+
+def _hf_client_factory(proxy: str | None) -> Callable[[], Any]:
+    def factory() -> Any:
+        from huggingface_hub.utils._http import hf_request_event_hook
+
+        return network.client(
+            HF_ENDPOINT,
+            proxy or "",
+            timeout=None,
+            # Keeps huggingface_hub's own offline check on every request.
+            event_hooks={"request": [hf_request_event_hook]},
+        )
+
+    return factory
+
+
+def _use_proxy(proxy: str | None) -> None:
+    """Point huggingface_hub's shared client at ``proxy``; only while no request runs
+    (``set_client_factory`` closes the current client)."""
+    global _hf_proxy
+    if _hf_proxy == (proxy,):
+        return
+    from huggingface_hub import set_client_factory
+
+    set_client_factory(_hf_client_factory(proxy))
+    _hf_proxy = (proxy,)
 
 
 @contextlib.contextmanager
-def _online() -> Iterator[None]:
+def _online(proxy: str = "") -> Iterator[None]:
     """``netguard.allow_network()`` plus lifting huggingface_hub's offline mode,
-    which the library reads once at import time (``constants.HF_HUB_OFFLINE``)."""
+    which the library reads once at import time (``constants.HF_HUB_OFFLINE``), with
+    the shared client going through ``proxy`` (``Config.proxy``, empty = the system's)."""
     global _hf_online, _hf_saved_offline
     with netguard.allow_network():
         from huggingface_hub import constants
 
+        resolved = network.resolve_proxy(HF_ENDPOINT, proxy)
         with _hf_lock:
             if _hf_online == 0:
                 _hf_saved_offline = constants.HF_HUB_OFFLINE
+                _use_proxy(resolved)
             _hf_online += 1
             constants.HF_HUB_OFFLINE = False
         try:
@@ -296,8 +330,11 @@ class ModelManager:
         *,
         api: HubApi | None = None,
         transport: Transport | None = None,
+        proxy: str = "",
     ) -> None:
         self.root = root or paths.models_dir()
+        #: ``Config.proxy``: empty = the proxy of the system.
+        self.proxy = proxy
         self._api = api
         self._transport = transport or HfTransport()
         self._lock = threading.RLock()
@@ -377,7 +414,7 @@ class ModelManager:
         """Read the live license on Hugging Face (network, explicit user action)."""
         spec = self._spec(model_id)
         try:
-            with _online():
+            with _online(self.proxy):
                 info = self._hub().model_info(spec.repo_id, revision=spec.revision)
         except ModelError:
             raise
@@ -461,7 +498,7 @@ class ModelManager:
         if cancel and cancel():
             raise DownloadCancelledError("Téléchargement annulé.")
         try:
-            with _online(), self._transport.stream(spec, filename, start) as remote:
+            with _online(self.proxy), self._transport.stream(spec, filename, start) as remote:
                 if remote.offset not in (0, start):
                     raise ModelError("Reprise du téléchargement impossible : réponse inattendue.")
                 mode = "ab" if remote.offset == start and start > 0 else "wb"

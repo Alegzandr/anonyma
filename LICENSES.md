@@ -42,7 +42,6 @@ Dans tous les cas, PyMuPDF (AGPL-3.0) et extract-msg (GPL-3.0) font partie des c
 
 ## Licences copyleft faibles (bibliothèques)
 
-- certifi 2026.10.23 : MPL-2.0
 - inflate64 1.0.4 : LGPL-2.1-or-later
 - libpff-python 20260926 : LGPL-3.0-or-later
 - multivolumefile 0.2.3 : LGPL-2.1+
@@ -76,7 +75,6 @@ Les modèles ne sont pas inclus dans l'archive : ils sont téléchargés à la d
 | backports.zstd | 1.8.0 | PSF-2.0 | https://github.com/rogdham/backports.zstd |
 | beautifulsoup4 | 4.15.0 | MIT License | https://www.crummy.com/software/BeautifulSoup/bs4/ |
 | brotli | 1.2.1 | MIT | https://github.com/google/brotli |
-| certifi | 2026.10.23 | MPL-2.0 | https://github.com/certifi/python-certifi |
 | cffi | 2.1.1 | MIT-0 | https://cffi.readthedocs.io/ |
 | click | 8.5.0 | BSD-3-Clause | https://github.com/pallets/click/ |
 | colorama | 0.4.6 | BSD License | https://github.com/tartley/colorama |
@@ -92,9 +90,7 @@ Les modèles ne sont pas inclus dans l'archive : ils sont téléchargés à la d
 | fsspec | 2026.9.0 | BSD-3-Clause | https://github.com/fsspec/filesystem_spec |
 | h11 | 0.16.0 | MIT | https://github.com/python-hyper/h11 |
 | hf-xet | 1.8.0 | Apache-2.0 | https://github.com/huggingface/xet-core |
-| httpcore | 1.0.9 | BSD-3-Clause | https://www.encode.io/httpcore/ |
 | httpcore2 | 2.16.0 | BSD-3-Clause | https://github.com/pydantic/httpx2 |
-| httpx | 0.28.1 | BSD-3-Clause | https://github.com/encode/httpx |
 | httpx2 | 2.16.0 | BSD-3-Clause | https://github.com/pydantic/httpx2 |
 | huggingface_hub | 2.4.0 | Apache-2.0 | https://github.com/huggingface/huggingface_hub |
 | idna | 3.20 | BSD-3-Clause | https://github.com/kjd/idna |

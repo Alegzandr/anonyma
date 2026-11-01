@@ -130,8 +130,8 @@ votre entreprise…) et les valeurs à toujours masquer (vos clients, vos projet
 - **Vos documents ne quittent jamais la machine.** Anonyma bloque toute connexion
   pendant le traitement.
 - Les seules connexions possibles sont le téléchargement d'un modèle, que vous demandez,
-  et la recherche de mises à jour au démarrage. Cette recherche n'envoie aucune donnée,
-  et vous pouvez la couper dans les Réglages.
+  et les mises à jour (recherche au démarrage, puis téléchargement si vous acceptez).
+  La recherche n'envoie aucune donnée, et vous pouvez la couper dans les Réglages.
 - Les originaux ne sont jamais modifiés.
 - Les journaux et les rapports ne contiennent aucune donnée d'origine.
 
@@ -141,6 +141,12 @@ Au démarrage, Anonyma vous prévient quand une nouvelle version est disponible.
 acceptez, il la télécharge, vérifie qu'elle est intacte, puis redémarre dessus. Vos
 réglages, la table de correspondance et les modèles sont conservés. « Ignorer cette
 version » ne vous la propose plus.
+
+**Poste d'entreprise (proxy).** Anonyma passe par le proxy de Windows ou de macOS, comme
+votre navigateur, et fait confiance aux certificats de votre entreprise installés sur le
+poste. Si les mises à jour ou les téléchargements de modèles échouent quand même,
+demandez l'adresse du proxy à votre service informatique et saisissez-la dans
+**Réglages > Application > Proxy** (ex. `http://proxy.entreprise.fr:8080`).
 
 ## Ligne de commande
 

@@ -269,7 +269,7 @@ def test_update_offer_skip_and_install(
 
     monkeypatch.setattr(dialogs, "ask_update", ask)
     staged = tmp_path / "maj" / "Anonyma"
-    monkeypatch.setattr(updater, "prepare", lambda _r, _p, _c: staged)
+    monkeypatch.setattr(updater, "prepare", lambda _r, _p, _c, proxy="": staged)
     launched: list[Path] = []
     versions: list[str] = []
 
@@ -310,7 +310,7 @@ def test_update_check_disabled_or_from_sources(
     from anonyma import updater
 
     calls: list[int] = []
-    monkeypatch.setattr(updater, "check_latest", lambda: calls.append(1))
+    monkeypatch.setattr(updater, "check_latest", lambda proxy="": calls.append(1))
     window.updates.check_on_startup()  # sources: never
     monkeypatch.setattr(updater, "can_self_update", lambda: True)
     window.context.config.check_updates = False

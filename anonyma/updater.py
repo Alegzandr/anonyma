@@ -12,7 +12,8 @@ which the next start reports to the user. ``data/`` (settings,
 encrypted mapping table, logs) and ``models/`` are never touched; the previous
 version is restored when a file cannot be replaced.
 
-Every network call runs inside ``netguard.allow_network()``.
+Every network call runs inside ``netguard.allow_network()``, through the proxy of the
+settings or of the system (``anonyma/network.py``).
 """
 
 from __future__ import annotations
@@ -33,7 +34,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from anonyma import __version__, netguard, paths
+from anonyma import __version__, netguard, network, paths
+from anonyma.errors import network_reason
 from anonyma.logs import get_logger
 
 log = get_logger("updater")
@@ -180,21 +182,22 @@ def parse_release(
     return None
 
 
-def _client(timeout: float) -> Any:
-    import httpx
-
-    return httpx.Client(
-        follow_redirects=True,
+def _client(url: str, timeout: float, proxy: str) -> Any:
+    return network.client(
+        url,
+        proxy,
         timeout=timeout,
         headers={"User-Agent": f"Anonyma/{__version__}", "Accept": "application/vnd.github+json"},
     )
 
 
-def check_latest(timeout: float = CHECK_TIMEOUT) -> Release | None:
-    """Ask GitHub for the latest release. None when up to date; raises UpdateError."""
+def check_latest(timeout: float = CHECK_TIMEOUT, *, proxy: str = "") -> Release | None:
+    """Ask GitHub for the latest release. None when up to date; raises UpdateError.
+
+    ``proxy``: ``Config.proxy`` (empty = the system's)."""
     root = install_root()
     try:
-        with netguard.allow_network(), _client(timeout) as client:
+        with netguard.allow_network(), _client(LATEST_RELEASE_URL, timeout, proxy) as client:
             response = client.get(LATEST_RELEASE_URL)
             if response.status_code == 404:  # no published release yet
                 return None
@@ -202,7 +205,9 @@ def check_latest(timeout: float = CHECK_TIMEOUT) -> Release | None:
             payload = response.json()
     except Exception as exc:
         log.info("update check failed: %s", type(exc).__name__)
-        raise UpdateError("Impossible de vérifier les mises à jour.") from exc
+        raise UpdateError(
+            f"Impossible de vérifier les mises à jour ({network_reason(exc)})."
+        ) from exc
     if not isinstance(payload, Mapping):
         raise UpdateError("Réponse inattendue du service de mises à jour.")
     return parse_release(payload, with_libreoffice=(root / LIBREOFFICE_DIR).is_dir())
@@ -218,6 +223,8 @@ def download(
     folder: Path,
     progress: Progress | None = None,
     cancel: Callable[[], bool] | None = None,
+    *,
+    proxy: str = "",
 ) -> Path:
     """Download the archive into ``folder`` and check its SHA-256 digest."""
     folder.mkdir(parents=True, exist_ok=True)
@@ -228,7 +235,7 @@ def download(
     try:
         with (
             netguard.allow_network(),
-            _client(DOWNLOAD_TIMEOUT) as client,
+            _client(release.asset_url, DOWNLOAD_TIMEOUT, proxy) as client,
             client.stream("GET", release.asset_url) as response,
         ):
             response.raise_for_status()
@@ -249,7 +256,7 @@ def download(
         part.unlink(missing_ok=True)
         log.info("update download failed: %s", type(exc).__name__)
         raise UpdateError(
-            f"Le téléchargement de la mise à jour a échoué ({type(exc).__name__})."
+            f"Le téléchargement de la mise à jour a échoué ({network_reason(exc)})."
         ) from exc
     if digest.hexdigest() != release.sha256:
         part.unlink(missing_ok=True)
@@ -330,11 +337,13 @@ def prepare(
     release: Release,
     progress: Progress | None = None,
     cancel: Callable[[], bool] | None = None,
+    *,
+    proxy: str = "",
 ) -> Path:
     """Download, verify and unpack ``release``; returns the staged ``Anonyma`` folder."""
     staging = update_dir()
     shutil.rmtree(staging, ignore_errors=True)
-    archive = download(release, staging, progress, cancel)
+    archive = download(release, staging, progress, cancel, proxy=proxy)
     folder = extract(archive, staging / "nouvelle-version")
     archive.unlink(missing_ok=True)
     return folder
