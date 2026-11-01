@@ -11,15 +11,17 @@ import json
 import threading
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pytest
 
-from anonyma import llm, paths
+from anonyma import llm, paths, pipeline
 from anonyma.config import Config
-from anonyma.detectors.llm import LlmDetector, batches, select_model
-from anonyma.models import Entity, Profile, Segment, SegmentContext, SegmentKind
+from anonyma.detectors import llm as llm_detector
+from anonyma.detectors.llm import LlmDetector, passages, plan, select_model
+from anonyma.models import Detector, Entity, Profile, Segment, SegmentContext, SegmentKind
+from anonyma.pipeline import Pipeline
 from tests.modelpaths import models_dir_or_skip
 
 
@@ -213,6 +215,7 @@ def _runner(answers: Sequence[str]) -> llm.LlmRunner:
     runner._prefix = fake.tokenize(before.encode(), add_bos=False, special=True)
     runner._suffix = fake.tokenize(after.encode(), add_bos=False, special=True)
     runner._lock = threading.Lock()
+    runner.measured_calls, runner.measured_seconds, runner.measured_tokens = 0, 0.0, 0
     runner._warm()
     return runner
 
@@ -249,8 +252,19 @@ def test_extract_stops_a_repetition_loop() -> None:
 # -- detector (fake runner) --------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _fresh_memo() -> Iterator[None]:
+    """Each test starts with no passage already analysed."""
+    llm_detector.forget()
+    yield
+    llm_detector.forget()
+
+
 class FakeRunner:
     window_tokens = 40
+    key = "faux:v0"
+    measured_calls = 0
+    measured_seconds = 0.0
 
     def __init__(self, answer: Sequence[tuple[str, str]]) -> None:
         self.answer = [llm.LlmMention(t, k) for t, k in answer]
@@ -420,8 +434,9 @@ def test_short_segments_share_calls_and_long_ones_are_windowed(
     cells = [_seg(f"c{i}", t, SegmentKind.CELL) for i, t in enumerate(["Nom", "Kervella"] * 5)]
     long = _seg("long", " ".join(["texte"] * 100) + " Kervella")
     found, runner = _detect(monkeypatch, [*cells, long], [("Kervella", "PERSONNE")])
-    assert runner.calls[0] == llm.SEGMENT_SEPARATOR.join(c.text for c in cells)
-    assert len(runner.calls) > 2  # the long segment is cut
+    # Repeated cells are sent once; the long paragraph is cut into windows.
+    assert runner.calls[0] == llm.SEGMENT_SEPARATOR.join(["Nom", "Kervella"])
+    assert len(runner.calls) > 2
     assert all(len(c.split()) <= FakeRunner.window_tokens for c in runner.calls)
     # Grounded in every segment of the group, once per span.
     assert sorted({e.segment_id for e in found}) == sorted(
@@ -430,19 +445,200 @@ def test_short_segments_share_calls_and_long_ones_are_windowed(
     assert len({(e.segment_id, e.start) for e in found}) == len(found)
 
 
-def test_batches_keep_order_and_budget() -> None:
-    segments = [_seg(f"s{i}", "un deux trois") for i in range(10)]
-    groups = list(batches(segments, 10, lambda t: len(t.split())))
-    assert [s.id for g, _ in groups for s in g] == [s.id for s in segments]
+def _words_count(text: str) -> int:
+    return len(text.split())
+
+
+def test_plan_keeps_order_and_budget() -> None:
+    todo = [p for i in range(10) for p in passages(_seg(f"s{i}", "un deux trois"), i)]
+    groups = plan(todo, 10, _words_count)
+    assert [p.segment.id for g, _ in groups for p in g] == [f"s{i}" for i in range(10)]
     assert all(len(text.split()) <= 10 for _, text in groups)
 
 
-def test_sentences_are_not_pooled() -> None:
-    """Pooled sentences make the model list fewer entities: only short ones share."""
+def test_sentences_of_different_segments_are_not_pooled() -> None:
+    """Pooled sentences make the model list fewer entities: only short ones share, or
+    consecutive paragraphs of one segment (a window over its text)."""
     sentence = " ".join(["mot"] * 30)
     segments = [_seg("a", "Nom"), _seg("b", sentence), _seg("c", sentence), _seg("d", "Riou")]
-    groups = [[s.id for s in g] for g, _ in batches(segments, 128, lambda t: len(t.split()))]
+    todo = [p for i, s in enumerate(segments) for p in passages(s, i)]
+    groups = [[p.segment.id for p in g] for g, _ in plan(todo, 128, _words_count)]
     assert groups == [["a"], ["b"], ["c"], ["d"]]
+    two = _seg("e", f"{sentence}\n\n{sentence}")
+    assert [len(g) for g, _ in plan(passages(two), 128, _words_count)] == [2]
+
+
+def test_passages_split_paragraphs_and_quoted_headers() -> None:
+    text = (
+        "Bonjour Erwan,\r\n\r\nVoici la note.\r\n> \r\n> Texte cité\r\n> De : Riou\r\n"
+        "> Objet : note"
+    )
+    found = passages(_seg("s", text))
+    assert [p.text for p in found] == [
+        "Bonjour Erwan,",
+        "Voici la note.",
+        "Texte cité",
+        "De : Riou",
+        "Objet : note",
+    ]
+    for p in found:
+        assert p.text.replace("> ", "") in text[p.start : p.end].replace("> ", "")
+    assert found[0].key == llm_detector.passage_key("bonjour  ERWAN")
+
+
+def test_prose_gate() -> None:
+    """Field values, identifiers and markup go to the rules and GLiNER, not the model."""
+    prose = [
+        "La DRH de l'agence de Nantes a validé la mutation hier.",
+        "Nous avons revu le dossier avec Kervella hier soir.",
+    ]
+    not_prose = [
+        "Kervella",
+        "Contoso Ltd",
+        "Demande de rappel",
+        '{"emailaddress": "a@b.fr", "statecode": 1}',
+        "https://exemple.fr/a/b?c=d https://exemple.fr/e",
+        "From: Erwan Cadiou <e.cadiou@exemple.fr>",
+        "12 345,00 € TTC au 31/12/2024",
+    ]
+    assert all(llm_detector.is_prose(t) for t in prose)
+    assert not any(llm_detector.is_prose(t) for t in not_prose)
+
+
+def test_repeated_passages_are_sent_once_across_documents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same mail in an .eml, a JSON export and a quoted reply: one model call, the
+    mentions found again in every document."""
+    body = "Comme convenu, la DRH de l'agence de Nantes rappellera Mme Kervella demain."
+    runner = FakeRunner([("Kervella", "PERSONNE")])
+    detector = LlmDetector(Config())
+    monkeypatch.setattr(detector, "_runner", lambda: runner)
+    first = detector.detect([_seg("m", f"Bonjour,\n\n{body}")], "eml")
+    quoted = "Merci.\n\n> " + body.replace("Nantes rappellera", "Nantes\n> rappellera")
+    second = detector.detect([_seg("j", quoted, SegmentKind.CELL)], "json")
+    assert runner.calls == [body]
+    assert [e.value for e in first] == ["Kervella"] == [e.value for e in second]
+    assert second[0].document_id == "json"
+
+
+def test_passages_the_other_detectors_cover_are_not_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    text = "Nous avons revu le dossier avec Kervella hier soir."
+    segment = _seg("s", text)
+    start = text.index("Kervella")
+    covering = Entity("PERSONNE", "Kervella", "d", "s", start, start + 8, 0.9, "gliner")
+    runner = FakeRunner([])
+    detector = LlmDetector(Config())
+    monkeypatch.setattr(detector, "_runner", lambda: runner)
+    assert detector.detect_after([segment], "d", [covering]) == []
+    assert runner.calls == []
+    detector.detect_after([segment], "d", [])
+    assert runner.calls == [text]
+    # Something shaped like an indirect identifier is always worth a call.
+    cue = _seg("c", "Le fils du maire a appelé Mme Kervella pour le rendez-vous.")
+    detector.detect_after([cue], "d", [covering])
+    assert len(runner.calls) == 2
+
+
+def test_progress_is_reported_by_segment(monkeypatch: pytest.MonkeyPatch) -> None:
+    segments = [_seg(f"s{i}", f"Le fils du maire numéro {i} a rappelé ce matin.") for i in range(3)]
+    runner = FakeRunner([])
+    detector = LlmDetector(Config())
+    monkeypatch.setattr(detector, "_runner", lambda: runner)
+    seen: list[tuple[int, int]] = []
+    detector.on_progress = lambda done, total: seen.append((done, total))
+    detector.detect(segments, "d")
+    assert seen[-1] == (3, 3) and len(seen) == len(runner.calls)
+
+
+class _Prior(Detector):
+    """Runs last, sees the others' entities, reports progress like the LLM."""
+
+    name = "prior"
+    uses_prior = True
+    seen: ClassVar[list[str]] = []
+
+    def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
+        raise AssertionError("detect_after expected")
+
+    def detect_after(
+        self, segments: Sequence[Segment], document_id: str, prior: Sequence[Entity]
+    ) -> list[Entity]:
+        self.seen.extend(e.value for e in prior)
+        self.report(1, 2)
+        return []
+
+
+class _First(Detector):
+    name = "zzz_first"
+
+    def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
+        s = next(s for s in segments if "Kervella" in s.text)
+        start = s.text.index("Kervella")
+        return [Entity("PERSONNE", "Kervella", document_id, s.id, start, start + 8, 0.9, "x")]
+
+
+def test_pipeline_runs_prior_detectors_last_with_item_progress(
+    canary_config: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A detector with ``uses_prior`` gets the other detectors' entities, and a long
+    detection shows up in the progress of a single-process run: counts and the
+    detector's French label, never a value."""
+    detectors = [_Prior(canary_config), _First(canary_config)]
+    monkeypatch.setattr(pipeline, "detectors_for", lambda config: detectors)
+    _Prior.seen.clear()
+    source = tmp_path / "note.txt"
+    source.write_text("Rendez-vous avec Mme Kervella.", encoding="utf-8")
+    events: list[pipeline.ProgressEvent] = []
+    Pipeline(canary_config).analyze([source], progress=events.append)
+    assert _Prior.seen == ["Kervella"]
+    inside = [e for e in events if e.item_total]
+    assert any((e.item_done, e.item_total) == (1, 2) for e in inside)
+    assert {e.item_step for e in inside} == {"Prior"}  # only detectors that report
+    assert all(e.stage == pipeline.LLM_STAGE and e.done == 0 for e in inside)
+    assert pipeline._item_progress is None
+
+
+def test_full_run_is_estimated_before_it_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Paragraphs the model would read are counted once (the same mail in two files),
+    then multiplied by the seconds per call; nothing outside FULL."""
+    folder = tmp_path / "lot"
+    folder.mkdir()
+    mail = "Bonjour,\n\nLe fils du maire de Plouha rappellera ce soir pour le dossier.\n"
+    (folder / "a.txt").write_text(mail, encoding="utf-8")
+    (folder / "b.txt").write_text("> " + mail.replace("\n", "\n> "), encoding="utf-8")
+    (folder / "c.txt").write_text("Kervella\nTotal : 12\n", encoding="utf-8")  # no prose
+    config = Config(profile=Profile.FULL, workers=1)
+    detector = LlmDetector(config)
+    monkeypatch.setattr(pipeline, "detectors_for", lambda config: [detector])
+    monkeypatch.setattr(llm_detector, "call_seconds", lambda config: 1200.0)
+    run = Pipeline(config)
+    run.detection_profile = Profile.FULL
+    estimate = run.estimate_llm([folder])
+    assert estimate is not None
+    assert (estimate.calls, estimate.minutes, estimate.total_files) == (1, 20.0, 3)
+    assert estimate.long
+    text = estimate.warning("--profil standard")
+    assert "environ 20 min" in text and "--profil standard" in text
+    assert "Plouha" not in text
+    run.detection_profile = Profile.STANDARD
+    assert run.estimate_llm([folder]) is None
+
+
+def test_throughput_is_measured_and_reused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    model = tmp_path / "Qwen3-4B-Q4_K_M.gguf"
+    monkeypatch.setattr(llm_detector, "select_model", lambda config: (object(), model))
+    config = Config(profile=Profile.FULL)
+    assert llm_detector.call_seconds(config) == llm_detector.DEFAULT_CALL_SECONDS
+    runner = _runner([])
+    runner.key = f"{model.name}:v{llm.PROMPT_VERSION}"
+    runner.measured_calls, runner.measured_seconds = 30, 75.0
+    llm_detector.record_throughput(runner)
+    assert llm_detector.call_seconds(config) == 2.5
 
 
 def test_no_model_means_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -453,13 +649,20 @@ def test_no_model_means_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 def test_segment_targeting() -> None:
-    detector = LlmDetector(Config())
-    assert detector.wanted("La DRH de l'agence de Nantes a validé.")
-    assert detector.wanted("Nous avons revu le dossier avec Kervella hier.")
-    assert not detector.wanted("Le comité a validé le budget.")
-    assert not detector.wanted("12 345,00")
-    assert not LlmDetector(Config(llm_all_segments=True)).wanted("Ok")
-    assert LlmDetector(Config(llm_all_segments=True)).wanted("Le comité a validé le budget.")
+    def wanted(text: str, config: Config | None = None) -> bool:
+        (passage,) = passages(_seg("s", text))
+        return LlmDetector(config or Config()).wanted(passage)
+
+    assert wanted("La DRH de l'agence de Nantes a validé la mutation.")
+    assert wanted("Nous avons revu le dossier avec Kervella hier.")
+    assert wanted("Le seul médecin du village a refusé de signer.")
+    assert not wanted("Le comité a validé le budget prévisionnel ce matin.")
+    assert not wanted("12 345,00")
+    assert not wanted("Kervella")  # a field value: rules and GLiNER
+    everything = Config(llm_all_segments=True)
+    assert not wanted("Ok", everything)
+    assert wanted("Kervella", everything)
+    assert wanted("Le comité a validé le budget.", everything)
 
 
 # -- real model ----------------------------------------------------------------------------
@@ -546,6 +749,7 @@ def test_llm_is_deterministic(llm_config: Config, counted: list[str]) -> None:
 
     first = run()
     detector.detect([_seg("x", "Le fils du maire de Plouha a été embauché.")], "d")  # other state
+    llm_detector.forget()  # analyse the text again, not from the memo
     assert run() == first
     assert len(counted) == 3
 

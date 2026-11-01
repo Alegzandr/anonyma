@@ -37,7 +37,7 @@ from anonyma.config import Config
 from anonyma.detectors.opaque import IdWhitelist
 from anonyma.detectors.regex_fr import kept_reference
 from anonyma.errors import failure_reason
-from anonyma.frenchtext import plural
+from anonyma.frenchtext import NBSP, grouped, plural
 from anonyma.logs import get_logger
 from anonyma.models import (
     FILENAME_SEGMENT_ID,
@@ -80,6 +80,7 @@ from anonyma.resolver import (
     PROPAGATION_DETECTOR,
     TYPE_PRIORITY,
     cluster_forms,
+    link_by_place,
     propagate,
     resolve,
     searched_variant,
@@ -107,6 +108,10 @@ INCOMPLETE_CONTAINER_CODE = "container.incomplete"
 EMPTY_CONTAINER_CODE = "container.empty"
 #: Issue of a verified output in which residues were found (quarantined).
 RESIDUE_ISSUE = "verify.residue"
+#: Issue of a verified output holding uncertain entities, masked and to confirm.
+REVIEW_ISSUE = "review.uncertain"
+#: Zones (segment labels) named at most in a review issue, and their length.
+REVIEW_ZONES, REVIEW_ZONE_LENGTH = 3, 60
 EMPTY_CONTAINER = (
     "Aucun élément de ce fichier n'a pu être anonymisé (illisible, chiffré ou non pris en "
     "charge) : fichier non produit."
@@ -130,6 +135,12 @@ class ProgressEvent:
     #: Index of the item just finished, in input order (``BatchAnalysis.documents``
     #: order); None for start/global events.
     index: int | None = None
+    #: Progress inside the file being analysed (single-process runs only): segments
+    #: done out of ``item_total`` and the detector at work (French label). Counts
+    #: and labels only, never a value or a name.
+    item_done: int = 0
+    item_total: int = 0
+    item_step: str = ""
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
@@ -586,10 +597,30 @@ def _extract_into(
 # ---------------------------------------------------------------------------
 
 
-def detect_tree(root: Document, config: Config) -> list[Entity]:
-    """Run the detector chain on a document and all its descendants."""
+#: ``(done, total, step)`` progress inside the file being analysed, set by
+#: :meth:`Pipeline._map` around each item of a single-process run.
+ItemProgress = Callable[[int, int, str], None]
+_item_progress: ItemProgress | None = None
+
+
+#: :func:`detect_tree` phases: every detector, those without ``uses_prior`` (run in
+#: worker processes), or only those with it (the LLM, run once per batch in the main
+#: process after the others).
+PHASE_ALL, PHASE_EARLY, PHASE_LATE = "all", "early", "late"
+
+
+def detect_tree(
+    root: Document, config: Config, phase: str = PHASE_ALL, prior: Sequence[Entity] = ()
+) -> list[Entity]:
+    """Run the detector chain on a document and all its descendants. Detectors with
+    ``uses_prior`` run last and receive what the others found (``prior`` holds the
+    early phase's entities when ``phase`` is :data:`PHASE_LATE`)."""
     entities: list[Entity] = []
-    detectors = detectors_for(config)
+    chain = detectors_for(config)
+    early = [d for d in chain if not d.uses_prior] if phase != PHASE_LATE else []
+    late = [d for d in chain if d.uses_prior] if phase != PHASE_EARLY else []
+    detectors = early + late
+    hook = _item_progress
     atomic = AtomicIndex()
     # References the user keeps (« --conserver-identifiants », « --identifiant-autorise »)
     # stay whole whatever detector reads a name or a number inside them.
@@ -607,9 +638,17 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
         # (``Contrat_jean_DUPONT.pdf`` -> ``Contrat jean DUPONT pdf``); offsets and
         # values still refer to the real name.
         view = [_name_view(s) if s.id == FILENAME_SEGMENT_ID else s for s in segments]
+        first = len(entities)
+        known = [e for e in prior if e.document_id == doc.id]
         for detector in detectors:
+            if hook is not None:
+                step = _detector_label(detector.name)
+                detector.on_progress = lambda d, t, step=step: hook(d, t, step)
             try:
-                found = detector.detect(view, doc.id)
+                if detector.uses_prior:
+                    found = detector.detect_after(view, doc.id, [*known, *entities[first:]])
+                else:
+                    found = detector.detect(view, doc.id)
             except Exception as exc:
                 log.warning(
                     "detector %s failed on %s: %s", detector.name, doc.id, type(exc).__name__
@@ -638,6 +677,7 @@ def detect_tree(root: Document, config: Config) -> list[Entity]:
                 e.value = text[e.start : e.end]
                 e.document_id = doc.id
                 entities.append(e)
+            detector.on_progress = None
     return entities
 
 
@@ -659,13 +699,15 @@ def _analyze_one(
     work_dir: Path,
     skipped: str = "",
     cancel: CancelToken | None = None,
+    phase: str = PHASE_ALL,
 ) -> tuple[Document, list[Entity]]:
     """Extract and detect one input; a ``skipped`` input is not read, only its name
     is analysed (so that it shows up anonymized in reports). ``cancel``: inline runs
-    only (a token does not cross processes), checked by containers between items."""
+    only (a token does not cross processes), checked by containers between items.
+    ``phase``: :data:`PHASE_EARLY` leaves the LLM to :meth:`Pipeline.analyze`."""
     doc = skipped_document(source, name, skipped) if skipped else None
     doc = doc or extract_file(source, name, config, work_dir, cancel=cancel)
-    return doc, detect_tree(doc, config)
+    return doc, detect_tree(doc, config, phase)
 
 
 def skipped_document(source: Path, name: str, reason: str) -> Document:
@@ -1218,6 +1260,42 @@ def _write_crashed(job: _WriteJob) -> DocumentResult:
     )
 
 
+def review_issue(job: _WriteJob, review_ids: set[str | None], tree_ids: set[str]) -> Issue:
+    """Why a file is « À revoir »: how many uncertain entities, of which types, in which
+    zones (segment labels, as in the residue reports): never a value."""
+    from anonyma.gui.labels import entity_type_label
+
+    segments = {(d.id, s.id): s for d in job.document.walk() for s in d.segments}
+    types: dict[str, set[str | None]] = {}
+    zones: list[str] = []
+    for e in job.entities:
+        if e.document_id not in tree_ids or e.cluster_id not in review_ids:
+            continue
+        types.setdefault(e.entity_type, set()).add(e.cluster_id)
+        segment = segments.get((e.document_id, e.segment_id))
+        label = " ".join((segment.context.label if segment else "").split())[:REVIEW_ZONE_LENGTH]
+        if label and label not in zones:
+            zones.append(label)
+    count = len(review_ids)
+    kinds = ", ".join(
+        f"{entity_type_label(t)} ×{len(c)}" if len(c) > 1 else entity_type_label(t)
+        for t, c in sorted(types.items(), key=lambda item: (-len(item[1]), item[0]))
+    )
+    what = plural(count, "entité incertaine", "entités incertaines")
+    masked = "masquée" if count < 2 else "masquées"
+    where = ""
+    if zones:
+        shown = ", ".join(f"« {z} »" for z in zones[:REVIEW_ZONES])
+        more = f" et {len(zones) - REVIEW_ZONES} autre(s)" if len(zones) > REVIEW_ZONES else ""
+        where = f" ; zones : {shown}{more}"
+    return Issue(
+        Severity.WARNING,
+        REVIEW_ISSUE,
+        f"{what} ({kinds}) {masked} par précaution : à confirmer ou rejeter dans la revue "
+        f"avant diffusion{where}.",
+    )
+
+
 def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[DocumentStatus, Path]:
     """Verify ``written`` and fill ``result`` (counters, issues). Returns the status of
     the tree and the folder the output belongs in: the output folder, or the
@@ -1239,6 +1317,8 @@ def _assess(result: DocumentResult, written: Path, job: _WriteJob) -> tuple[Docu
         for c in review_ids
         if c is not None
     )
+    if review_ids:
+        result.issues.append(review_issue(job, review_ids, tree_ids))
     quarantine = quarantine_dir(job.output_dir)
     if not verification.clean:
         if verification.verified:
@@ -1332,6 +1412,53 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
 # Pipeline
 # ---------------------------------------------------------------------------
 
+#: Progress stage of the language model, run after the other detectors (FULL).
+LLM_STAGE = "langue"
+#: Beyond this, a FULL run is announced as long (CLI warning, GUI notice).
+LLM_WARNING_MINUTES = 15.0
+#: Files read (at most) and seconds of extraction spent to estimate a FULL run.
+ESTIMATE_SAMPLE_FILES = 12
+ESTIMATE_SAMPLE_SECONDS = 20.0
+
+
+@dataclass(frozen=True, slots=True)
+class LlmEstimate:
+    """Expected language-model work of a FULL run (:meth:`Pipeline.estimate_llm`)."""
+
+    minutes: float
+    #: Model calls expected (paragraphs pooled into windows), extrapolated.
+    calls: int
+    sampled_files: int
+    total_files: int
+
+    @property
+    def long(self) -> bool:
+        return self.minutes > LLM_WARNING_MINUTES
+
+    def warning(self, switch: str) -> str:
+        """The estimate in French, with ``switch`` (how to choose Standard here)."""
+        total = max(1, round(self.minutes))
+        hours, rest = divmod(total, 60)
+        duration = f"{hours} h {rest:02d} min" if hours else f"{rest} min"
+        sample = (
+            ""
+            if self.sampled_files >= self.total_files
+            else f", d'après {self.sampled_files} fichiers sur {self.total_files}"
+        )
+        noun = "passage" if self.calls < 2 else "passages"
+        return (
+            f"profil Complet : environ {duration} estimées pour le modèle de langue local "
+            f"({grouped(self.calls)}{NBSP}{noun} à analyser{sample}). Le profil Standard "
+            f"traite ce lot en quelques minutes : {switch}."
+        )
+
+
+def _size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
 
 class Pipeline:
     def __init__(self, config: Config, *, store: MappingStore | None = None) -> None:
@@ -1344,16 +1471,65 @@ class Pipeline:
         #: language model runs as ``standard``): it sizes the worker pool.
         self.detection_profile = registry.usable_profile(self.config, profile)
 
+    def estimate_llm(
+        self, inputs: Sequence[Path], *, sample_seconds: float = ESTIMATE_SAMPLE_SECONDS
+    ) -> LlmEstimate | None:
+        """Language-model workload of a FULL run on ``inputs``, before it starts: a
+        sample of the files (spread over the batch, at most ``sample_seconds`` of
+        extraction) is read, its paragraphs the model would analyse counted (repeats
+        once) and extrapolated by size, times the measured seconds per call. None
+        outside FULL. An upper bound: the other detectors' coverage is not known yet."""
+        if self.detection_profile is not Profile.FULL:
+            return None
+        llm_detector = next((d for d in detectors_for(self.config) if d.uses_prior), None)
+        if llm_detector is None or not hasattr(llm_detector, "workload"):
+            return None
+        from anonyma.detectors import llm as llm_module
+
+        files, _ = walk_inputs(inputs)
+        if not files:
+            return None
+        sizes = [_size(path) for path, _ in files]
+        total = sum(sizes) or 1
+        step = max(1, len(files) // ESTIMATE_SAMPLE_FILES)
+        order = [*range(0, len(files), step), *(i for i in range(len(files)) if i % step)]
+        seen: set[str] = set()
+        todo: list[Any] = []
+        sampled = sampled_bytes = 0
+        started = time.monotonic()
+        work_dir = paths.tmp_dir() / f"estimation-{new_id()[:8]}"
+        try:
+            for i in order:
+                if sampled and time.monotonic() - started > sample_seconds:
+                    break
+                path, name = files[i]
+                doc = extract_file(path, name, self.config, work_dir / f"f{i}")
+                for item in doc.walk():
+                    todo += llm_detector.workload(item.segments, seen)
+                sampled += 1
+                sampled_bytes += sizes[i]
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        scale = total / max(1, sampled_bytes) if sampled < len(files) else 1.0
+        calls = round(llm_module.estimated_calls(todo) * scale)
+        minutes = calls * llm_module.call_seconds(self.config) / 60
+        return LlmEstimate(minutes, calls, sampled, len(files))
+
     # -- execution helpers --------------------------------------------------
 
-    def _workers(self, jobs: int) -> int:
+    def _workers(self, jobs: int, stage: str = "analyse") -> int:
+        """Worker processes for ``stage``. FULL runs its language model in one process
+        (one model instance, a memo shared by the whole batch: :data:`LLM_STAGE`);
+        everything else (extraction, the other detectors, writing and verification,
+        where the LLM never runs) is sized like STANDARD."""
+        full = self.detection_profile is Profile.FULL
         if self.config.workers:
             wanted = self.config.workers
-        elif self.detection_profile is Profile.FULL:
+        elif full and stage == LLM_STAGE:
             wanted = 1  # one LLM instance at a time
         else:
             wanted = max(1, min(os.cpu_count() or 1, 8) - 1)
-            if self.detection_profile is Profile.STANDARD:
+            if full or self.detection_profile is Profile.STANDARD:
                 # Each worker holds its own GLiNER instance (~2 GiB).
                 from anonyma import hardware
 
@@ -1389,17 +1565,26 @@ class Pipeline:
 
         if progress:
             progress(ProgressEvent(stage, 0, total))
-        if self._workers(total) == 1:
+        if self._workers(total, stage) == 1:
+            global _item_progress
+
+            def item(done_: int, total_: int, step: str) -> None:
+                if progress is not None:
+                    progress(ProgressEvent(stage, len(finished), total, None, done_, total_, step))
+
             for i, job in enumerate(jobs):
                 if cancel and cancel.cancelled:
                     break
+                _item_progress = item if progress is not None else None
                 try:
                     done(i, fn(*job))
                 except CancelledError:  # raised inside the item (inline extraction)
                     break
+                finally:
+                    _item_progress = None
             return results
         try:
-            self._pool(fn, jobs, list(range(total)), self._workers(total), cancel, done)
+            self._pool(fn, jobs, list(range(total)), self._workers(total, stage), cancel, done)
         except BrokenProcessPool:
             log.warning("worker pool broken during %s; retrying the remaining items", stage)
             # A worker can also die for reasons outside the item (memory pressure from
@@ -1509,6 +1694,13 @@ class Pipeline:
             log.warning("%d link(s) skipped in input folders", len(links))
         items = [*files, *links]
         inline = cancel if self._workers(len(items)) == 1 else None
+        # The language model runs after the pool, here, once for the whole batch: one
+        # instance and one memo, the other detectors in parallel worker processes.
+        late = (
+            any(d.uses_prior for d in detectors_for(self.config))
+            and self._workers(len(items), LLM_STAGE) == 1
+        )
+        phase = PHASE_EARLY if late else PHASE_ALL
         jobs = [
             (
                 path,
@@ -1517,10 +1709,13 @@ class Pipeline:
                 work_dir / f"f{i}",
                 SKIP_LINK if i >= len(files) else "",
                 inline,
+                phase,
             )
             for i, (path, name) in enumerate(items)
         ]
         outputs = self._map(_analyze_one, jobs, "analyse", progress, cancel, self._analysis_crashed)
+        if late:
+            self._late_detection(outputs, progress, cancel)
 
         documents: list[Document] = []
         entities: list[Entity] = []
@@ -1541,6 +1736,7 @@ class Pipeline:
         extra = propagate(documents, clusters, entities, self.config)
         extra += propagate_names(documents, clusters, [*entities, *extra])
         entities, clusters = resolve([*entities, *extra], self.config, clusters)
+        link_by_place(documents, entities, clusters)
         entities = drop_inside_whitelist(documents, entities, self.config)
         entities, clusters = apply_policies(documents, entities, clusters, self.config)
         return BatchAnalysis(
@@ -1552,6 +1748,39 @@ class Pipeline:
             work_dir,
             inputs=[Path(p).resolve() for p in inputs],
         )
+
+    def _late_detection(
+        self,
+        outputs: list[Any | None],
+        progress: ProgressCallback | None,
+        cancel: CancelToken | None,
+    ) -> None:
+        """Run the ``uses_prior`` detectors (the LLM) on every analysed document, in
+        this process, with the entities the other detectors found; progress as the
+        :data:`LLM_STAGE` stage (files, and segments inside the current one)."""
+        global _item_progress
+        total = len(outputs)
+        done = 0
+
+        def item(done_: int, total_: int, step: str) -> None:
+            if progress is not None:
+                progress(ProgressEvent(LLM_STAGE, done, total, None, done_, total_, step))
+
+        if progress:
+            progress(ProgressEvent(LLM_STAGE, 0, total))
+        for index, out in enumerate(outputs):
+            if cancel and cancel.cancelled:
+                break
+            if out is not None:
+                doc, found = out
+                _item_progress = item if progress is not None else None
+                try:
+                    found.extend(detect_tree(doc, self.config, PHASE_LATE, found))
+                finally:
+                    _item_progress = None
+            done += 1
+            if progress:
+                progress(ProgressEvent(LLM_STAGE, done, total, index=index))
 
     def apply(
         self,

@@ -1,18 +1,27 @@
-"""LLM pass (profile FULL): indirect identifiers and ambiguous segments.
+"""LLM pass (profile FULL): indirect identifiers and names in prose.
 
-Only segments with indirect-identifier cues (roles, family ties, « le seul... »,
-organisational units) or capitalized words the lexicon does not explain are sent to
-the model, unless ``Config.llm_all_segments`` is set; segments with fewer than
-:data:`MIN_LETTERS` letters never are. Short consecutive segments share one call.
-Every mention is grounded: kept only where it occurs in the segments sent, and
-filtered by the same plausibility rules as GLiNER. Skipped by the verifier
-(``verify = False``): too slow and not deterministic enough for a second pass.
+The model reads paragraphs (:func:`passages`, e-mail quote markers removed), and only
+those it can add something to (:meth:`LlmDetector.wanted`): prose rather than field
+values, headers or identifiers, holding something shaped like an indirect identifier
+(« la DRH de l'agence de Nantes », « le seul médecin », « sa voisine ») or a
+capitalized word the lexicon does not explain and the other detectors did not cover
+(it runs after them, ``uses_prior``). ``Config.llm_all_segments`` sends every
+paragraph with letters.
+
+A paragraph already analysed in the process (same normalized text: one mail in an
+.eml, its JSON export and a quoted reply) is not sent again (:class:`Memo`).
+Mentions are grounded: kept only where they occur in the segment, and filtered by the
+plausibility rules shared with GLiNER. Skipped by the verifier (``verify = False``):
+too slow and not deterministic enough for a second pass.
 """
 
 from __future__ import annotations
 
+import json
 import threading
-from collections.abc import Callable, Iterator, Sequence
+from collections import OrderedDict
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 import regex
@@ -68,16 +77,10 @@ _PERSON_WORDS = (
     "le seul|la seule|l'unique|seul|seule|unique"
 )
 PERSON_CUES = regex.compile(rf"(?<![a-z])(?:{_PERSON_WORDS})(?:e|s|es)?(?![a-z])")
-CUES = regex.compile(
-    rf"(?<![a-z])(?:{_PERSON_WORDS}|agence|service|filiale|succursale|antenne|delegation|"
-    r"mairie|ecole|college|lycee|hopital|clinique|cabinet|usine|magasin|boutique|equipe|"
-    r"departement)(?:e|s|es)?(?![a-z])"
-)
 #: An LLM date of birth needs a birth cue in its segment (other dates are left to
 #: the date rules, which mask them as DATE).
 BIRTH_CUES = regex.compile(r"(?<![a-z])(?:ne|nee|naissance|ddn|naitre|born|birth)(?![a-z])")
 _TOKEN = regex.compile(r"[\p{L}\p{N}]+")
-_CAPITALIZED = regex.compile(r"(?<=[\p{Ll},;] )\p{Lu}\p{Ll}+")
 
 _runners: dict[str, llm.LlmRunner] = {}
 _lock = threading.Lock()
@@ -117,12 +120,103 @@ def select_model(config: Config) -> tuple[ModelSpec, Path] | None:
     return fitting[0] if fitting else installed[-1]
 
 
+@dataclass(frozen=True, slots=True)
+class Passage:
+    """A paragraph of a segment, as the model reads it."""
+
+    segment: Segment
+    #: Position of the segment in the document (progress).
+    position: int
+    start: int
+    end: int
+    #: Paragraph text without e-mail quote markers (``> ``).
+    text: str
+    #: Normalized text: identical passages of the batch are analysed once.
+    key: str
+
+
+#: Blank lines (quoted ones too: « > »), and the header lines of a quoted message
+#: (« De : », « From: »...).
+_PARAGRAPH = regex.compile(
+    r"\n(?:[^\S\n]|>)*\n"
+    r"|\r?\n(?=[ \t>]*(?:De|From|Envoyé|Sent|À|To|Cc|Objet|Subject|Date)[ \t\u00a0]*:)"
+)
+_QUOTE = regex.compile(r"^[ \t]*(?:>[ \t]?)+", regex.M)
+
+
+def passage_key(text: str) -> str:
+    """Letters and digits only (case, accents, punctuation and line wrapping ignored):
+    the same paragraph from an .eml, its HTML version and a CSV cell."""
+    return " ".join(_TOKEN.findall(normalize(text)))
+
+
+def passages(segment: Segment, position: int = 0) -> list[Passage]:
+    """The paragraphs of ``segment`` (blank-line separated), quote markers removed:
+    a reply chain quotes earlier messages paragraph by paragraph."""
+    out: list[Passage] = []
+    text = segment.text
+    start = 0
+    for brk in [*_PARAGRAPH.finditer(text), None]:
+        end = brk.start() if brk is not None else len(text)
+        body = _QUOTE.sub("", text[start:end]).strip()
+        if body:
+            out.append(Passage(segment, position, start, end, body, passage_key(body)))
+        if brk is not None:
+            start = brk.end()
+    return out
+
+
+_WORDS = regex.compile(r"\p{L}[\p{L}'’\-]+")
+#: Segment kinds that hold no prose: names, markup attributes, codes, signatures.
+_NO_PROSE = frozenset(
+    {SegmentKind.FILENAME, SegmentKind.ATTRIBUTE, SegmentKind.BARCODE, SegmentKind.SIGNATURE}
+)
+#: A sentence: enough words, mostly lower-case ones, few symbols (not a field value,
+#: an identifier, a URL list or a JSON fragment).
+PROSE_WORDS = 6
+PROSE_LOWER = 0.4
+PROSE_PLAIN = 0.75
+_PLAIN = frozenset(" '’,.;:!?()-\n\u00a0")
+
+
+_NOISE = regex.compile(r"\S+@\S+|\w+://\S+|www\.\S+")
+
+
+def is_prose(text: str) -> bool:
+    text = _NOISE.sub(" ", text)  # addresses and links are no words
+    words = _WORDS.findall(text)
+    lower = sum(1 for w in words if w[0].islower())
+    if len(words) < PROSE_WORDS or lower < 3 or lower < PROSE_LOWER * len(words):
+        return False
+    plain = sum(1 for c in text if c.isalpha() or c in _PLAIN)
+    return plain >= PROSE_PLAIN * len(text)
+
+
+_FAMILY = (
+    "fils|fille|pere|mere|frere|soeur|oncle|tante|cousin|cousine|neveu|niece|epoux|epouse|"
+    "mari|femme|conjoint|conjointe|compagnon|compagne|voisin|voisine|collegue|ami|amie|"
+    "veuf|veuve|beau-pere|belle-mere|beau-frere|belle-soeur|grand-pere|grand-mere|"
+    "petit-fils|petite-fille|enfant|bebe"
+)
+_POSSESSIVE = "mon|ma|mes|ton|ta|tes|son|sa|ses|notre|nos|votre|vos|leur|leurs"
+#: What an indirect identifier looks like (normalized text): a role or tie qualified
+#: by an organisation, a place or a person (« la DRH de l'agence », « le fils du
+#: maire »), uniqueness (« le seul médecin »), or a tie to someone (« sa voisine »).
+SINGLING_OUT = regex.compile(
+    rf"(?<![a-z])(?:(?:{_PERSON_WORDS})(?:e|s|es)?\s+(?:de|du|des|d'|au|aux|chez)(?![a-z])"
+    r"|(?:le|la|l')\s*(?:seul|seule|unique)(?![a-z])"
+    rf"|(?:{_POSSESSIVE})\s+(?:{_FAMILY})s?(?![a-z]))"
+)
+_NAME = regex.compile(r"\b\p{Lu}[\p{L}'’\-]+")
+
+
 @register_detector
 class LlmDetector(Detector):
     name = "llm"
     min_profile = Profile.FULL
     deterministic = False
     verify = False
+    uses_prior = True
 
     @classmethod
     def is_available(cls, config: Config) -> bool:
@@ -142,95 +236,271 @@ class LlmDetector(Detector):
                 _runners[key] = llm.LlmRunner(selected[1])
             return _runners[key]
 
-    def wanted(self, text: str) -> bool:
+    def wanted(self, passage: Passage, covered: Sequence[tuple[int, int]] = ()) -> bool:
+        """Whether the model can add anything to ``passage``: prose (not a field value,
+        a header or an identifier) with a possible indirect identifier, or a name the
+        other detectors (``covered`` spans of the segment) left out.
+        ``Config.llm_all_segments`` sends every passage with letters."""
+        text = passage.text
         if sum(c.isalpha() for c in text) < MIN_LETTERS:
             return False
         if self.config.llm_all_segments:
             return True
-        if CUES.search(normalize(text)):
+        if passage.segment.context.kind in _NO_PROSE or not is_prose(text):
+            return False
+        if SINGLING_OUT.search(normalize(text)):
             return True
-        return any(normalize(m.group()) not in self.lexicon for m in _CAPITALIZED.finditer(text))
+        return any(self._uncovered(passage, m, covered) for m in _NAME.finditer(text))
+
+    def _uncovered(
+        self, passage: Passage, match: regex.Match[str], covered: Sequence[tuple[int, int]]
+    ) -> bool:
+        """A capitalized word the lexicon does not explain, inside a sentence (or in
+        capitals), that no other detector covers (« avec Kervella hier »)."""
+        word = match.group()
+        key = normalize(word)
+        if key in self.lexicon or key in FUNCTION_WORDS:
+            return False
+        shouted = word.isupper() and len(word) > 2
+        if not shouted and not mid_sentence(passage.text, match.start()):
+            return False
+        spans = list(llm.locate(passage.segment.text, word))
+        return not spans or any(
+            not any(cs <= s and e <= ce for cs, ce in covered) for s, e in spans
+        )
 
     def detect(self, segments: Sequence[Segment], document_id: str) -> list[Entity]:
-        todo = [s for s in segments if not skip_segment(s) and self.wanted(s.text)]
+        return self.detect_after(segments, document_id, ())
+
+    def detect_after(
+        self, segments: Sequence[Segment], document_id: str, prior: Sequence[Entity]
+    ) -> list[Entity]:
+        covered: dict[str, list[tuple[int, int]]] = {}
+        for e in prior:
+            covered.setdefault(e.segment_id, []).append((e.start, e.end))
+        todo = [
+            p
+            for i, s in enumerate(segments)
+            if not skip_segment(s)
+            for p in passages(s, i)
+            if self.wanted(p, covered.get(s.id, ()))
+        ]
         if not todo:
             return []
         runner = self._runner()
-        found: list[Entity] = []
-        seen: set[tuple[str, int, int]] = set()
-        for group, text in batches(todo, runner.window_tokens, runner.count_tokens):
-            for mention in runner.extract(text):
-                for segment in group:
-                    for start, end in llm.locate(segment.text, mention.text):
-                        key = (segment.id, start, end)
-                        value = segment.text[start:end]
-                        if key in seen or not _keep(segment, mention.entity_type, value, start):
-                            continue
-                        seen.add(key)
-                        found.append(
-                            Entity(
-                                entity_type=mention.entity_type,
-                                value=value,
-                                document_id=document_id,
-                                segment_id=segment.id,
-                                start=start,
-                                end=end,
-                                score=_score(mention.entity_type, value),
-                                detector=self.name,
-                            )
-                        )
-        # Same rule as GLiNER: a job title alone (« le boucher du marché couvert »
-        # as FONCTION) is ordinary text; next to a person it identifies them.
-        by_segment: dict[str, list[Entity]] = {}
-        for e in found:
-            by_segment.setdefault(e.segment_id, []).append(e)
-        texts = {s.id: s.text for s in todo}
-        return [
-            e
-            for sid, group in by_segment.items()
-            for e in job_titles_near_people(texts[sid], group)
-        ]
+        memo = _memo(runner.key)
+        pending: dict[str, Passage] = {}
+        for p in todo:
+            if p.key not in memo and p.key not in pending:
+                pending[p.key] = p
+        calls = plan(list(pending.values()), runner.window_tokens, runner.count_tokens)
+        for group, text in calls:
+            mentions = runner.extract(text)
+            for p in group:
+                memo.add(p.key, [m for m in mentions if next(llm.locate(p.text, m.text), None)])
+            self.report(group[-1].position + 1, len(segments))
+        if calls:
+            record_throughput(runner)
+        return _entities(todo, memo, document_id, self.name)
+
+    def workload(self, segments: Sequence[Segment], seen: set[str]) -> list[Passage]:
+        """Passages of ``segments`` the model would read, not counting those in ``seen``
+        (keys, updated): an upper bound, the other detectors' coverage is unknown."""
+        out: list[Passage] = []
+        for i, s in enumerate(segments):
+            if skip_segment(s):
+                continue
+            for p in passages(s, i):
+                if p.key not in seen and self.wanted(p):
+                    seen.add(p.key)
+                    out.append(p)
+        return out
 
 
-def batches(
-    segments: Sequence[Segment],
+def _entities(todo: Sequence[Passage], memo: Memo, document_id: str, detector: str) -> list[Entity]:
+    """Every mention of every passage, located (grounded) in the passage's segment."""
+    found: list[Entity] = []
+    seen: set[tuple[str, int, int]] = set()
+    for p in todo:
+        segment = p.segment
+        for mention in memo.get(p.key):
+            for start, end in llm.locate(segment.text, mention.text):
+                key = (segment.id, start, end)
+                value = segment.text[start:end]
+                if key in seen or not _keep(segment, mention.entity_type, value, start):
+                    continue
+                seen.add(key)
+                found.append(
+                    Entity(
+                        entity_type=mention.entity_type,
+                        value=value,
+                        document_id=document_id,
+                        segment_id=segment.id,
+                        start=start,
+                        end=end,
+                        score=_score(mention.entity_type, value),
+                        detector=detector,
+                    )
+                )
+    # Same rule as GLiNER: a job title alone (« le boucher du marché couvert »
+    # as FONCTION) is ordinary text; next to a person it identifies them.
+    by_segment: dict[str, list[Entity]] = {}
+    for e in found:
+        by_segment.setdefault(e.segment_id, []).append(e)
+    texts = {p.segment.id: p.segment.text for p in todo}
+    return [
+        e for sid, group in by_segment.items() for e in job_titles_near_people(texts[sid], group)
+    ]
+
+
+class Memo:
+    """Mentions of the passages already analysed in this process, for one model and
+    prompt version (least recently used dropped beyond :data:`MEMO_SIZE`). FULL runs
+    in one process, so a passage repeated in the batch (the same mail in an .eml, a
+    JSON export and a CSV, quoted replies) costs one model call; with several worker
+    processes (``-j``) each keeps its own."""
+
+    def __init__(self) -> None:
+        self._items: OrderedDict[str, tuple[llm.LlmMention, ...]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def __contains__(self, key: object) -> bool:
+        with self._lock:
+            return key in self._items
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._items)
+
+    def get(self, key: str) -> tuple[llm.LlmMention, ...]:
+        with self._lock:
+            if key not in self._items:
+                return ()
+            self._items.move_to_end(key)
+            return self._items[key]
+
+    def add(self, key: str, mentions: Sequence[llm.LlmMention]) -> None:
+        with self._lock:
+            merged = dict.fromkeys([*self._items.get(key, ()), *mentions])
+            self._items[key] = tuple(merged)
+            self._items.move_to_end(key)
+            while len(self._items) > MEMO_SIZE:
+                self._items.popitem(last=False)
+
+
+#: Seconds per model call assumed before any was measured on this machine (Qwen3
+#: 4B Q4 on an 8-core desktop CPU: 1 s for an empty answer, 3 to 5 s with a few
+#: entities; a laptop is slower).
+DEFAULT_CALL_SECONDS = 4.0
+#: Measured throughput, per model file: ``{"<model>": {"appels": n, "secondes": s}}``.
+THROUGHPUT_FILE = "debit_modele_langue.json"
+
+
+def _throughput_path() -> Path:
+    from anonyma import paths
+
+    return paths.data_dir() / THROUGHPUT_FILE
+
+
+def record_throughput(runner: llm.LlmRunner) -> None:
+    """Remember this process's measured seconds per call for later estimates (best
+    effort: counts only)."""
+    if not runner.measured_calls:
+        return
+    path = _throughput_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        if not isinstance(data, dict):
+            data = {}
+        data[runner.key] = {
+            "appels": runner.measured_calls,
+            "secondes": round(runner.measured_seconds, 3),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    except (OSError, ValueError):
+        log.info("llm throughput not saved")
+
+
+def call_seconds(config: Config) -> float:
+    """Seconds per model call: measured on this machine for the selected model if a
+    run did so, :data:`DEFAULT_CALL_SECONDS` otherwise."""
+    selected = select_model(config)
+    if selected is None:
+        return DEFAULT_CALL_SECONDS
+    key = f"{selected[1].name}:v{llm.PROMPT_VERSION}"
+    try:
+        data = json.loads(_throughput_path().read_text(encoding="utf-8"))
+        item = data[key]
+        calls, seconds = int(item["appels"]), float(item["secondes"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return DEFAULT_CALL_SECONDS
+    return seconds / calls if calls >= 20 else DEFAULT_CALL_SECONDS
+
+
+def estimated_calls(todo: Sequence[Passage]) -> int:
+    """Model calls for ``todo`` without loading the model (about 3 characters per
+    token of French text)."""
+    return len(plan(todo, llm.WINDOW_TOKENS, lambda text: max(1, len(text) // 3)))
+
+
+MEMO_SIZE = 50_000
+_memos: dict[str, Memo] = {}
+
+
+def _memo(key: str) -> Memo:
+    with _lock:
+        return _memos.setdefault(key, Memo())
+
+
+def forget() -> None:
+    """Drop every memo (tests; a new model or prompt gets its own memo anyway)."""
+    with _lock:
+        _memos.clear()
+
+
+def plan(
+    todo: Sequence[Passage],
     budget: int,
     count: Callable[[str], int],
     short: int = SHORT_SEGMENT_TOKENS,
-) -> Iterator[tuple[list[Segment], str]]:
-    """Model calls for ``segments``, each at most ``budget`` tokens of text.
+) -> list[tuple[list[Passage], str]]:
+    """Model calls for ``todo``, each at most ``budget`` tokens of text.
 
-    Consecutive short segments (cells, header fields, signature lines: at most
-    ``short`` tokens) share one call, separated by blank lines: a lone « Merci » is
-    read in its context, and 100 cells do not mean 100 calls. A longer segment goes
-    alone (the model lists fewer entities when sentences are pooled), cut into
-    overlapping windows when it exceeds ``budget``.
-
-    Each item is ``(segments, text)``: mentions are searched in every segment of the
-    group (a window of a long segment is searched in the whole segment).
+    Consecutive paragraphs of one segment share a call (a window over its text);
+    paragraphs of different segments only when short (cells, fields, signature lines:
+    at most ``short`` tokens), since sentences pooled from unrelated places make the
+    model list fewer entities. A paragraph longer than ``budget`` is cut into
+    overlapping windows.
     """
-    group: list[Segment] = []
-    used = 0
+    calls: list[tuple[list[Passage], str]] = []
+    group: list[Passage] = []
+    sizes: list[int] = []
     separator = count(llm.SEGMENT_SEPARATOR)
 
-    def flush() -> Iterator[tuple[list[Segment], str]]:
+    def flush() -> None:
         if group:
-            yield list(group), llm.SEGMENT_SEPARATOR.join(s.text for s in group)
+            calls.append((list(group), llm.SEGMENT_SEPARATOR.join(p.text for p in group)))
+            group.clear()
+            sizes.clear()
 
-    for segment in segments:
-        size = count(segment.text)
-        if size > short:
-            yield from flush()
-            group, used = [], 0
-            for _, window in llm.windows(segment.text, budget, count, llm.WINDOW_OVERLAP):
-                yield [segment], window
+    for p in todo:
+        size = count(p.text)
+        if size > budget:
+            flush()
+            windows = llm.windows(p.text, budget, count, llm.WINDOW_OVERLAP)
+            calls.extend(([p], window) for _, window in windows)
             continue
-        if group and used + separator + size > budget:
-            yield from flush()
-            group, used = [], 0
-        used += size + (separator if group else 0)
-        group.append(segment)
-    yield from flush()
+        if group:
+            same = group[-1].segment is p.segment
+            pooled = size <= short and max(sizes) <= short
+            fits = sum(sizes) + separator * len(group) + size <= budget
+            if not (same or pooled) or not fits:
+                flush()
+        group.append(p)
+        sizes.append(size)
+    flush()
+    return calls
 
 
 def _keep(segment: Segment, entity_type: str, value: str, start: int) -> bool:
@@ -313,4 +583,16 @@ def _born(text: str) -> bool:
     return BIRTH_CUES.search(normalize(text)) is not None
 
 
-__all__ = ["LlmDetector", "batches", "select_model"]
+__all__ = [
+    "LlmDetector",
+    "Memo",
+    "Passage",
+    "call_seconds",
+    "estimated_calls",
+    "forget",
+    "is_prose",
+    "passages",
+    "plan",
+    "record_throughput",
+    "select_model",
+]

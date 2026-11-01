@@ -8,7 +8,9 @@ import csv
 import dataclasses
 import email
 import json
-from datetime import UTC, datetime, timedelta
+import re
+from datetime import datetime, timedelta
+from email.header import decode_header, make_header
 from email.message import Message
 from email.policy import compat32
 from email.utils import getaddresses, parsedate_to_datetime
@@ -16,10 +18,11 @@ from pathlib import Path
 
 import pytest
 
+from anonyma import threadindex
 from anonyma.config import Config
-from anonyma.extractors._mailheaders import thread_index_time
 from anonyma.models import DocumentStatus, ReplacementMode
 from anonyma.pipeline import Pipeline
+from anonyma.textutils import strip_accents
 
 SENDER = "Jessica Morin"
 #: A digit in the domain: ``<address>`` once looked like a message id in mail headers.
@@ -30,11 +33,13 @@ REPLY = "2026-09-02T09:30:00Z"
 LABEL = "01/09/2026 10:14"  # Dataverse formatted value, local time
 #: Thread-Index of the first message (thread started 2026-09-01 08:14:29 UTC).
 PARENT_INDEX = "AQHdOenojzqcIdTmS3+aHC49T1prfA=="
-MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+#: The same indexes as a Dataverse export writes them (hexadecimal, upper case).
+PARENT_HEX = base64.b64decode(PARENT_INDEX).hex().upper()
+CHILD_BLOCK = "0000ab12c3"
 
 
 def _child_index(parent: str) -> str:
-    raw = base64.b64decode(parent) + bytes.fromhex("0000ab12c3")
+    raw = base64.b64decode(parent) + bytes.fromhex(CHILD_BLOCK)
     return base64.b64encode(raw).decode()
 
 
@@ -89,14 +94,22 @@ def _export(root: Path) -> Path:
             "createdon": CREATED,
             "createdon_libelle": LABEL,
             "modifiedon": MODIFIED,
+            "conversationindex": PARENT_HEX,
         },
-        {"subject": "RE: Devis", "sender": ADDRESS, "createdon": REPLY, "modifiedon": REPLY},
+        {
+            "subject": "RE: Devis",
+            "sender": ADDRESS,
+            "createdon": REPLY,
+            "modifiedon": REPLY,
+            "conversationindex": PARENT_HEX + CHILD_BLOCK.upper(),
+        },
     ]
     (src / "webapi" / "page.json").write_text(
         json.dumps({"value": records}, ensure_ascii=False, indent=1), encoding="utf-8"
     )
     (src / "csv" / "emails.csv").write_text(
-        f"subject,createdon,sender\nDevis borne de recharge,{CREATED},{ADDRESS}\n",
+        "subject,createdon,sender,conversationindex\n"
+        f"Devis borne de recharge,{CREATED},{ADDRESS},{PARENT_HEX}\n",
         encoding="utf-8",
     )
     return src
@@ -160,11 +173,16 @@ def test_same_sender_and_instants_in_every_format(tmp_path: Path, canary_config:
     original = base64.b64decode(PARENT_INDEX)
     assert len(first) == 22 and len(second) == 27 and second[:22] == first
     assert first[6:] != original[6:]  # new GUID
-    assert second[22:] == bytes.fromhex("0000ab12c3")  # reply delta kept
-    start = datetime(2026, 9, 1, 8, 14, tzinfo=UTC) + shift
-    assert thread_index_time(str(parent["Thread-Index"])) == (
-        f"{start:%d} {MONTHS[start.month - 1]} {start:%Y %H:%M} +0000"
-    )
+    assert second[22:] == bytes.fromhex(CHILD_BLOCK)  # reply delta kept
+    start = threadindex.start_time(str(parent["Thread-Index"]))
+    original_start = threadindex.start_time(PARENT_INDEX)
+    assert start is not None and original_start is not None
+    assert abs((start - original_start) - shift) < timedelta(seconds=2)
+
+    # H4: the hexadecimal index of the JSON and CSV is the very same rebuilt index
+    # (left as is, it would give away the real date and the secret offset).
+    assert records[0]["conversationindex"] == first.hex().upper() == row["conversationindex"]
+    assert records[1]["conversationindex"] == second.hex().upper()
 
 
 @pytest.mark.parametrize("mode", [ReplacementMode.TAG, ReplacementMode.BLACKOUT])
@@ -176,5 +194,54 @@ def test_thread_index_with_neutral_dates(
     first, second = _thread_index(parent), _thread_index(reply)
     assert second[:22] == first and first[6:] != base64.b64decode(PARENT_INDEX)[6:]
     assert second[22:26] == bytes(4)  # no interval survives a neutral date
-    assert thread_index_time(str(parent["Thread-Index"])) == ""  # 1970: not exposed
+    start = threadindex.start_time(str(parent["Thread-Index"]))
+    assert start is not None and start.year == 1970
     assert parsedate_to_datetime(str(parent["Date"])).year == 1970
+
+
+def test_forms_of_one_person_share_one_substitute(tmp_path: Path, canary_config: Config) -> None:
+    """Two « Laëtitia » in the batch: each lone signature follows the person of its own
+    record; an address after a display name follows that name (D365 v2: « Ivana
+    Fleury » signed « Alya », « Lahna Chauvet » wrote from mya-sauvage@)."""
+    src = tmp_path / "export"
+    src.mkdir()
+    records = [
+        {
+            "sender_name": "Laëtitia Vidal",
+            "sender": "vidal.laetitia@arnaud-rey.exemple.test",
+            "description": "Merci de supprimer mon adresse.\nBien à vous,\nLaëtitia",
+        },
+        {
+            "sender_name": "Laëtitia Huet",
+            "sender": "l.huet@chateau-lescure.exemple.test",
+            "description": "Voici le RIB demandé.\nCordialement,\nLaëtitia",
+        },
+    ]
+    (src / "page.json").write_text(
+        json.dumps({"value": records}, ensure_ascii=False), encoding="utf-8"
+    )
+    (src / "m.eml").write_text(
+        "From: Thi Lan Lambert <thi-lan@vercors-logistique.exemple.test>\r\n"
+        "To: contact@hexagone.exemple.test\r\nSubject: Devis\r\n\r\n"
+        "Bonne journée,\r\nThi Lan Lambert\r\n",
+        encoding="utf-8",
+        newline="",
+    )
+    config = dataclasses.replace(canary_config, mode=ReplacementMode.REALISTIC)
+    result = Pipeline(config).run([src], tmp_path / "out")
+    outputs = {Path(r.output_name).name: r.output_path for r in result.results}
+    page = outputs["page.json"]
+    assert page is not None
+    out = json.loads(page.read_text(encoding="utf-8"))["value"]
+    for record in out:
+        given = record["sender_name"].split()[0]
+        signature = record["description"].rsplit("\n", 1)[-1]
+        assert signature == given, (record["sender_name"], signature)
+    assert out[0]["sender_name"] != out[1]["sender_name"]
+    mail = outputs["m.eml"]
+    assert mail is not None
+    [(name, address)] = getaddresses([str(_mail(mail)["From"])])
+    words = [w for w in re.split(r"[.\-_]", address.split("@")[0]) if w]
+    name = str(make_header(decode_header(name)))  # RFC 2047 when accented
+    shown = re.sub(r"[^a-z]", "", strip_accents(name).casefold())
+    assert words and all(w in shown for w in words), (name, address)  # a form of the name

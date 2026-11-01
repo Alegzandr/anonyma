@@ -347,6 +347,15 @@ llama-cpp-python** : le profil `complet` y tourne comme `standard`, même si `mo
 liste` montre un modèle de langue installé et vérifié (la colonne État le signale).
 Depuis les sources, le moteur s'installe avec `uv sync --extra llm`.
 
+Le modèle de langue lit les paragraphes rédigés (pas les valeurs de champs, en-têtes ou
+identifiants), seulement ceux où il peut ajouter quelque chose aux autres détecteurs,
+et une seule fois par lot un paragraphe répété (le même courriel dans un .eml, un
+export JSON, un CSV ou une réponse citée). Sur processeur, il reste nettement plus lent
+que `standard` : avant de commencer, Anonyma estime sa durée sur un échantillon du lot
+et, au-delà de 15 minutes, l'annonce avec l'alternative (`estimation_minutes` dans la
+sortie `--json`). Pendant l'analyse, la progression indique où en est le fichier en
+cours (« fichier en cours : 1 240/7 217 segments · modèle de langue »).
+
 ## Modèles
 
 Les modèles d'IA ne sont pas livrés dans l'archive :
@@ -495,11 +504,24 @@ ré-identifiés.
   balises et masquage, les dates des en-têtes, des propriétés msg et du `Thread-Index`
   deviennent la date neutre du 1er mars 1970. La date du séparateur `From ` d'une boîte
   mbox n'est jamais conservée : elle reprend la date anonymisée du message.
-- **`Thread-Index` régénéré** : l'en-tête Outlook des fils de discussion est reconstruit
-  à partir de la date de début anonymisée et d'un identifiant recalculé ; une réponse
-  prolonge toujours l'index du message auquel elle répond. Un `Thread-Index` invalide, ou
-  dont la date n'a pas été masquée, est supprimé. La propriété binaire équivalente des msg
+- **Index de conversation reconstruits** : l'index Outlook d'un fil de discussion
+  (en-tête `Thread-Index` en base64, colonne `conversationindex` d'un export Dynamics 365
+  en hexadécimal, ou toute autre valeur qui se décode comme tel, dans un JSON, un CSV, un
+  XML ou un texte) contient la date réelle de début du fil : laissé tel quel, il
+  trahirait le décalage secret des dates. Il est donc toujours reconstruit, dans tous les
+  modes et même avec `--conserver-identifiants` : date de début décalée comme les autres
+  dates (date neutre du 1er mars 1970 en modes balises et masquage), identifiant recalculé
+  avec une clé du lot (gardée dans la table en pseudonymisation), encodage d'origine
+  conservé. Le même index reçoit la même valeur dans l'eml, le JSON et le CSV, et une
+  réponse prolonge toujours l'index du message auquel elle répond. Un `Thread-Index` que
+  rien n'a reconstruit est supprimé ; un index d'origine retrouvé dans un fichier produit
+  est un résidu certain. La propriété binaire équivalente des msg
   (`PR_CONVERSATION_INDEX`) reste supprimée.
+- **Chaque fichier « À revoir » dit pourquoi** : le bilan `--json` (`documents[].problemes`,
+  code `review.uncertain`) et les rapports donnent le nombre d'entités incertaines, leurs
+  types et les zones concernées (jamais les valeurs), par exemple « 1 entité incertaine
+  (Personne) masquée par précaution : à confirmer ou rejeter dans la revue avant
+  diffusion ; zones : « $.*[3].* » ».
 
 ## Licences
 

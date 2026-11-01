@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from anonyma import registry
-from anonyma.frenchtext import NBSP, plural, typo
+from anonyma.frenchtext import NBSP, item_progress, plural, typo
 from anonyma.gui import dialogs
 from anonyma.gui.controller import REVIEW_POLICIES, REVIEW_POLICY_GLOSSES, BatchController, Phase
 from anonyma.gui.itemmodels import QueueModel, QueueRow
@@ -43,7 +43,11 @@ from anonyma.gui.widgets import (
 from anonyma.models import DocumentResult, DocumentStatus, Regime
 from anonyma.pipeline import ProgressEvent, is_quarantined, quarantine_dir
 
-STAGE_LABELS = {"analyse": "Analyse des fichiers", "ecriture": "Écriture et vérification"}
+STAGE_LABELS = {
+    "analyse": "Analyse des fichiers",
+    "langue": "Modèle de langue",
+    "ecriture": "Écriture et vérification",
+}
 
 #: Summary of the supported families (the full extension list is in the tooltip).
 FORMATS_SUMMARY = "Office, PDF, courriels (eml, msg, pst), images, archives, texte et données."
@@ -206,6 +210,11 @@ class ProcessingPage(QWidget):
         progress_row.addWidget(self.progress_bar, 1)
         progress_row.addWidget(self.time_label)
         layout.addWidget(self.progress_box)
+        #: A FULL analysis announced as long, and the faster alternative.
+        self.notice_label = muted("")
+        self.notice_label.setWordWrap(True)
+        self.notice_label.hide()
+        layout.addWidget(self.notice_label)
         self._clock = QTimer(self)
         self._clock.setInterval(1000)
         self._clock.timeout.connect(self._update_times)
@@ -239,6 +248,7 @@ class ProcessingPage(QWidget):
         c.queue_ready.connect(self.refresh)
         c.phase_changed.connect(self._phase_changed)
         c.progress.connect(self._on_progress)
+        c.long_run.connect(self._on_long_run)
         c.analysis_ready.connect(self._on_analysis)
         c.analysis_cleared.connect(self.refresh)
         c.decisions_changed.connect(self._update_buttons)
@@ -543,6 +553,8 @@ class ProcessingPage(QWidget):
         if phase != Phase.IDLE.value:
             self._started = time.monotonic()
             self._last_event = None
+            if phase == Phase.ANALYZING.value:
+                self.notice_label.hide()  # a new estimate comes with each analysis
             self.stage_label.setText(STAGE_LABELS.get(phase, "") + "…")
             self.time_label.setText("")
             self.progress_bar.setRange(0, 0)
@@ -553,15 +565,22 @@ class ProcessingPage(QWidget):
             self.time_label.setText("")
         self.refresh()
 
+    def _on_long_run(self, message: str) -> None:
+        self.notice_label.setText(typo(message[:1].upper() + message[1:]))
+        self.notice_label.show()
+
     def _on_progress(self, event: ProgressEvent) -> None:
         self._last_event = event
         label = STAGE_LABELS.get(event.stage, event.stage)
-        self.stage_label.setText(typo(f"{label} : {event.done} / {event.total}"))
+        text = f"{label} : {event.done} / {event.total}"
+        if event.item_total and event.done < event.total:
+            text += " · " + item_progress(event.item_done, event.item_total, event.item_step)
+        self.stage_label.setText(typo(text))
         self.progress_bar.setRange(0, max(event.total, 1))
         self.progress_bar.setValue(event.done)
         self._update_times()
         if event.index is not None:
-            status = "Analysé" if event.stage == "analyse" else "Écrit"
+            status = "Écrit" if event.stage == "ecriture" else "Analysé"
             self.model.update_row(event.index, status=status, level="info")
 
     def _update_times(self) -> None:
