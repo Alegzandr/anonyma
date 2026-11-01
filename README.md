@@ -116,6 +116,12 @@ n'est pas disponible dans la version portable : il y fonctionne comme Standard.
   pouvoir retrouver les vraies valeurs plus tard. Une phrase secrète protège cette table.
   **Une phrase secrète perdue rend la table définitivement illisible.**
 
+**Plusieurs lots qui doivent rester reliés** (des mails traités en plusieurs fois, puis
+triés ensemble) : dans un même lot, une même valeur reçoit toujours le même substitut et
+deux valeurs différentes jamais le même. D'un lot à l'autre, ce n'est garanti qu'en
+**pseudonymisation**, en réutilisant la même table : en anonymisation, chaque exécution
+tire de nouveaux substituts. Sinon, traitez tous les fichiers en un seul lot.
+
 **Listes** (onglet Listes des Réglages) : les valeurs à ne jamais masquer (le nom de
 votre entreprise…) et les valeurs à toujours masquer (vos clients, vos projets…).
 

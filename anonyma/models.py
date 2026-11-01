@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from PIL import Image
 
     from anonyma.config import Config
+    from anonyma.store import MappingEntry
 
 
 def new_id() -> str:
@@ -514,6 +515,10 @@ class MappingStore(Protocol):
     def reverse(self, substitute: str) -> str | None: ...
 
     def used_substitutes(self) -> set[str]: ...
+
+    def items(self) -> Iterator[MappingEntry]:
+        """Every entry, decrypted (internal ones included)."""
+        ...
 
     def save_filename(self, batch_id: str, output_name: str, original: str) -> None:
         """Keep the original path behind a neutral output path."""

@@ -271,6 +271,10 @@ def _cluster_id(key: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+#: Initials a person signs with: « JB », « J.-B. », « H. », « GM ».
+_SIGN = re.compile(r"(?:[A-Z]\.?-?){1,4}")
+
+
 @dataclass(slots=True)
 class _PersonIndex:
     full: dict[str, str] = field(default_factory=dict)  # "given|surname" -> cluster
@@ -298,7 +302,7 @@ class _PersonIndex:
         if not any(is_initial(g) for g in person.given):
             given = "".join(p[0] for g in person.given for p in g.split("-") if p).upper()
             family = "".join(w[0] for w in person.surname if normalize(w) not in PARTICLES).upper()
-            for sign in {given + family, given if len(given) > 1 else ""} - {""}:
+            for sign in {given + family, given} - {""}:
                 self.signs.setdefault(sign, set()).add(cluster_id)
 
     def link(self, person: PersonName, value: str = "") -> str | None:
@@ -307,10 +311,14 @@ class _PersonIndex:
             owners = self.logins.get(compact.casefold(), set())
             if len(owners) == 1:
                 return next(iter(owners))
-            if compact.isalpha() and compact.isupper() and 2 <= len(compact) <= 4:
-                signers = self.signs.get(compact, set())
-                if len(signers) == 1:
-                    return next(iter(signers))
+            sign = _SIGN.fullmatch(compact)
+            if sign is not None:
+                letters = "".join(c for c in compact if c.isalpha())
+                # A single capital is an initial only with its dot (« H. »).
+                if len(letters) > 1 or "." in compact:
+                    signers = self.signs.get(letters, set())
+                    if len(signers) == 1:
+                        return next(iter(signers))
         if person.is_full:
             swapped = self.full.get(f"{person.surname_key}|{person.given_key}")
             exact = self.full.get(f"{person.given_key}|{person.surname_key}") or swapped
@@ -1095,6 +1103,29 @@ def _email_person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
         return
 
 
+def domain_organization(address: str) -> str | None:
+    """The organisation a mail domain spells, as it would be written in a signature:
+    ``maelle@altavia-conseil.fr`` -> « Altavia Conseil » (searched capitalized). The
+    domain alone is replaced in the address; the name must not stay in clear next to
+    it. Public mailboxes, ordinary words alone and short labels give nothing."""
+    from anonyma.substitutes import PUBLIC_MAIL_DOMAINS, split_domain
+
+    host = address.strip("<> ").rpartition("@")[2].casefold()
+    if not host or host in PUBLIC_MAIL_DOMAINS:
+        return None
+    label = split_domain(host)[1]
+    words = [w for w in re.split(r"[-_]", label) if w]
+    if not words or not all(w.isalpha() for w in words) or len(words) > 4:
+        return None
+    if len(words) == 1:
+        word = words[0]
+        if len(word) < 5 or is_common_word(word) or given_like(word):
+            return None
+    elif all(is_common_word(w) for w in words):
+        return None  # « mon-avocat.fr »
+    return " ".join(w.capitalize() for w in words)
+
+
 def propagate(
     documents: Sequence[Document],
     clusters: Mapping[str, EntityCluster],
@@ -1118,6 +1149,15 @@ def propagate(
         if c.entity_type == EntityType.PERSON
         for v in c.variants
     }
+    #: Values and words of the known names: a domain spelling one of them (``sorbel.fr``
+    #: next to « Sorbel ») already has its cluster.
+    known_words = {
+        normalize(w)
+        for c in clusters.values()
+        if c.entity_type in NAME_TYPES
+        for v in c.variants
+        for w in (v, *v.split())
+    }
     for cluster in clusters.values():
         if cluster.review is ReviewStatus.REJECTED:
             continue
@@ -1135,6 +1175,10 @@ def propagate(
             for form, cap in _email_person_forms(cluster):
                 if cluster_key(EntityType.PERSON, form) not in person_keys:
                     matcher.add(form, new, require_capital=cap)
+        if cluster.entity_type == EntityType.EMAIL:
+            org = domain_organization(cluster.canonical)
+            if org and not any(normalize(w) in known_words for w in (org, *org.split())):
+                matcher.add(org, _Target(None, EntityType.ORGANIZATION), require_capital=True)
     # A given name alone (« Maëlle ») goes to the only person of the batch bearing it;
     # when two people share it (two « Bérénice »), each lone mention is still masked,
     # as a person of its own that ``link_by_place`` then gives to the one of its file.

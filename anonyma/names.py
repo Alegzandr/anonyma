@@ -114,6 +114,16 @@ def tokens_of(value: str) -> list[str]:
     return _TOKEN.findall(value)
 
 
+#: Vietnamese family names, written first (« Nguyen Thi Lan »). Short ones that are
+#: also French words or particles (« Le », « Do », « Mai ») are left out.
+SURNAME_FIRST = frozenset(
+    {
+        "nguyen", "tran", "pham", "hoang", "huynh", "phan", "vu", "vo", "dang", "bui",
+        "ngo", "duong", "truong", "dinh", "trinh", "luong",
+    }
+)  # fmt: skip
+
+
 @lru_cache(maxsize=65536)
 def parse_person(value: str) -> PersonName | None:
     """Parse ``value`` as a person name; None if it holds no name token."""
@@ -159,6 +169,13 @@ def parse_person(value: str) -> PersonName | None:
                 surname, given = words[:k], words[k:]
             else:
                 given, surname = words[:first_upper], words[first_upper:]
+        elif normalize(words[0]) in SURNAME_FIRST and not is_initial(words[-1]):
+            # « Nguyen Thi Lan »: the family name comes first; « Lan » alone is the
+            # given name the person goes by.
+            surname_first = True
+            surname, given = words[:1], words[1:]
+        elif normalize(words[-1]) in SURNAME_FIRST and not is_initial(words[0]):
+            given, surname = words[:-1], words[-1:]  # « Thi Lan Nguyen », Western order
         else:
             first_is_name = given_like(words[0])
             last_is_name = given_like(words[-1])

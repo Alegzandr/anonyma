@@ -480,6 +480,16 @@ ré-identifiés.
 
 - **Dans le doute, Anonyma masque** : une seule détection suffit ; les entités
   incertaines sont masquées sans rien vous demander, jamais laissées visibles.
+- **Liens conservés en mode réaliste** : une même valeur reçoit le même substitut dans
+  tout le lot (en-têtes, corps, citations, pièces jointes, noms de fichiers), et deux
+  valeurs différentes jamais le même, composant par composant : deux noms de famille
+  différents ne partagent pas leur substitut, deux parents « Dupont » gardent le même.
+  Un prénom reste un prénom et un nom un nom, y compris pour les noms écrits nom puis
+  prénom (« Nguyen Thi Lan »). Le domaine d'une adresse et l'organisation qu'il désigne
+  (« Altavia Conseil » et `altavia-conseil.fr`, « Moreau Avocats » et
+  `moreau-avocats.fr`) reçoivent des substituts dérivés l'un de l'autre. D'un lot à
+  l'autre, ces garanties demandent la pseudonymisation avec la même table, qui garde
+  aussi les correspondances de chaque prénom et nom de famille.
 - **Prénoms et initiales** : dès qu'une personne est reconnue sous son nom complet,
   son prénom seul (« Merci Maëlle ») est masqué dans tout le lot, quelle que soit sa
   fréquence ; un prénom qui est aussi un mot courant (« pierre ») ne l'est en minuscules
@@ -518,7 +528,7 @@ ré-identifiés.
 - **PST restitué en dossier d'eml** : aucun outil libre ne sait réécrire un PST de façon
   fiable.
 - **Dates en mode réaliste** : toutes les dates du lot sont décalées d'un même nombre de
-  jours entiers (entre 30 et 400, toujours vers le passé), tiré au hasard et secret ;
+  jours entiers (entre 30 et 330, toujours vers le passé), tiré au hasard et secret ;
   l'heure et le fuseau horaire sont conservés. Les dates sans année (« reporté au
   9 octobre », « le 9/10 ») reçoivent le même décalage, calculé dans l'année la plus
   fréquente des dates du lot, et restent écrites sans année : aucune date d'origine ne

@@ -71,13 +71,16 @@ TAG_ID_DIGITS = "23456789"
 TAG_ID_LENGTH = 4
 #: Pseudo entity type used to persist batch parameters in the mapping store.
 PARAMETER_TYPE = "__parametre__"
+#: Substitutes of person name components (given names, surnames) in the table.
+COMPONENT_TYPE = "__composant__"
 DATE_SHIFT_KEY = "decalage_dates"
 #: Key of the per-date offsets of birth dates (hex), kept with the batch parameters.
 BIRTH_KEY = "cle_dates_naissance"
 #: Key of the GUIDs of rebuilt thread indexes (hex), kept with the batch parameters.
 THREAD_KEY = "cle_index_conversation"
 #: Bounds (days) of the offset of every date of a batch, and of a birth date.
-DATE_SHIFT_DAYS = (30, 400)
+#: Never close to a whole year: the day and month would come back almost unchanged.
+DATE_SHIFT_DAYS = (30, 330)
 BIRTH_SHIFT_DAYS = (30, 365)
 DATE_TYPES = frozenset({EntityType.DATE, EntityType.DATE_OF_BIRTH})
 MAX_ATTEMPTS = 25
@@ -413,11 +416,22 @@ class _Realistic:
         self.clusters = clusters
         self.table = table
         self.persons: dict[str, fk.FakePerson] = {}
+        #: Components of the person being assigned, registered once accepted.
+        self.pending: dict[str, list[tuple[str, str, str]]] = {}
         self.domains: dict[str, str] = {}
         self.sirens: dict[str, str] = {}
-        self.used: set[str] = {
-            normalize(s) for s in (self.store.used_substitutes() if self.store else ())
-        }
+        self.used: set[str] = set()
+        #: (kind « g »/« s », original key) -> substitute, and its reverse; kept in the
+        #: pseudonymisation table so that later batches follow them too.
+        self.component: dict[tuple[str, str], str] = {}
+        self.component_owner: dict[tuple[str, str], str] = {}
+        for entry in self.store.items() if self.store else ():
+            if entry.entity_type == COMPONENT_TYPE:
+                kind, _, original = entry.original.partition(":")
+                self.component.setdefault((kind, original), entry.substitute)
+                self.component_owner.setdefault((kind, normalize(entry.substitute)), original)
+            else:
+                self.used.add(normalize(entry.substitute))
         self.forbidden: set[str] = set()
         self.forbidden_tokens: set[str] = set()
         for cluster in clusters.values():
@@ -507,6 +521,8 @@ class _Realistic:
             self._tag(cluster)
             return
         base = result.pop("", None) or next(iter(result.values()))
+        if cluster.entity_type == EntityType.PERSON:
+            self.register_person(cluster)
         self.table.by_cluster[cluster.id] = base
         self.used.add(normalize(base))
 
@@ -611,6 +627,41 @@ class _Realistic:
                 return False
         return True
 
+    # -- one substitute per name component -----------------------------------------
+    #
+    # The links of the original must survive and no new one may appear: « Jean
+    # Dupont » and « Marie Dupont » share their substitute surname, « Karim
+    # Benhaddou » and « Maëlle Le Goff » never do; the same holds for given names.
+
+    def mapped(self, person: PersonName, fake: fk.FakePerson) -> fk.FakePerson:
+        """``fake`` with the substitutes already given to the components of ``person``."""
+        given = list(fake.given)
+        for i, name in enumerate(person.given):
+            known = self.component.get(("g", normalize(name)))
+            if known is not None and not is_initial(name) and i < len(given):
+                given[i] = known
+        surname = " ".join(w for w in person.surname if normalize(w) not in PARTICLES)
+        known_surname = self.component.get(("s", normalize(surname))) if surname else None
+        return fk.FakePerson(tuple(given), known_surname or fake.surname, fake.gender)
+
+    def injective(self, components: Sequence[tuple[str, str, str]]) -> bool:
+        """No substitute component already given to another original one."""
+        for kind, original, substitute in components:
+            owner = self.component_owner.get((kind, normalize(substitute)))
+            if owner is not None and owner != original:
+                return False
+        return True
+
+    def register_person(self, cluster: EntityCluster) -> None:
+        for kind, original, substitute in self.pending.pop(cluster.id, ()):
+            if (kind, original) in self.component:
+                continue
+            self.component[(kind, original)] = substitute
+            self.component_owner.setdefault((kind, normalize(substitute)), original)
+            if self.store:
+                key = f"{kind}:{original}"
+                self.store.save(COMPONENT_TYPE, key, key, substitute)
+
     def _date_shift(self) -> int:
         if self.r.batch_shift is not None:
             return self.r.batch_shift
@@ -696,25 +747,56 @@ class _Realistic:
                         self._org_labels.setdefault(whole, (key, prefix, True))
         label = fk.split_domain(domain)[1]
         found = self._org_labels.get(fk.compact_key(label))
-        head = ""
+        head = tail = ""
         if found is None and "-" in label:
-            # Only the core was detected (« Sorbel » of « Groupe Sorbel »): the other
-            # words of ``groupe-sorbel.fr`` are kept around its substitute.
+            # Only the core was detected (« Sorbel » of « Groupe Sorbel », « Altavia »
+            # of « Altavia Conseil »): the other words of ``groupe-sorbel.fr`` or
+            # ``altavia-conseil.fr`` are kept around its substitute.
             parts = label.split("-")
             for i in range(1, len(parts)):
                 found = self._org_labels.get(fk.compact_key("-".join(parts[i:])))
                 if found is not None and found[0] in self.cores:
                     head = " ".join(parts[:i])
                     break
+                found = self._org_labels.get(fk.compact_key("-".join(parts[:-i])))
+                if found is not None and found[0] in self.cores:
+                    tail = " ".join(parts[-i:])
+                    break
         if found is None or found[0] not in self.cores:
-            return None
+            return self._person_domain(label)
         key, prefix, full = found
         fake = fk.slug(f"{prefix} {self.cores[key]}" if full else self.cores[key])
-        if head:
-            fake = fk.slug(f"{head} {fake}")
+        if head or tail:
+            fake = fk.slug(f"{head} {fake} {tail}")
         if "-" not in label:
             fake = fake.replace("-", "")
         return (fake, f"o:{key}") if fake else None
+
+    def _person_domain(self, label: str) -> tuple[str, str] | None:
+        """(label, owner) of a domain named after a person of the batch
+        (``moreau-avocats.fr`` of Grégoire Moreau): its surname replaced by the
+        person's substitute surname (``hubert-avocats.fr`` next to « Hubert Avocats »),
+        the other words kept. Only a surname a single person bears."""
+        parts = label.split("-")
+        if len(parts) < 2:
+            return None  # ``moreau.fr`` alone may be anyone's
+        owners: dict[str, set[str]] = {}
+        for cluster_id in self.persons:
+            cluster = self.clusters.get(cluster_id)
+            person = parse_person(cluster.canonical) if cluster is not None else None
+            if person is None or not person.is_full:
+                continue
+            surname = fk.compact_key(" ".join(person.surname))
+            if len(surname) >= 3:
+                owners.setdefault(surname, set()).add(cluster_id)
+        for i, part in enumerate(parts):
+            bearers = owners.get(fk.compact_key(part), set())
+            if len(bearers) == 1:
+                (cluster_id,) = bearers
+                new = fk.slug(self.persons[cluster_id].surname)
+                if new:
+                    return "-".join([*parts[:i], new, *parts[i + 1 :]]), f"p:{cluster_id}"
+        return None
 
     def nir_birth(self, nir: str) -> tuple[int, int] | None:
         """(year, month) of the substitute birth date of the person a NIR belongs
@@ -784,6 +866,18 @@ def _natural(word: str) -> str:
     return word.title() if word.isupper() and len(word) > 1 else word
 
 
+def _components(person: PersonName, fake: fk.FakePerson) -> list[tuple[str, str, str]]:
+    """(kind, original key, substitute) of each given name and of the surname."""
+    out: list[tuple[str, str, str]] = []
+    for i, given in enumerate(person.given):
+        if not is_initial(given) and fake.given:
+            out.append(("g", normalize(given), fake.given[min(i, len(fake.given) - 1)]))
+    surname = " ".join(w for w in person.surname if normalize(w) not in PARTICLES)
+    if surname and fake.surname:
+        out.append(("s", normalize(surname), fake.surname))
+    return out
+
+
 def _person(
     st: _Realistic, cluster: EntityCluster, rng: random.Random, known: str | None
 ) -> dict[str, str]:
@@ -801,11 +895,14 @@ def _person(
         surname = " ".join(_natural(w) for w in parsed.surname) if parsed.surname else "Martin"
         fake = fk.FakePerson(given, surname, gender or "m")
     else:
-        fake = fk.fake_person(canonical, gender, rng)
+        fake = st.mapped(canonical, fk.fake_person(canonical, gender, rng))
         names = [normalize(fake.surname), *(normalize(g) for g in fake.given)]
         if any(n in st.forbidden_tokens or n in st.forbidden for n in names):
             raise _CollisionError
     st.persons[cluster.id] = fake
+    st.pending[cluster.id] = _components(canonical, fake)
+    if known is None and not st.injective(st.pending[cluster.id]):
+        raise _CollisionError
     out: dict[str, str] = {"": fk.render_person(canonical, fake) if known is None else known}
     if known is None and normalize(out[""]) in st.used:
         # Taken already: ``_acceptable`` would refuse it, so the variants (dozens for a
