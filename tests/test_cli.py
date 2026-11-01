@@ -1024,8 +1024,12 @@ def test_missing_language_engine_is_named_precisely(
 
     llm = registry.detector_classes()["llm"]
     monkeypatch.setattr(llm, "is_available", classmethod(lambda cls, config: False))
+    from anonyma import model_setup
+
     real = cli.engine_available
     monkeypatch.setattr(cli, "engine_available", lambda name: name != "llm" and real(name))
+    shipped = model_setup.engine_shipped
+    monkeypatch.setattr(model_setup, "engine_shipped", lambda name: name != "llm" and shipped(name))
     result = invoke(
         "analyser", corpus, "-p", "complet", "--liste-metier", business_list, "-j", "1", "-q"
     )

@@ -112,7 +112,7 @@ OPTIONAL = {
     "lxml": (False, False, False, None),  # PyInstaller hooks
     "xlrd": (True, False, False, None),
     "olefile": (True, False, False, None),
-    # Future LLM detector.
+    # Language model engine (profil complet), installed by `uv sync --extra llm`.
     "llama_cpp": (True, True, True, None),
     "tokenizers": (False, False, True, None),
 }

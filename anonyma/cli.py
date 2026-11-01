@@ -827,16 +827,21 @@ def progress_display(enabled: bool) -> Iterator[Callable[[ProgressEvent], None] 
 #: French names of detectors that may be missing (model not installed...).
 _DETECTOR_LABELS = {"gliner": "GLiNER", "llm": "modèle de langue"}
 #: Detectors whose engine (a library) may be left out of a build, and how to get it.
-_ENGINE_MISSING = {
-    "gliner": "moteur GLiNER (onnxruntime) absent",
-    "llm": "moteur du modèle de langue (llama-cpp-python) absent",
+_ENGINE_NAMES = {
+    "gliner": "moteur GLiNER (onnxruntime)",
+    "llm": "moteur du modèle de langue (llama-cpp-python)",
 }
+_ENGINE_MISSING = {name: f"{label} absent" for name, label in _ENGINE_NAMES.items()}
 _ENGINE_SOURCE_HINT = {"llm": "uv sync --extra llm"}
 
 
 def _engine_missing(name: str) -> str:
-    """Why a detector cannot run here and what would fix it: the portable build does
-    not ship llama-cpp-python (it is an optional extra of the sources)."""
+    """Why a detector cannot run here and what would fix it: an engine shipped but
+    refused by this machine, or an optional extra of the sources not installed."""
+    from anonyma import model_setup
+
+    if model_setup.engine_shipped(name):
+        return f"{_ENGINE_NAMES[name]} présent mais inutilisable sur ce poste"
     reason = _ENGINE_MISSING[name]
     if getattr(sys, "frozen", False):
         return f"{reason} de la version portable, qui ne permet pas ce détecteur"
@@ -2269,6 +2274,16 @@ def hardware_info(config_file: ConfigOpt = None) -> None:
     notes = list(info.notes)
     if not engine_available("llm"):
         rows["Modèle de langage recommandé"] = f"aucun ({_engine_missing('llm')})"
+    else:
+        from anonyma import llm
+
+        devices = llm.engine_devices()
+        if not devices.loaded:
+            rows["Calcul du modèle de langue"] = "indisponible (moteur sans processeur utilisable)"
+        elif devices.gpus:
+            rows["Calcul du modèle de langue"] = f"carte graphique ({', '.join(devices.gpus)})"
+        else:
+            rows["Calcul du modèle de langue"] = "processeur"
     if advised is not recommended:
         detector = _PROFILE_DETECTOR[recommended]
         notes.append(

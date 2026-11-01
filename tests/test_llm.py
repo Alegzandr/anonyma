@@ -821,3 +821,41 @@ def test_llm_runner_budget_fits_context(llm_config: Config) -> None:
     assert runner.window_tokens <= runner.text_budget
     window = "Le comité a examiné les points inscrits à l'ordre du jour. " * 20
     assert runner.count_tokens(window) > runner.window_tokens  # a real text gets cut
+
+
+def test_model_offloaded_to_the_gpu_only_when_it_fits() -> None:
+    from anonyma import llm
+    from anonyma.hardware import HardwareInfo
+
+    gib = 1024**3
+    card = HardwareInfo(ram_bytes=32 * gib, vram_bytes=16 * gib, os_name="Windows")
+    assert llm.offload_layers(9 * gib, card, gpu=True) == -1
+    assert llm.offload_layers(9 * gib, card, gpu=False) == 0  # no GPU backend loaded
+    small = HardwareInfo(ram_bytes=32 * gib, vram_bytes=4 * gib, os_name="Windows")
+    assert llm.offload_layers(9 * gib, small, gpu=True) == 0  # does not fit: processor
+    # Apple Silicon: the GPU shares the whole memory.
+    mac = HardwareInfo(ram_bytes=32 * gib, os_name="Darwin", machine="arm64")
+    assert llm.offload_layers(9 * gib, mac, gpu=True) == -1
+
+
+def test_engine_devices_without_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No engine (or one without the device entry points): nothing loaded, no GPU."""
+    import builtins
+
+    from anonyma import llm
+
+    real_import = builtins.__import__
+
+    def no_engine(name: str, *args: object, **kwargs: object) -> object:
+        if name.startswith("llama_cpp"):
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(builtins, "__import__", no_engine)
+    llm.engine_devices.cache_clear()
+    try:
+        assert llm.engine_devices() == llm.EngineDevices(loaded=False)
+        assert not llm.gpu_backend()
+    finally:
+        monkeypatch.undo()
+        llm.engine_devices.cache_clear()

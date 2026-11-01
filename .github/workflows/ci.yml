@@ -105,10 +105,49 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
-      - run: uv sync --locked
+      # The portable folder ships the language model engine (profil complet).
+      # Its prebuilt wheel is skipped: the engine is built from source below.
+      - run: uv sync --locked --extra llm --no-install-package llama-cpp-python
+      # The engine is rebuilt from source with its GPU backends: Vulkan (any recent
+      # GPU driver) as a module that simply does not load on a machine without it, and
+      # Metal on macOS. Portable CPU code (no instructions of the build machine).
+      - name: Vulkan SDK (GPU backend of the language model engine, Linux)
+        if: runner.os == 'Linux'
+        uses: jakoch/install-vulkan-sdk-action@d17de7e2f5e50efb5d2123efed18497d3c58c533 # v1.7.0
+        with:
+          vulkan_version: 1.4.363.0
+          cache: true
+      # The official installer, unattended (as llama.cpp's own CI does on Windows). It
+      # is a Qt application: the workflow's offscreen platform would make it hang.
+      - name: Vulkan SDK (GPU backend of the language model engine, Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 15
+        env:
+          VULKAN_VERSION: 1.4.357.0
+        run: |
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+          $installer = "$env:RUNNER_TEMP\VulkanSDK-Installer.exe"
+          curl.exe -fsSL -o $installer "https://sdk.lunarg.com/sdk/download/$env:VULKAN_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_VERSION.exe"
+          & $installer --accept-licenses --default-answer --confirm-command install
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_VERSION"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$env:VULKAN_VERSION\Bin"
+      - name: Language model engine with GPU backends
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            export CMAKE_ARGS="-DGGML_METAL=on -DGGML_NATIVE=off"
+          else
+            export CMAKE_ARGS="-DGGML_VULKAN=on -DGGML_BACKEND_DL=on -DGGML_NATIVE=off"
+          fi
+          version=$(uv run --no-sync python -c "import tomllib; print(next(p['version'] for p in tomllib.load(open('uv.lock', 'rb'))['package'] if p['name'] == 'llama-cpp-python'))")
+          uv pip install --reinstall --no-deps --no-binary llama-cpp-python \
+            --index-url https://pypi.org/simple "llama-cpp-python==$version"
+          uv run --no-sync python -c "import llama_cpp; print('llama-cpp', llama_cpp.__version__)"
       - name: Export GLiNER to ONNX (when the script exists)
         if: hashFiles('packaging/export_gliner_onnx.py') != ''
-        run: uv run python packaging/export_gliner_onnx.py
+        run: uv run --no-sync python packaging/export_gliner_onnx.py
       # Full build: LibreOffice (pinned, SHA-256 checked) is downloaded here, at build
       # time, and bundled in the portable folder; the cache avoids re-downloading it.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -116,7 +155,8 @@ jobs:
           path: build/libreoffice-cache
           key: libreoffice-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packaging/libreoffice_bundle.py') }}
       - name: Build, smoke-test (CLI batch, GUI start) and zip the portable folder
-        run: uv run python packaging/build.py
+        # --no-sync: keep the engine built above (a sync would reinstall the CPU wheel).
+        run: uv run --no-sync python packaging/build.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: anonyma-${{ runner.os }}-${{ runner.arch }}

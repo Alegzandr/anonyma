@@ -129,11 +129,16 @@ def _url_of(dist: metadata.Distribution) -> str:
     return urls[0].partition(",")[2].strip() if urls else ""
 
 
+#: Optional extras the portable build ships (the language model engine).
+SHIPPED_EXTRAS = frozenset({"llm"})
+
+
 def runtime_distributions(root: str = "anonyma") -> list[metadata.Distribution]:
-    """Runtime dependency closure of ``root`` (markers evaluated for this platform)."""
+    """Runtime dependency closure of ``root`` and of the extras the portable build
+    ships (markers evaluated for this platform; an extra not installed is skipped)."""
     environment = default_environment()
     seen: dict[str, metadata.Distribution] = {}
-    pending: list[tuple[str, frozenset[str]]] = [(root, frozenset())]
+    pending: list[tuple[str, frozenset[str]]] = [(root, SHIPPED_EXTRAS)]
     while pending:
         name, extras = pending.pop()
         key = canonicalize_name(name)

@@ -258,7 +258,25 @@ def smoke_test(folder: Path, with_libreoffice: bool) -> None:
         report = work / "rapport.json"
         run([str(exe), "--version"], env=env)
         run([str(exe), "formats"], env=env)
-        run([str(exe), "materiel"], env=env)
+        hardware = subprocess.run(
+            [str(exe), "materiel"],
+            env={**env, "COLUMNS": "240"},
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        ).stdout
+        compute = next((ln for ln in hardware.splitlines() if "Calcul du modèle" in ln), "")
+        if importlib.util.find_spec("llama_cpp") is not None and (
+            "llama-cpp" in hardware or not compute or "indisponible" in compute
+        ):
+            # The engine was bundled: the frozen folder must load it and its backends.
+            encoding = sys.stdout.encoding or "utf-8"
+            print(hardware.encode(encoding, "replace").decode(encoding), flush=True)
+            raise SystemExit("Test de fumée en échec : moteur du modèle de langue inutilisable.")
+        print("Moteurs des modèles : présents et chargés.", flush=True)
         command = [
             str(exe),
             "run",

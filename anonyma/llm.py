@@ -22,6 +22,7 @@ Mentions are never trusted: the detector keeps only text found again verbatim
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import json
 import os
@@ -31,11 +32,14 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from anonyma.logs import get_logger
 from anonyma.models import EntityType
 from anonyma.textutils import find_all
+
+if TYPE_CHECKING:
+    from anonyma.hardware import HardwareInfo
 
 log = get_logger("llm")
 
@@ -369,10 +373,100 @@ def _cpu_threads() -> tuple[int, int]:
     return max(1, physical or logical // 2), max(1, logical)
 
 
+#: Share of the graphics memory a model file may take to run wholly on the GPU (the
+#: rest holds the context, the compute buffers and what the GLiNER session uses).
+GPU_MEMORY_SHARE = 0.8
+
+
+#: ``ggml_backend_dev_type`` of the processor.
+_DEVICE_CPU = 0
+
+
+@dataclass(frozen=True, slots=True)
+class EngineDevices:
+    """Devices the language model engine can compute on."""
+
+    #: The engine loaded with at least one device (its processor backend included).
+    loaded: bool
+    #: Descriptions of the GPUs the model can be offloaded to.
+    gpus: tuple[str, ...] = ()
+
+
+@functools.cache
+def engine_devices() -> EngineDevices:
+    """Load the engine's backends shipped as modules (processor variants, Vulkan) and
+    list its devices. A backend whose driver is missing does not load and the engine
+    stays on the processor; an engine built without modules (processor only, Metal
+    built in) only lists what it holds."""
+    try:
+        import ctypes
+
+        import llama_cpp
+        import llama_cpp._ctypes_extensions as native
+        from llama_cpp import _ggml
+
+        folder = Path(_ggml.__file__).parent / "lib"
+        ggml = _ggml.libggml
+        ggml.ggml_backend_load_all_from_path.argtypes = [ctypes.c_char_p]
+        ggml.ggml_backend_load_all_from_path.restype = None
+        ggml.ggml_backend_load_all_from_path(str(folder).encode())
+        base = native.load_shared_library("ggml-base", folder)
+        ggml.ggml_backend_dev_count.restype = ctypes.c_size_t
+        ggml.ggml_backend_dev_get.argtypes = [ctypes.c_size_t]
+        ggml.ggml_backend_dev_get.restype = ctypes.c_void_p
+        base.ggml_backend_dev_type.argtypes = [ctypes.c_void_p]
+        base.ggml_backend_dev_type.restype = ctypes.c_int
+        base.ggml_backend_dev_description.argtypes = [ctypes.c_void_p]
+        base.ggml_backend_dev_description.restype = ctypes.c_char_p
+        count = int(ggml.ggml_backend_dev_count())
+        offload = bool(llama_cpp.llama_supports_gpu_offload())
+        gpus = []
+        for index in range(count):
+            device = ggml.ggml_backend_dev_get(index)
+            if base.ggml_backend_dev_type(device) == _DEVICE_CPU or not offload:
+                continue
+            raw = base.ggml_backend_dev_description(device) or b""
+            gpus.append(raw.decode("utf-8", "replace").strip() or "GPU")
+        return EngineDevices(loaded=count > 0, gpus=tuple(gpus))
+    except Exception as exc:  # no engine, or a library without these entry points
+        log.info("language model engine devices unknown: %s", type(exc).__name__)
+        return EngineDevices(loaded=False)
+
+
+def gpu_backend() -> bool:
+    """Whether a GPU can take the language model."""
+    return bool(engine_devices().gpus)
+
+
+def offload_layers(model_bytes: int, info: HardwareInfo, *, gpu: bool) -> int:
+    """Layers to offload: all of them (-1) when a GPU can take the model and the
+    model fits in its memory (unified memory on Apple Silicon), none otherwise."""
+    if not gpu or model_bytes <= 0:
+        return 0
+    unified = info.os_name == "Darwin" and info.machine == "arm64"
+    room = info.ram_bytes if unified else info.vram_bytes
+    return -1 if room and model_bytes <= room * GPU_MEMORY_SHARE else 0
+
+
+def gpu_layers(model_path: Path) -> int:
+    """:func:`offload_layers` for a model file on this machine."""
+    if not gpu_backend():
+        return 0
+    from anonyma import hardware
+
+    try:
+        size = model_path.stat().st_size
+    except OSError:
+        return 0
+    return offload_layers(size, hardware.detect_hardware(), gpu=True)
+
+
 class LlmRunner:
-    """One llama.cpp model instance (thread-safe, CPU), loaded once per process."""
+    """One llama.cpp model instance (thread-safe), loaded once per process: on the
+    GPU when it fits there, on the processor otherwise."""
 
     def __init__(self, model_path: Path, *, n_ctx: int = N_CTX, threads: int = 0) -> None:
+        offload = gpu_layers(Path(model_path))
         from llama_cpp import Llama
         from llama_cpp.llama_grammar import LlamaGrammar
 
@@ -383,10 +477,12 @@ class LlmRunner:
             n_batch=512,
             n_threads=threads or decode_threads,
             n_threads_batch=threads or batch_threads,
-            n_gpu_layers=0,
+            n_gpu_layers=offload,
             seed=SEED,
             verbose=False,
         )
+        self.on_gpu = offload != 0
+        log.info("language model loaded on %s", "GPU" if self.on_gpu else "CPU")
         self.n_ctx = n_ctx
         self.key = f"{Path(model_path).name}:v{PROMPT_VERSION}"
         #: Model calls made and their wall time (seconds): measured throughput.

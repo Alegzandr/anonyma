@@ -360,10 +360,12 @@ profil : `--profil` ponctuellement, ou `anonyma-cli config definir profile compl
 (`auto` pour revenir au choix automatique). Un détecteur dont le modèle n'est pas
 installé est ignoré et signalé ; si c'est son moteur qui manque (modèle de langue sans
 llama-cpp-python), le message le dit, et ni `materiel` ni le choix automatique ne
-conseillent un profil qui ne peut pas tourner. **Le dossier portable n'embarque pas
-llama-cpp-python** : le profil `complet` y tourne comme `standard`, même si `modeles
-liste` montre un modèle de langue installé et vérifié (la colonne État le signale).
-Depuis les sources, le moteur s'installe avec `uv sync --extra llm`.
+conseillent un profil qui ne peut pas tourner. Le dossier portable embarque
+llama-cpp-python. Le modèle de langue tourne sur la carte graphique quand il tient dans
+sa mémoire (Vulkan sous Windows et Linux, avec le pilote de la carte ; Metal sous
+macOS), sur le processeur sinon ; `materiel` indique lequel (« Calcul du modèle de
+langue »). Si la bibliothèque ne se charge pas sur un poste, le profil `complet` y
+tourne comme `standard` et aucun modèle de langue n'est téléchargé. Depuis les sources, le moteur s'installe avec `uv sync --extra llm`.
 
 Le modèle de langue lit les paragraphes rédigés (pas les valeurs de champs, en-têtes ou
 identifiants), seulement ceux où il peut ajouter quelque chose aux autres détecteurs,

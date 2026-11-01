@@ -3,8 +3,8 @@ needs, installs them, replaces outdated ones and removes what is no longer used.
 
 The user never picks a model. ``wanted_models`` derives the set from the hardware
 (``hardware.recommend_profile`` / ``recommend_llm``) and from the engines this build
-ships (the portable build has no llama-cpp-python, so no language model is fetched
-there). ``plan`` compares it with ``models/``:
+ships and that load on this machine (no language model is fetched where
+llama-cpp-python is missing or refused). ``plan`` compares it with ``models/``:
 
 * a wanted model missing, or installed with files that no longer match the catalogue
   (new revision after an update of Anonyma, altered file), is (re)installed;
@@ -19,6 +19,8 @@ next start tries again (partial downloads resume).
 
 from __future__ import annotations
 
+import functools
+import importlib
 import importlib.util
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -45,11 +47,33 @@ _ENGINE_MODULES = {"gliner": ("onnxruntime", "tokenizers"), "llm": ("llama_cpp",
 SetupProgress = Callable[[ModelSpec, int, int], None]
 
 
-def engine_available(detector: str) -> bool:
-    """Whether this build ships the library a model-based detector runs on (a model
-    may be installed while its engine is not: llama-cpp-python left out...)."""
+#: Engines loaded for real before being reported available: their native library may
+#: be shipped yet fail to load on this machine (missing instruction set, runtime).
+_LOADED_ENGINES = frozenset({"llm"})
+
+
+def engine_shipped(detector: str) -> bool:
+    """Whether the libraries of a model-based detector are present in this build."""
     modules = _ENGINE_MODULES.get(detector, ())
     return all(importlib.util.find_spec(m) is not None for m in modules)
+
+
+@functools.cache
+def engine_available(detector: str) -> bool:
+    """Whether this build ships the library a model-based detector runs on (a model
+    may be installed while its engine is not), and, for a native engine, whether it
+    loads on this machine: no model is fetched for an engine that cannot run."""
+    if not engine_shipped(detector):
+        return False
+    if detector not in _LOADED_ENGINES:
+        return True
+    try:
+        for module in _ENGINE_MODULES[detector]:
+            importlib.import_module(module)
+    except Exception as exc:  # native library refused: OSError, RuntimeError...
+        log.warning("engine %s does not load: %s", detector, type(exc).__name__)
+        return False
+    return True
 
 
 def wanted_models(info: hardware.HardwareInfo) -> list[ModelSpec]:
@@ -192,6 +216,7 @@ __all__ = [
     "SetupProgress",
     "SetupResult",
     "engine_available",
+    "engine_shipped",
     "import_from",
     "plan",
     "run",

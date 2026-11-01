@@ -159,3 +159,23 @@ def test_offline_import_from_another_models_folder(
         ModelManager(tmp_path / "vide"), model_setup.plan(manager, _info(32)), [tmp_path / "x"]
     )
     assert missing.errors
+
+
+def test_native_engine_that_does_not_load_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A language model engine shipped but refused by the machine: no language model
+    is wanted, and the CLI says why."""
+    from anonyma import cli
+
+    monkeypatch.setattr(model_setup, "engine_shipped", lambda _name: True)
+
+    def refuse(name: str) -> object:
+        raise OSError("bibliothèque native refusée")
+
+    monkeypatch.setattr(model_setup.importlib, "import_module", refuse)
+    model_setup.engine_available.cache_clear()
+    try:
+        assert not model_setup.engine_available("llm")
+        assert model_setup.engine_available("gliner")  # not loaded, only looked up
+        assert "inutilisable sur ce poste" in cli._engine_missing("llm")
+    finally:
+        model_setup.engine_available.cache_clear()

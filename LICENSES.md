@@ -81,6 +81,7 @@ Les modèles ne sont pas inclus dans l'archive : ils sont téléchargés à la d
 | colorclass | 2.2.2 | MIT | https://github.com/matthewdeanmartin/colorclass |
 | compressed-rtf | 1.0.7 | MIT | https://github.com/delimitry/compressed_rtf |
 | cryptography | 50.0.2 | Apache-2.0 OR BSD-3-Clause | https://github.com/pyca/cryptography |
+| diskcache | 5.6.3 | Apache 2.0 | http://www.grantjenks.com/docs/diskcache/ |
 | easygui | 0.98.3 | BSD | https://github.com/robertlugg/easygui |
 | ebcdic | 2.0.1 | BSD-2-Clause | https://pypi.python.org/pypi/ebcdic |
 | extract-msg | 0.58.0 | GPL | https://github.com/TeamMsgExtractor/msg-extractor |
@@ -95,10 +96,13 @@ Les modèles ne sont pas inclus dans l'archive : ils sont téléchargés à la d
 | huggingface_hub | 2.4.0 | Apache-2.0 | https://github.com/huggingface/huggingface_hub |
 | idna | 3.20 | BSD-3-Clause | https://github.com/kjd/idna |
 | inflate64 | 1.0.4 | LGPL-2.1-or-later | https://inflate64.readthedocs.io/ |
+| Jinja2 | 3.1.6 | BSD License | https://github.com/pallets/jinja/ |
 | lark | 1.3.1 | MIT | https://github.com/lark-parser/lark |
 | libpff-python | 20260926 | LGPL-3.0-or-later | https://github.com/libyal/libpff |
+| llama_cpp_python | 0.3.36 | MIT | https://github.com/abetlen/llama-cpp-python |
 | lxml | 6.1.3 | BSD-3-Clause | https://lxml.de/ |
 | markdown-it-py | 4.2.0 | MIT License | https://github.com/executablebooks/markdown-it-py |
+| MarkupSafe | 3.0.4 | BSD-3-Clause | https://github.com/pallets/markupsafe/ |
 | mdurl | 0.1.2 | MIT License | https://github.com/executablebooks/mdurl |
 | mpmath | 1.3.0 | BSD | http://mpmath.org/ |
 | msoffcrypto-tool | 6.0.0 | MIT | https://github.com/nolze/msoffcrypto-tool |

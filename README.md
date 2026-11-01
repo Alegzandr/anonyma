@@ -103,8 +103,9 @@ plus il est lent.
 Anonyma choisit le profil selon votre machine et installe seul les modèles d'IA qui
 lui conviennent, en arrière-plan au démarrage : rien à choisir. Après une mise à jour,
 il remplace les modèles périmés et supprime ceux qui ne servent plus. L'onglet
-**Application** des Réglages montre où en est l'installation. Le profil Complet n'est
-pas disponible dans la version portable : il y fonctionne comme Standard.
+**Application** des Réglages montre où en est l'installation. Le profil Complet
+télécharge un modèle de langue de plusieurs gigaoctets et rend les traitements bien plus
+longs.
 
 **Remplacement** : comment les données sont remplacées.
 - **Réaliste** (par défaut) : `Jean Dupont` devient un autre nom vraisemblable, les
