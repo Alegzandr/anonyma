@@ -35,7 +35,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
-from anonyma import checksums
+from anonyma import checksums, threadindex
 from anonyma import substitutes as fk
 from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
@@ -72,6 +72,8 @@ PARAMETER_TYPE = "__parametre__"
 DATE_SHIFT_KEY = "decalage_dates"
 #: Key of the per-date offsets of birth dates (hex), kept with the batch parameters.
 BIRTH_KEY = "cle_dates_naissance"
+#: Key of the GUIDs of rebuilt thread indexes (hex), kept with the batch parameters.
+THREAD_KEY = "cle_index_conversation"
 #: Bounds (days) of the offset of every date of a batch, and of a birth date.
 DATE_SHIFT_DAYS = (30, 400)
 BIRTH_SHIFT_DAYS = (30, 365)
@@ -92,7 +94,7 @@ class SubstitutionTable:
     by_surface: dict[tuple[str, str], str] = field(default_factory=dict, repr=False)
 
     def substitute_for(self, entity: Entity) -> str:
-        if self.mode is ReplacementMode.BLACKOUT:
+        if self.mode is ReplacementMode.BLACKOUT and entity.entity_type != EntityType.THREAD_INDEX:
             return BLACKOUT_CHAR * max(len(entity.value), 1)
         assert entity.cluster_id is not None
         exact = self.by_surface.get((entity.cluster_id, entity.value))
@@ -113,6 +115,10 @@ class SubstitutionTable:
         )
 
 
+#: Entities that give the substitute of a span they cover exactly.
+_WHOLE_TYPES = frozenset({EntityType.BARCODE, EntityType.THREAD_INDEX})
+
+
 class _CollisionError(Exception):
     pass
 
@@ -126,6 +132,39 @@ class Replacer:
         self.config = config
         self.store = store if config.regime is Regime.PSEUDONYMIZATION else None
         self._salt = secrets.token_bytes(32)
+        self._secrets: dict[str, bytes] = {}
+
+    def secret(self, name: str) -> bytes:
+        """A batch key: kept in the mapping table in pseudonymization (the same from
+        one run to the next), drawn for this batch otherwise."""
+        if name in self._secrets:
+            return self._secrets[name]
+        key: bytes | None = None
+        known = self.store.lookup(PARAMETER_TYPE, name) if self.store else None
+        if known:
+            try:
+                key = bytes.fromhex(known)
+            except ValueError:
+                key = None
+        if not key:
+            key = secrets.token_bytes(32)
+            if self.store:
+                self.store.save(PARAMETER_TYPE, name, name, key.hex())
+        self._secrets[name] = key
+        return key
+
+    def thread_indexes(
+        self, cluster: EntityCluster, table: SubstitutionTable, shift: int | None
+    ) -> None:
+        """Rebuilt thread indexes for ``cluster`` (every mode: see
+        :mod:`anonyma.threadindex`); ``shift``: date offset, None for the neutral date."""
+        key = self.secret(THREAD_KEY)
+        base = threadindex.rebuild_text(cluster.canonical, key, shift)
+        table.by_cluster[cluster.id] = base or cluster.canonical
+        for variant in cluster.variants:
+            rebuilt = threadindex.rebuild_text(variant, key, shift)
+            if rebuilt is not None:
+                table.by_surface[(cluster.id, variant)] = rebuilt
 
     def assign(
         self,
@@ -161,6 +200,9 @@ class Replacer:
     def _tags(self, ordered: Sequence[EntityCluster], table: SubstitutionTable) -> None:
         tags = self.tag_allocator()
         for cluster in ordered:
+            if cluster.entity_type == EntityType.THREAD_INDEX:
+                self.thread_indexes(cluster, table, None)  # rebuilt, never a tag
+                continue
             tag = tags.tag_for(cluster)
             table.by_cluster[cluster.id] = tag
             if cluster.entity_type == EntityType.PERSON:
@@ -376,6 +418,10 @@ class _Realistic:
             self._assign(cluster)
 
     def _assign(self, cluster: EntityCluster) -> None:
+        if cluster.entity_type == EntityType.THREAD_INDEX:
+            # Recomputed from the batch offset and key: consistent in every format.
+            self.r.thread_indexes(cluster, self.table, self.shift)
+            return
         known = self.r.stored(cluster)
         generator = GENERATORS.get(cluster.entity_type)
         if generator is None:
@@ -454,17 +500,7 @@ class _Realistic:
         return shift
 
     def _birth_key(self) -> bytes:
-        if self.store:
-            known = self.store.lookup(PARAMETER_TYPE, BIRTH_KEY)
-            if known:
-                try:
-                    return bytes.fromhex(known)
-                except ValueError:
-                    pass
-        key = secrets.token_bytes(32)
-        if self.store:
-            self.store.save(PARAMETER_TYPE, BIRTH_KEY, BIRTH_KEY, key.hex())
-        return key
+        return self.r.secret(BIRTH_KEY)
 
     def date_shift(self, entity_type: str, value: str) -> int:
         """Days ``value`` moves by: the batch offset, or for a birth date its own
@@ -546,6 +582,12 @@ def _same_for_all(cluster: EntityCluster, base: str) -> dict[str, str]:
     return out
 
 
+def _natural(word: str) -> str:
+    """``CLÉMENT`` -> ``Clément``, ``LAGARDE-MOREAU`` -> ``Lagarde-Moreau``; a word
+    already in mixed or lower case (``de``, ``McLeod``) is kept."""
+    return word.title() if word.isupper() and len(word) > 1 else word
+
+
 def _person(
     st: _Realistic, cluster: EntityCluster, rng: random.Random, known: str | None
 ) -> dict[str, str]:
@@ -557,10 +599,11 @@ def _person(
         parsed = parse_person(known)
         if parsed is None:
             return _same_for_all(cluster, known)
-        given = tuple(g for g in parsed.given if not is_initial(g)) or ("Camille",)
-        fake = fk.FakePerson(
-            given, " ".join(parsed.surname) if parsed.surname else "Martin", gender or "m"
-        )
+        # The stored form carries the case of the mention it was made for
+        # (« CLÉMENT Hubert »): every mention gets its own case back (H3).
+        given = tuple(_natural(g) for g in parsed.given if not is_initial(g)) or ("Camille",)
+        surname = " ".join(_natural(w) for w in parsed.surname) if parsed.surname else "Martin"
+        fake = fk.FakePerson(given, surname, gender or "m")
     else:
         fake = fk.fake_person(canonical, gender, rng)
         names = [normalize(fake.surname), *(normalize(g) for g in fake.given)]
@@ -596,6 +639,10 @@ def _email(
             template = match_login_template(local, person) if person else None
             if template is not None:
                 fake_local = fk.login_like(template, local, st.persons[owner])
+            elif person is not None and not generic_local(local):
+                # Its owner is known (« Thi Lan Lambert <thi-lan@…> ») but the local
+                # part follows no template: still a form of the same substitute.
+                fake_local = fk.local_like(local, person, st.persons[owner])
         if fake_local is None and generic_local(local):
             # A function mailbox (offres@, contact@) names no one: it stays one, so
             # that its display name (« Promo Cartouches ») reads as before.
@@ -793,8 +840,9 @@ def build_plan(
             continue
         # Last guard of :mod:`anonyma.atomic`: no replacement cuts a GUID or a token.
         items = [e for e in (_fitted(e, text, atomic) for e in found) if e is not None]
-        # On equal spans a whole-code entity gives the substitute ([CODE_BARRES_001]).
-        items.sort(key=lambda e: (e.start, -(e.end - e.start), e.entity_type != EntityType.BARCODE))
+        # On equal spans a whole-code entity gives the substitute ([CODE_BARRES_001]),
+        # and a thread index its rebuilt value (never a tag for an opaque token).
+        items.sort(key=lambda e: (e.start, -(e.end - e.start), e.entity_type not in _WHOLE_TYPES))
         merged: list[tuple[int, int, Entity]] = []
         for e in items:
             if e.start < 0 or e.end > len(text) or e.start >= e.end:
@@ -809,7 +857,11 @@ def build_plan(
         reps = []
         for start, end, head in merged:
             substitute = table.substitute_for(head)
-            if table.mode is ReplacementMode.BLACKOUT:
+            rebuilt = head.entity_type == EntityType.THREAD_INDEX and (start, end) == (
+                head.start,
+                head.end,
+            )
+            if table.mode is ReplacementMode.BLACKOUT and not rebuilt:
                 substitute = BLACKOUT_CHAR * max(end - start, 1)
             elif (start, end) != (head.start, head.end):
                 substitute = _extend(text, start, end, head, substitute)

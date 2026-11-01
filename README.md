@@ -495,11 +495,24 @@ ré-identifiés.
   balises et masquage, les dates des en-têtes, des propriétés msg et du `Thread-Index`
   deviennent la date neutre du 1er mars 1970. La date du séparateur `From ` d'une boîte
   mbox n'est jamais conservée : elle reprend la date anonymisée du message.
-- **`Thread-Index` régénéré** : l'en-tête Outlook des fils de discussion est reconstruit
-  à partir de la date de début anonymisée et d'un identifiant recalculé ; une réponse
-  prolonge toujours l'index du message auquel elle répond. Un `Thread-Index` invalide, ou
-  dont la date n'a pas été masquée, est supprimé. La propriété binaire équivalente des msg
+- **Index de conversation reconstruits** : l'index Outlook d'un fil de discussion
+  (en-tête `Thread-Index` en base64, colonne `conversationindex` d'un export Dynamics 365
+  en hexadécimal, ou toute autre valeur qui se décode comme tel, dans un JSON, un CSV, un
+  XML ou un texte) contient la date réelle de début du fil : laissé tel quel, il
+  trahirait le décalage secret des dates. Il est donc toujours reconstruit, dans tous les
+  modes et même avec `--conserver-identifiants` : date de début décalée comme les autres
+  dates (date neutre du 1er mars 1970 en modes balises et masquage), identifiant recalculé
+  avec une clé du lot (gardée dans la table en pseudonymisation), encodage d'origine
+  conservé. Le même index reçoit la même valeur dans l'eml, le JSON et le CSV, et une
+  réponse prolonge toujours l'index du message auquel elle répond. Un `Thread-Index` que
+  rien n'a reconstruit est supprimé ; un index d'origine retrouvé dans un fichier produit
+  est un résidu certain. La propriété binaire équivalente des msg
   (`PR_CONVERSATION_INDEX`) reste supprimée.
+- **Chaque fichier « À revoir » dit pourquoi** : le bilan `--json` (`documents[].problemes`,
+  code `review.uncertain`) et les rapports donnent le nombre d'entités incertaines, leurs
+  types et les zones concernées (jamais les valeurs), par exemple « 1 entité incertaine
+  (Personne) masquée par précaution : à confirmer ou rejeter dans la revue avant
+  diffusion ; zones : « $.*[3].* » ».
 
 ## Licences
 

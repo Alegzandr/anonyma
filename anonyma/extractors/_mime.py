@@ -607,13 +607,11 @@ def thread_index_line(
     replacements: Sequence[Replacement],
     plan: ReplacementPlan,
 ) -> str | None:
-    """New value of a ``Thread-Index`` header, or None to drop it: rebuilt only when
-    its exposed start time was replaced (never copied as is)."""
+    """New value of a ``Thread-Index`` header, or None to drop it: the index the
+    replacer rebuilt, never the original value."""
     if segment is None or not replacements:
         return None
-    return safe_thread_index(
-        decode_header_value(value), plan.apply(segment), [r.cluster_id for r in replacements]
-    )
+    return safe_thread_index(decode_header_value(value), plan.apply(segment))
 
 
 def cid_values(source: HtmlSource, content_ids: Mapping[str, str]) -> dict[int, str]:

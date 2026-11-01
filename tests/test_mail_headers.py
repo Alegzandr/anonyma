@@ -454,7 +454,7 @@ def test_msg_dates_are_exposed(tmp_path: Path, canary_config: Config) -> None:
 def test_msg_dates_follow_the_date_policy(
     tmp_path: Path, canary_config: Config, mode: ReplacementMode
 ) -> None:
-    from anonyma.extractors._mailheaders import thread_index_time
+    from anonyma.threadindex import start_time
 
     src = tmp_path / "in"
     src.mkdir()
@@ -479,8 +479,12 @@ def test_msg_dates_follow_the_date_policy(
         assert times[0x0E06] - times[0x0039] == DELIVERY - SUBMIT  # interval kept
         assert times[0x3007] == times[0x0039]
         assert header_date.timestamp() == (times[0x0039] / 10**7) - 11644473600
-        assert thread_index_time(header_index) != ""
+        start, original = start_time(header_index), start_time("AQHdOenojzqcIdTmS3+aHC49T1prfA==")
+        assert start is not None and original is not None
+        moved = (start - original).total_seconds() - shift / 10**7
+        assert abs(moved) < 2  # the thread start moved like the dates
     else:
         neutral = datetime(1970, 3, 1, tzinfo=UTC) - datetime(1601, 1, 1, tzinfo=UTC)
         assert set(times.values()) == {int(neutral.total_seconds()) * 10**7}
-        assert header_date.year == 1970 and thread_index_time(header_index) == ""
+        start = start_time(header_index)
+        assert header_date.year == 1970 and start is not None and start.year == 1970

@@ -441,3 +441,25 @@ def test_realistic_case_is_per_word_for_names_only() -> None:
     )
     assert _case_of("ADRESSE", "12 RUE DES LILAS", "46 rue Colas") == "46 RUE COLAS"
     assert _case_of("PERSONNE", "Claire FONTAINE", "Paul Martin") == "Paul MARTIN"
+
+
+def test_stored_person_takes_the_case_of_each_mention() -> None:
+    """Same table, another run (or profile): the stored « CLÉMENT Hubert » was made for
+    « FONTAINE Régis »; « Régis Fontaine » must read « Hubert Clément », not « Hubert
+    CLÉMENT » (D365: « Tylio Collin » / « Tylio COLLIN » between leger and standard)."""
+    store = InMemoryMappingStore()
+    cfg = Config(mode=ReplacementMode.REALISTIC, regime=Regime.PSEUDONYMIZATION)
+
+    def run(*values: str) -> dict[str, str]:
+        entities = [ent(v, "PERSONNE", f"s{i}") for i, v in enumerate(values)]
+        kept, clusters = resolve(entities, cfg)
+        table = Replacer(cfg, store).assign(clusters, kept)
+        return {e.value: table.substitute_for(e) for e in kept}
+
+    [upper] = run("FONTAINE Régis").values()
+    surname, given = upper.split(" ", 1)
+    assert surname.isupper()
+    again = run("Régis Fontaine", "Régis FONTAINE", "Régis")
+    assert again["Régis Fontaine"] == f"{given} {surname.title()}"
+    assert again["Régis FONTAINE"] == f"{given} {surname}"
+    assert again["Régis"] == given

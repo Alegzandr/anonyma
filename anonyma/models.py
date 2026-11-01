@@ -92,6 +92,7 @@ class EntityType(enum.StrEnum):
     CASE_NUMBER = "NUMERO_DOSSIER"
     USERNAME = "IDENTIFIANT"
     MESSAGE_ID = "ID_MESSAGE"
+    THREAD_INDEX = "INDEX_CONVERSATION"  # Outlook thread index: always rebuilt
     INDIRECT = "IDENTIFIANT_INDIRECT"
     PROPER_NOUN = "NOM_PROPRE"  # paranoid mode
     SUSPICIOUS_TOKEN = "SEQUENCE_SUSPECTE"  # paranoid mode
