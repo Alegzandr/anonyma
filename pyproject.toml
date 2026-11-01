@@ -1,6 +1,6 @@
 [project]
 name = "anonyma"
-version = "0.4.1"
+version = "0.5.0"
 description = "Anonymisation locale et en masse de documents de tous formats"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
