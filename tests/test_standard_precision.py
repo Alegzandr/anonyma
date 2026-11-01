@@ -299,3 +299,17 @@ def test_team_mailbox_gets_no_person_local_part(tmp_path: Path) -> None:
     Pipeline(Config(mode=ReplacementMode.REALISTIC, workers=1)).run([source], tmp_path / "out")
     text = next((tmp_path / "out").rglob("a.txt")).read_text(encoding="utf-8")
     assert "irve@" not in text and "boite" in text
+
+
+def test_function_mailbox_keeps_its_local_part_next_to_team_names(tmp_path: Path) -> None:
+    from anonyma.models import ReplacementMode
+    from anonyma.pipeline import Pipeline
+
+    source = tmp_path / "in"
+    source.mkdir()
+    (source / "a.txt").write_text(
+        "Le Service Client Martinod répond à service-client@hexagone.example.", "utf-8"
+    )
+    Pipeline(Config(mode=ReplacementMode.REALISTIC, workers=1)).run([source], tmp_path / "out")
+    text = next((tmp_path / "out").rglob("a.txt")).read_text(encoding="utf-8")
+    assert "service-client@" in text and "[EMAIL" not in text.upper()

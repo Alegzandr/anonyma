@@ -477,6 +477,14 @@ class _Realistic:
             # A shifted date may equal another date of the batch: the offset is what
             # hides them, and every rendering of an instant must follow it.
             return True
+        # Parts of the original kept on purpose (``service-client@`` of a function
+        # mailbox) are no reuse of a name.
+        own: set[str] = set()
+        if cluster.entity_type == EntityType.EMAIL:
+            for v in cluster.variants:
+                local = v.strip("<> ").split("@")[0]
+                if generic_local(local):
+                    own.update(normalize(p) for p in re.split(r"[-._+]", local) if p)
         for substitute in result.values():
             key = normalize(substitute)
             if key in self.forbidden or key in self.used:
@@ -486,7 +494,11 @@ class _Realistic:
             # Parts too: « Renaud-sur-François », ``monique.girard@…``, ``@elodie_david``
             # must not reuse « Renaud », « Girard », « Élodie ».
             parts = [p for t in tokens_of(substitute) for p in (t, *re.split(r"[-._@]", t))]
-            if any(normalize(p.strip(".")) in self.forbidden_tokens for p in parts):
+            if any(
+                normalize(p.strip(".")) in self.forbidden_tokens
+                for p in parts
+                if normalize(p.strip(".")) not in own
+            ):
                 return False
         return True
 
