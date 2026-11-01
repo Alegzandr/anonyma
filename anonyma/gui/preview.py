@@ -30,7 +30,7 @@ from anonyma.models import (
     ReviewDecisions,
     ReviewStatus,
 )
-from anonyma.pipeline import BatchAnalysis, resolve_decisions
+from anonyma.pipeline import BatchAnalysis, open_links, resolve_decisions
 from anonyma.replacer import BLACKOUT_CHAR, Replacer, SubstitutionTable, build_plan
 from anonyma.textutils import normalize
 
@@ -102,7 +102,13 @@ def compute_effective(
     preview_config = replace(
         config, regime=Regime.ANONYMIZATION, mode=mode if mode is not None else config.mode
     )
-    table = Replacer(preview_config, None).assign(active, entities)
+    # The same fake values as the output: the link memory of realistic anonymisation.
+    links = open_links(replace(config, mode=preview_config.mode))
+    try:
+        table = Replacer(preview_config, links).assign(active, entities)
+    finally:
+        if links is not None:
+            links.close()
     state = EffectiveState(entities, clusters, active, table)
     for e in entities:
         state.by_document.setdefault(e.document_id, []).append(e)
@@ -394,7 +400,3 @@ def snippet(
     if text[end : end + 1].isspace() and after:
         after = " " + after
     return before, " ".join(text[start:end].split()), after
-
-
-def search_key(value: str) -> str:
-    return normalize(value)

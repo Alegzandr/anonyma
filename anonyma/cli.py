@@ -1152,8 +1152,8 @@ ModeOpt = Annotated[
     typer.Option(
         "--mode",
         "-m",
-        help="Remplacement : balises ([PERSONNE_001]), realiste (substituts vraisemblables) "
-        "ou masquage (caviardage).",
+        help="Remplacement : realiste (substituts vraisemblables, par défaut), balises "
+        "([PERSONNE_001]) ou masquage (caviardage).",
         metavar="MODE",
         show_default=False,
         rich_help_panel=PANEL_REPLACEMENT,
@@ -2146,6 +2146,29 @@ def models_remove(
     except ModelError as exc:
         fail(str(exc), EXIT_PARTIAL)
     out.print(f"Modèle « {model_id} » supprimé.")
+
+
+# ---------------------------------------------------------------------------
+# nouveaux-substituts
+# ---------------------------------------------------------------------------
+
+
+@app.command("nouveaux-substituts")
+def new_substitutes(
+    yes: Annotated[bool, typer.Option("--oui", "-y", help="Ne pas demander confirmation.")] = False,
+) -> None:
+    """Repartir avec de nouveaux faux noms : les lots suivants n'auront plus de lien avec
+    les précédents (mode réaliste, régime d'anonymisation)."""
+    from anonyma import paths
+    from anonyma.store import LinkMemory
+
+    question = "Oublier les substituts des lots précédents ?"
+    if not yes and not confirm_or_fail(question, default=False):
+        fail("Rien n'a été oublié.", EXIT_PARTIAL)
+    if LinkMemory.forget(paths.links_path()):
+        out.print("Substituts oubliés : les prochains lots recevront de nouveaux faux noms.")
+    else:
+        out.print("Aucun substitut à oublier.")
 
 
 # ---------------------------------------------------------------------------

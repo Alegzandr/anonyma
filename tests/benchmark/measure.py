@@ -668,6 +668,10 @@ def run_anonyma(
         str(output),
         "--profil",
         profile,
+        # Detection is measured; tags keep the results comparable from one version to
+        # the next (realistic mode is the application's default since 0.5.0).
+        "--mode",
+        "balises",
         "--rapport",
         str(report),
         "--organisations-blanches",

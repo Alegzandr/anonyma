@@ -20,13 +20,6 @@ PROFILE_LABELS: dict[Profile | None, str] = {
     Profile.FULL: "Complet",
 }
 
-PROFILE_GLOSSES: dict[Profile | None, str] = {
-    None: "Choisi selon la mémoire, le processeur et la carte graphique de ce poste.",
-    Profile.LIGHT: "Règles et listes : rapide, sans modèle.",
-    Profile.STANDARD: "Règles et listes, plus le modèle GLiNER pour les noms et les lieux.",
-    Profile.FULL: "Standard, plus un modèle de langue pour les cas ambigus.",
-}
-
 PROFILE_SHORT: dict[Profile, str] = {
     Profile.LIGHT: "Léger",
     Profile.STANDARD: "Standard",
@@ -34,14 +27,16 @@ PROFILE_SHORT: dict[Profile, str] = {
 }
 
 MODE_LABELS: dict[ReplacementMode, str] = {
-    ReplacementMode.TAG: "Balises",
     ReplacementMode.REALISTIC: "Réaliste",
+    ReplacementMode.TAG: "Balises",
     ReplacementMode.BLACKOUT: "Masquage",
 }
 
 MODE_GLOSSES: dict[ReplacementMode, str] = {
     ReplacementMode.TAG: "Chaque valeur devient une balise, par exemple [PERSONNE_001].",
-    ReplacementMode.REALISTIC: "Chaque valeur devient un substitut vraisemblable du même type.",
+    ReplacementMode.REALISTIC: (
+        "Chaque valeur devient un faux élément vraisemblable, le même d'un lot à l'autre."
+    ),
     ReplacementMode.BLACKOUT: "Chaque valeur est caviardée.",
 }
 

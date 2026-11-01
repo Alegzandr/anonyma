@@ -91,6 +91,7 @@ from anonyma.resolver import (
     resolve,
     searched_variant,
 )
+from anonyma.store import LinkMemory
 from anonyma.structure import PROPERTY as STRUCTURE
 from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import find_all, normalize, safe_filename, safe_suffix
@@ -775,8 +776,6 @@ NAME_LIKE_KINDS = frozenset(
 NEUTRAL_DOCUMENT = "document"
 NEUTRAL_CHILD = "piece_jointe"
 NEUTRAL_FOLDER = "dossier"
-#: Entity type under which neutral file names are kept in the encrypted store.
-FILENAME_STORE_TYPE = "NOM_FICHIER"
 
 
 def _name_view(segment: Segment) -> Segment:
@@ -787,6 +786,16 @@ def _name_view(segment: Segment) -> Segment:
     if dot and stem and "/" not in text[len(stem) :]:
         text = f"{stem} {text[len(stem) + 1 :]}"
     return replace(segment, text=text)
+
+
+def open_links(config: Config) -> LinkMemory | None:
+    """The link memory of realistic anonymisation (:class:`anonyma.store.LinkMemory`):
+    the same value gets the same substitute from one batch to the next, with no
+    passphrase and no original value kept. Pseudonymisation uses its table instead;
+    tags stay numbered per batch (``[PERSONNE_001]``)."""
+    if config.regime is not Regime.ANONYMIZATION or config.mode is not ReplacementMode.REALISTIC:
+        return None
+    return LinkMemory.open(paths.links_path())
 
 
 def propagate_names(
@@ -1409,7 +1418,6 @@ class LlmEstimate:
     #: Upper bound: unique paragraphs extrapolated linearly by size, as if no file
     #: repeated another (the sample cannot see every repetition).
     max_minutes: float = 0.0
-    max_calls: int = 0
 
     @property
     def exact(self) -> bool:
@@ -1547,7 +1555,6 @@ class Pipeline:
             sampled,
             len(files),
             upper * seconds / 60,
-            round(upper),
         )
 
     # -- execution helpers --------------------------------------------------
@@ -1852,7 +1859,7 @@ class Pipeline:
                 todo += llm_detector.pending(view, prior, seen)
         calls = llm_module.estimated_calls(todo)
         minutes = calls * llm_module.call_seconds(self.config) / 60
-        return LlmEstimate(minutes, calls, len(outputs), len(outputs), minutes, calls)
+        return LlmEstimate(minutes, calls, len(outputs), len(outputs), minutes)
 
     def apply(
         self,
@@ -1868,15 +1875,27 @@ class Pipeline:
         validate_output_dir([*analysis.inputs, *sources], output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        replacer = Replacer(self.config, self.store)
-        plan = self._plan(analysis, decisions, output_dir, replacer)
-        results = self._write(plan, range(len(plan.jobs)), progress, cancel)
-        if not (cancel and cancel.cancelled):
-            corrections = correction_values(analysis, results)
-            if corrections:
-                results = self._correct(
-                    analysis, decisions, output_dir, replacer, plan, results, corrections, progress
-                )
+        links = open_links(self.config) if self.store is None else None
+        try:
+            replacer = Replacer(self.config, self.store or links)
+            plan = self._plan(analysis, decisions, output_dir, replacer)
+            results = self._write(plan, range(len(plan.jobs)), progress, cancel)
+            if not (cancel and cancel.cancelled):
+                corrections = correction_values(analysis, results)
+                if corrections:
+                    results = self._correct(
+                        analysis,
+                        decisions,
+                        output_dir,
+                        replacer,
+                        plan,
+                        results,
+                        corrections,
+                        progress,
+                    )
+        finally:
+            if links is not None:
+                links.close()
         # What this batch wrote, so that a later run can replace it (``--remplacer``).
         output_record.record(output_dir, [r.output_path for r in results if r.output_path])
         return BatchResult(

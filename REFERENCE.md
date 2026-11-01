@@ -169,7 +169,7 @@ Options principales de `run` :
 |---|---|
 | `--sortie`, `-o` | dossier de sortie (distinct des originaux, jamais modifiés) |
 | `--profil`, `-p` | `auto` (selon le matériel), `leger`, `standard`, `complet` |
-| `--mode`, `-m` | `balises` (`[PERSONNE_001]`), `realiste` (substituts vraisemblables), `masquage` |
+| `--mode`, `-m` | `realiste` (substituts vraisemblables, par défaut), `balises` (`[PERSONNE_001]`), `masquage` |
 | `--regime`, `-r` | `anonymisation` (irréversible) ou `pseudonymisation` (table chiffrée) |
 | `--liste-blanche FICHIER` | valeurs à ne jamais masquer, une par ligne (`#` = commentaire) |
 | `--liste-metier CSV` | valeurs à toujours masquer, colonnes `valeur[,type]` ; répétable |
@@ -405,8 +405,9 @@ son nom ou son empreinte et vérifié avant installation.
 
 ## Pseudonymisation ou anonymisation
 
-- **Anonymisation** (par défaut) : aucune correspondance n'est conservée ; l'opération
-  est irréversible.
+- **Anonymisation** (par défaut) : aucune valeur d'origine n'est conservée ; l'opération
+  est irréversible. En mode réaliste, la **mémoire des substituts** (ci-dessous) garde
+  les mêmes faux éléments d'un lot à l'autre.
 - **Pseudonymisation** (`--regime pseudonymisation`) : les correspondances
   « substitut → valeur d'origine » sont enregistrées dans une **table chiffrée**
   (`data/table-correspondance.anonyma` par défaut, ou `--table`). Une même personne
@@ -431,6 +432,28 @@ Les fichiers retrouvent le texte exact qu'ils contenaient (« DUPONT » reste en
 majuscules) quand la table le connaît, sinon la valeur de référence de l'entité ; les
 fichiers ignorés (formats non textuels…) sont nommés et ne sont pas comptés comme
 ré-identifiés.
+
+### Mémoire des substituts
+
+En mode réaliste et en anonymisation, Anonyma garde dans `data/liens.anonyma` (lisible
+par le seul propriétaire sous macOS et Linux) une clé aléatoire et, pour chaque valeur
+déjà remplacée, une empreinte HMAC-SHA256 de la valeur et son faux élément, ainsi que les
+prénoms, noms de famille et domaines substituts déjà attribués. Aucune valeur d'origine
+n'y est écrite et rien n'y est réversible. Effet : sans option ni phrase secrète, deux lots
+traités séparément donnent les mêmes faux éléments aux personnes, adresses,
+organisations et domaines qu'ils partagent, le même décalage des dates, et deux valeurs
+différentes ne reçoivent jamais le même faux élément. Un faux élément mémorisé qui
+serait la vraie valeur de quelqu'un du lot en cours est remplacé (le lien de cette valeur
+avec les lots précédents est alors perdu, jamais au prix d'une fausse fuite).
+
+Qui dispose de ce fichier et d'une liste de noms candidats peut vérifier si l'un d'eux a
+été traité : tant que la mémoire existe, les sorties sont des données pseudonymisées au
+sens du RGPD. Le fichier n'est jamais écrit dans les sorties ni les rapports.
+`anonyma nouveaux-substituts [--oui]` (ou **Repartir avec de nouveaux faux noms** dans les
+Réglages) l'efface : les lots suivants reçoivent de nouveaux faux éléments, sans lien
+avec les précédents. Sans console et sans `--oui`, la commande ne fait rien et sort avec
+le code 2. Le mode balises numérote chaque lot (`[PERSONNE_001]`) et n'utilise pas cette
+mémoire ; la pseudonymisation utilise sa table chiffrée.
 
 ## Sécurité
 
@@ -507,9 +530,8 @@ ré-identifiés.
   Un prénom reste un prénom et un nom un nom, y compris pour les noms écrits nom puis
   prénom (« Nguyen Thi Lan »). Le domaine d'une adresse et l'organisation qu'il désigne
   (« Altavia Conseil » et `altavia-conseil.fr`, « Moreau Avocats » et
-  `moreau-avocats.fr`) reçoivent des substituts dérivés l'un de l'autre. D'un lot à
-  l'autre, ces garanties demandent la pseudonymisation avec la même table, qui garde
-  aussi les correspondances de chaque prénom et nom de famille.
+  `moreau-avocats.fr`) reçoivent des substituts dérivés l'un de l'autre. Ces garanties
+  valent aussi d'un lot à l'autre (voir « Mémoire des substituts »).
 - **Prénoms et initiales** : dès qu'une personne est reconnue sous son nom complet,
   son prénom seul (« Merci Maëlle ») est masqué dans tout le lot, quelle que soit sa
   fréquence ; un prénom qui est aussi un mot courant (« pierre ») ne l'est en minuscules

@@ -60,6 +60,11 @@ def config_path() -> Path:
     return data_dir() / "config.json"
 
 
+def links_path() -> Path:
+    """Link memory of the anonymisation regime (:class:`anonyma.store.LinkMemory`)."""
+    return data_dir() / "liens.anonyma"
+
+
 def ensure_dirs() -> None:
     for d in (data_dir(), tmp_dir(), logs_dir(), models_dir()):
         d.mkdir(parents=True, exist_ok=True)

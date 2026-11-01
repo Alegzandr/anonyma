@@ -34,6 +34,7 @@ import contextlib
 import hashlib
 import hmac
 import os
+import secrets
 import sqlite3
 import threading
 import unicodedata
@@ -103,7 +104,7 @@ class InMemoryMappingStore:
         return None
 
     def used_substitutes(self) -> set[str]:
-        return {sub for _, sub in self._data.values()}
+        return {sub for (kind, _), (_, sub) in self._data.items() if not is_internal(kind)}
 
     def items(self) -> Iterator[MappingEntry]:
         for (entity_type, _), (original, substitute) in self._data.items():
@@ -462,7 +463,7 @@ class EncryptedMappingStore:
         return None
 
     def used_substitutes(self) -> set[str]:
-        return {entry.substitute for entry in self.items()}
+        return {e.substitute for e in self.items() if not is_internal(e.entity_type)}
 
     # -- neutral file names ----------------------------------------------------
 
@@ -501,12 +502,120 @@ class EncryptedMappingStore:
         return int(self._execute("SELECT COUNT(*) FROM mapping")[0][0])
 
 
+class LinkMemory:
+    """Substitutes kept from one batch to the next in the anonymisation regime, with
+    no original value: one local SQLite file holding a random key and rows
+    ``HMAC(key, type || key) -> substitute``.
+
+    The same value gets the same substitute in every batch, and a substitute given
+    once is never given to another value, without any passphrase. Nothing can be
+    read back: :meth:`reverse` knows nothing. Someone holding this file and a list
+    of candidate names can test whether one of them was in a batch, as with any
+    keyed pseudonym: the file stays on the machine, readable by its owner only, and
+    never goes into an output or a report. :meth:`forget` starts afresh.
+    """
+
+    def __init__(self, connection: sqlite3.Connection, path: Path, key: bytes) -> None:
+        self._db: sqlite3.Connection | None = connection
+        self.path = path
+        self._key = key
+        self._lock = threading.RLock()
+
+    @classmethod
+    def open(cls, path: Path) -> LinkMemory:
+        path = Path(path)
+        exists = path.is_file() and path.stat().st_size > 0
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _owner_only(path, exists)
+        try:
+            db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+            EncryptedMappingStore._configure(db)
+            db.execute("CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value BLOB)")
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS links (id BLOB PRIMARY KEY, internal INTEGER, "
+                "substitute TEXT NOT NULL)"
+            )
+            row = db.execute("SELECT value FROM meta WHERE name = 'key'").fetchone()
+            if row is None:
+                key = secrets.token_bytes(32)
+                db.execute("INSERT INTO meta VALUES ('key', ?)", (key,))
+            else:
+                key = bytes(row[0])
+        except sqlite3.Error as exc:
+            raise StoreError("Impossible d'ouvrir la mémoire des substituts.") from exc
+        return cls(db, path, key)
+
+    @staticmethod
+    def forget(path: Path) -> bool:
+        """Delete the memory (and its key): the next batches get new substitutes."""
+        removed = False
+        for candidate in (Path(path), Path(f"{path}-journal")):
+            with contextlib.suppress(FileNotFoundError):
+                candidate.unlink()
+                removed = True
+        return removed
+
+    def close(self) -> None:
+        with self._lock:
+            if self._db is not None:
+                self._db.close()
+                self._db = None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def _index(self, entity_type: str, key: str) -> bytes:
+        data = entity_type.encode("utf-8") + b"\0" + key.encode("utf-8")
+        return hmac.new(self._key, data, hashlib.sha256).digest()
+
+    def _execute(self, sql: str, params: tuple[Any, ...] = ()) -> list[Any]:
+        with self._lock:
+            if self._db is None:
+                raise StoreError("La mémoire des substituts est fermée.")
+            try:
+                return self._db.execute(sql, params).fetchall()
+            except sqlite3.Error as exc:
+                raise StoreError("Impossible d'utiliser la mémoire des substituts.") from exc
+
+    def lookup(self, entity_type: str, key: str) -> str | None:
+        rows = self._execute(
+            "SELECT substitute FROM links WHERE id = ?", (self._index(entity_type, key),)
+        )
+        return str(rows[0][0]) if rows else None
+
+    def save(self, entity_type: str, key: str, original: str, substitute: str) -> None:
+        del original  # never stored
+        self._execute(
+            "INSERT OR REPLACE INTO links VALUES (?, ?, ?)",
+            (self._index(entity_type, key), int(is_internal(entity_type)), substitute),
+        )
+
+    def reverse(self, substitute: str) -> str | None:
+        del substitute
+        return None
+
+    def used_substitutes(self) -> set[str]:
+        return {str(r[0]) for r in self._execute("SELECT substitute FROM links WHERE internal = 0")}
+
+    def save_filename(self, batch_id: str, output_name: str, original: str) -> None:
+        """Original names are never kept."""
+
+
 __all__ = [
     "SURFACE_TYPE",
     "EncryptedMappingStore",
     "FilenameEntry",
     "InMemoryMappingStore",
     "KdfParams",
+    "LinkMemory",
     "MappingEntry",
     "StoreError",
     "WrongPassphraseError",

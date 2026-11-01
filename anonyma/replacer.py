@@ -73,6 +73,11 @@ TAG_ID_LENGTH = 4
 PARAMETER_TYPE = "__parametre__"
 #: Substitutes of person name components (given names, surnames) in the table.
 COMPONENT_TYPE = "__composant__"
+#: Name component substitutes already given (« taken » marks, no original).
+COMPONENT_OWNER_TYPE = "__composant_pris__"
+#: Substitute of a mail domain, and the substitute domains already given.
+DOMAIN_TYPE = "__domaine__"
+DOMAIN_TAKEN_TYPE = "__domaine_pris__"
 DATE_SHIFT_KEY = "decalage_dates"
 #: Key of the per-date offsets of birth dates (hex), kept with the batch parameters.
 BIRTH_KEY = "cle_dates_naissance"
@@ -141,7 +146,8 @@ class Replacer:
                 "Le régime de pseudonymisation nécessite une table de correspondance chiffrée."
             )
         self.config = config
-        self.store = store if config.regime is Regime.PSEUDONYMIZATION else None
+        #: The encrypted table (pseudonymisation) or the link memory (anonymisation).
+        self.store = store
         self._salt = secrets.token_bytes(32)
         self._secrets: dict[str, bytes] = {}
         #: Date offset of the batch, drawn once: every assignment of this replacer
@@ -420,18 +426,13 @@ class _Realistic:
         self.pending: dict[str, list[tuple[str, str, str]]] = {}
         self.domains: dict[str, str] = {}
         self.sirens: dict[str, str] = {}
-        self.used: set[str] = set()
-        #: (kind « g »/« s », original key) -> substitute, and its reverse; kept in the
-        #: pseudonymisation table so that later batches follow them too.
+        self.used: set[str] = {
+            normalize(s) for s in (self.store.used_substitutes() if self.store else ())
+        }
+        #: (kind « g »/« s », original key) -> substitute, and (kind, substitute) ->
+        #: original key; the store keeps both for later batches (see ``component_of``).
         self.component: dict[tuple[str, str], str] = {}
         self.component_owner: dict[tuple[str, str], str] = {}
-        for entry in self.store.items() if self.store else ():
-            if entry.entity_type == COMPONENT_TYPE:
-                kind, _, original = entry.original.partition(":")
-                self.component.setdefault((kind, original), entry.substitute)
-                self.component_owner.setdefault((kind, normalize(entry.substitute)), original)
-            else:
-                self.used.add(normalize(entry.substitute))
         self.forbidden: set[str] = set()
         self.forbidden_tokens: set[str] = set()
         for cluster in clusters.values():
@@ -497,7 +498,7 @@ class _Realistic:
             # Recomputed from the batch offset and key: consistent in every format.
             self.r.thread_indexes(cluster, self.table, self.shift)
             return
-        known = self.r.stored(cluster)
+        known = self.remembered(self.r.stored(cluster))
         generator = GENERATORS.get(cluster.entity_type)
         pinned_tag = cluster.id in self.r.pinned and STORED_TAG.fullmatch((known or "").strip())
         if generator is None or pinned_tag:
@@ -633,22 +634,50 @@ class _Realistic:
     # Dupont » and « Marie Dupont » share their substitute surname, « Karim
     # Benhaddou » and « Maëlle Le Goff » never do; the same holds for given names.
 
+    def component_of(self, kind: str, original: str) -> str | None:
+        known = self.component.get((kind, original))
+        if known is None and self.store:
+            known = self.remembered(self.store.lookup(COMPONENT_TYPE, f"{kind}:{original}"))
+        return known
+
+    def remembered(self, known: str | None) -> str | None:
+        """A substitute of an earlier batch, unless (anonymisation's link memory) it
+        is a value of this batch: drawn when that name was unknown, it would now read
+        as a residue. That entity then gets a new substitute; a pseudonymisation table
+        stays authoritative (re-identification reads it)."""
+        if known is None or self.r.config.regime is Regime.PSEUDONYMIZATION:
+            return known
+        key = normalize(known)
+        words = (normalize(t.strip(".'’")) for t in tokens_of(known))
+        if key in self.forbidden or any(w in self.forbidden_tokens for w in words):
+            return None
+        return known
+
     def mapped(self, person: PersonName, fake: fk.FakePerson) -> fk.FakePerson:
         """``fake`` with the substitutes already given to the components of ``person``."""
         given = list(fake.given)
         for i, name in enumerate(person.given):
-            known = self.component.get(("g", normalize(name)))
+            known = self.component_of("g", normalize(name))
             if known is not None and not is_initial(name) and i < len(given):
                 given[i] = known
         surname = " ".join(w for w in person.surname if normalize(w) not in PARTICLES)
-        known_surname = self.component.get(("s", normalize(surname))) if surname else None
+        known_surname = self.component_of("s", normalize(surname)) if surname else None
         return fk.FakePerson(tuple(given), known_surname or fake.surname, fake.gender)
 
     def injective(self, components: Sequence[tuple[str, str, str]]) -> bool:
-        """No substitute component already given to another original one."""
+        """No substitute component already given to another original one, in this
+        batch or (store) an earlier one; the store only knows that a substitute is
+        taken, and by which original through :meth:`component_of`."""
         for kind, original, substitute in components:
             owner = self.component_owner.get((kind, normalize(substitute)))
             if owner is not None and owner != original:
+                return False
+            if (
+                owner is None
+                and self.store
+                and self.store.lookup(COMPONENT_OWNER_TYPE, f"{kind}:{normalize(substitute)}")
+                and self.component_of(kind, original) != substitute
+            ):
                 return False
         return True
 
@@ -661,6 +690,8 @@ class _Realistic:
             if self.store:
                 key = f"{kind}:{original}"
                 self.store.save(COMPONENT_TYPE, key, key, substitute)
+                taken = f"{kind}:{normalize(substitute)}"
+                self.store.save(COMPONENT_OWNER_TYPE, taken, taken, "1")
 
     def _date_shift(self) -> int:
         if self.r.batch_shift is not None:
@@ -700,6 +731,10 @@ class _Realistic:
         original = original.casefold()
         if original in fk.PUBLIC_MAIL_DOMAINS:
             return original
+        if original not in self.domains and self.store:
+            stored = self.remembered(self.store.lookup(DOMAIN_TYPE, original))
+            if stored:
+                self.domains[original] = stored
         if original not in self.domains:
             derived = self._org_domain(original)
             owner = derived[1] if derived else f"d:{original}"
@@ -712,6 +747,7 @@ class _Realistic:
                 words = [normalize(w) for w in fk.split_domain(candidate)[1].split("-")]
                 if (
                     candidate not in self.domains.values()
+                    and not (self.store and self.store.lookup(DOMAIN_TAKEN_TYPE, candidate))
                     and normalize(candidate) not in self.forbidden
                     and not any(w in self.forbidden_tokens for w in words)
                     and not self._clashes((w for w in words if len(w) >= 3), owner)
@@ -723,6 +759,9 @@ class _Realistic:
                 if len(word) >= 3:
                     self.words.setdefault(normalize(word), owner)
             self.domains[original] = candidate
+            if self.store:  # the next batches give this domain the same substitute
+                self.store.save(DOMAIN_TYPE, original, original, candidate)
+                self.store.save(DOMAIN_TAKEN_TYPE, candidate, candidate, "1")
         return self.domains[original]
 
     def _org_domain(self, domain: str) -> tuple[str, str] | None:

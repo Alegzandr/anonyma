@@ -11,14 +11,21 @@ from __future__ import annotations
 import dataclasses
 import email
 import email.policy
+import json
+import re
 from email.message import EmailMessage
 from email.utils import getaddresses
 from pathlib import Path
 
+import pytest
+from typer.testing import CliRunner
+
+from anonyma import cli, paths
+from anonyma import config as config_module
 from anonyma.config import Config
 from anonyma.models import DocumentStatus, Regime, ReplacementMode
 from anonyma.pipeline import Pipeline
-from anonyma.store import InMemoryMappingStore
+from anonyma.store import InMemoryMappingStore, LinkMemory
 from anonyma.textutils import normalize
 
 #: 20 people of 3 organisations; « Dupont » twice (relatives share a surname).
@@ -153,3 +160,108 @@ def test_same_substitutes_across_batches_with_a_table(
     old = {name.split(" ", 1)[1] for name, _ in sent_a.values()}
     new = {sent_b[p][0].split(" ", 1)[1] for p in set(sent_b) - common}
     assert not old & new, old & new
+
+
+@pytest.fixture
+def realistic_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The application's own default (tests otherwise default to tags)."""
+    monkeypatch.setattr(config_module, "DEFAULT_MODE", ReplacementMode.REALISTIC)
+
+
+def _senders(out: Path, numbers: range) -> dict[int, tuple[str, str]]:
+    found: dict[int, tuple[str, str]] = {}
+    for number in numbers:
+        path = next(out.rglob(f"m{number:02d}.eml"))
+        message = email.message_from_bytes(path.read_bytes(), policy=email.policy.default)
+        assert isinstance(message, EmailMessage)
+        found[number] = _mailbox(message, "From")
+    return found
+
+
+#: People of the second batch only: names the generator never draws (given names
+#: rarer than its pool, surnames outside Faker's), so that no substitute of the first
+#: batch can be one of them (that substitute would then be replaced, see
+#: ``_Realistic.remembered``).
+LATE_SURNAMES = ["Quillardet", "Brossolin", "Ternisien", "Valdeyron", "Morizur", "Jacquelot"]
+LATE_DOMAINS = ["sorbel-industrie.fr", "altavia-conseil.fr", "moreau-avocats.fr"] * 2
+
+
+def _late_people() -> list[tuple[str, str, str]]:
+    from anonyma.data import first_names
+
+    rare = sorted(
+        r.display
+        for r in first_names().values()
+        if 300 <= r.count < 1000 and r.display.isalpha() and r.gender in ("m", "f")
+    )
+    return [
+        (rare[i * 7], s, d)
+        for i, (s, d) in enumerate(zip(LATE_SURNAMES, LATE_DOMAINS, strict=True))
+    ]
+
+
+def test_default_run_is_realistic_and_linked_across_batches(
+    tmp_path: Path, realistic_default: None
+) -> None:
+    """« anonyma run lot1 -o s1 » then « anonyma run lot2 -o s2 », no option, no
+    passphrase: realistic substitutes, the same for the people of both batches, never
+    shared by two different people."""
+    lot1 = PEOPLE[:12]
+    lot2 = [*PEOPLE[8:12], *_late_people()]  # 4 people in both batches
+    _mails(tmp_path / "lot1", lot1)
+    _mails(tmp_path / "lot2", lot2, start=8)
+    runner = CliRunner()
+    for lot, out, people in (("lot1", "s1", lot1), ("lot2", "s2", lot2)):
+        result = runner.invoke(cli.app, ["run", str(tmp_path / lot), "-o", str(tmp_path / out)])
+        assert result.exit_code == 0, result.output
+        assert "phrase secrète" not in result.output.lower()
+        text = "\n".join(p.read_text(encoding="utf-8") for p in (tmp_path / out).rglob("*.eml"))
+        for _given, surname, domain in people:
+            assert normalize(surname) not in normalize(text) and domain not in text
+        # The memory holds no original value, only keyed indexes and fake values (a
+        # fake « Jeanne » holds the letters of « Jean »: whole words are compared).
+        memory = paths.links_path().read_bytes()
+        for person in people:
+            for original in person:
+                word = rb"(?<![\w.-])" + re.escape(original.encode("utf-8")) + rb"(?![\w-])"
+                assert re.search(word, memory) is None, original
+    first = _senders(tmp_path / "s1", range(12))
+    second = _senders(tmp_path / "s2", range(8, 8 + len(lot2)))
+    for number in range(8, 12):
+        assert first[number] == second[number]
+    everyone = {**first, **second}
+    people = {**dict(enumerate(lot1)), **{8 + i: p for i, p in enumerate(lot2)}}
+    assert all("[" not in name for name, _ in everyone.values())  # realistic, no tag
+    names = [name for name, _ in everyone.values()]
+    assert len(set(names)) == len(people)  # one substitute per person, never shared
+    assert len({address for _, address in everyone.values()}) == len(people)
+    domains: dict[str, set[str]] = {}
+    for number, (_, _, domain) in people.items():
+        domains.setdefault(domain, set()).add(everyone[number][1].split("@")[1])
+    assert all(len(d) == 1 for d in domains.values()), domains
+
+
+def test_new_substitutes_command_forgets_the_links(tmp_path: Path, realistic_default: None) -> None:
+    _mails(tmp_path / "lot", PEOPLE[:3])
+    runner = CliRunner()
+    assert runner.invoke(cli.app, ["run", str(tmp_path / "lot"), "-o", str(tmp_path / "a")])
+    assert paths.links_path().is_file()
+    # Without a console nor « --oui »: nothing is done, and the exit code says so.
+    result = runner.invoke(cli.app, ["nouveaux-substituts"])
+    assert result.exit_code == 2 and paths.links_path().is_file()
+    result = runner.invoke(cli.app, ["nouveaux-substituts", "--oui"])
+    assert result.exit_code == 0 and not paths.links_path().exists()
+    with LinkMemory.open(paths.links_path()) as memory:
+        assert memory.lookup("PERSONNE", "x") is None
+
+
+def test_settings_saved_with_tags_by_default_become_realistic(tmp_path: Path) -> None:
+    old = tmp_path / "ancien.json"
+    old.write_text(json.dumps({"mode": "balises"}), encoding="utf-8")
+    assert Config.load(old).mode is config_module.DEFAULT_MODE
+    chosen = tmp_path / "choisi.json"
+    chosen.write_text(json.dumps({"mode": "balises", "version": 2}), encoding="utf-8")
+    assert Config.load(chosen).mode is ReplacementMode.TAG
+    saved = tmp_path / "enregistre.json"
+    Config(mode=ReplacementMode.TAG).save(saved)
+    assert Config.load(saved).mode is ReplacementMode.TAG

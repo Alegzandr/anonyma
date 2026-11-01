@@ -5,10 +5,18 @@ from pathlib import Path
 
 import pytest
 
+from anonyma import config as config_module
 from anonyma import pipeline
 from anonyma.config import Config
-from anonyma.models import Profile
+from anonyma.models import Profile, ReplacementMode
 from tests.canary import CANARY_TERMS
+
+
+@pytest.fixture(autouse=True)
+def tags_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests read tags (« [PERSONNE_001] »): the application defaults to realistic
+    mode, which tests ask for explicitly (``tests/test_links.py`` covers the default)."""
+    monkeypatch.setattr(config_module, "DEFAULT_MODE", ReplacementMode.TAG)
 
 
 @pytest.fixture(autouse=True)

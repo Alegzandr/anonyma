@@ -197,6 +197,16 @@ class SettingsPage(QWidget):
             "de l'application."
         )
         self._row(f, "&Table de correspondance", self.store_row_widget, self.store_hint)
+        forget = button("Repartir avec de nouveaux faux noms")
+        forget.setObjectName("ForgetSubstitutes")
+        forget.clicked.connect(self._forget_substitutes)
+        self._row(
+            f,
+            "Substituts",
+            forget,
+            "Une même valeur garde le même faux nom d'un lot à l'autre. Ce bouton efface "
+            "ce souvenir : les lots suivants n'auront plus de lien avec les précédents.",
+        )
 
         # Lists ----------------------------------------------------------------------------
         lv = self._list_tab("Listes")
@@ -705,6 +715,24 @@ class SettingsPage(QWidget):
         policy = self.organization_policy.currentData()
         self.organization_whitelist.setEnabled(policy == POLICY_EXCEPT_WHITELIST)
         self.organization_blacklist.setEnabled(policy != POLICY_ALL)
+
+    def _forget_substitutes(self) -> None:
+        from anonyma.store import LinkMemory
+
+        if not dialogs.confirm(
+            self,
+            "Les prochains lots recevront de nouveaux faux noms, sans lien avec les lots "
+            "déjà traités. Continuer ?",
+            ok_label="Repartir de zéro",
+            warn=True,
+        ):
+            return
+        if LinkMemory.forget(paths.links_path()):
+            self.banner.show_message(
+                "Substituts oubliés : nouveaux faux noms au prochain lot.", "success"
+            )
+        else:
+            self.banner.show_message("Aucun substitut à oublier.", "info")
 
     def _update_store_visibility(self) -> None:
         pseudo = self.regime.currentData() == Regime.PSEUDONYMIZATION.value

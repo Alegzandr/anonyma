@@ -45,11 +45,17 @@ class ArchiveLimits:
         )
 
 
+#: Version of the settings file: 2 since realistic mode is the default (0.5.0).
+SETTINGS_VERSION = 2
+#: Realistic by default: fake but plausible values, every link kept.
+DEFAULT_MODE = ReplacementMode.REALISTIC
+
+
 @dataclass(slots=True)
 class Config:
     #: None = use the profile recommended by ``hardware.py``.
     profile: Profile | None = None
-    mode: ReplacementMode = ReplacementMode.TAG
+    mode: ReplacementMode = field(default_factory=lambda: DEFAULT_MODE)
     regime: Regime = Regime.ANONYMIZATION
 
     #: Values never masked (compared after normalisation).
@@ -144,7 +150,7 @@ class Config:
     # -- (de)serialisation -------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
+        return {**dataclasses.asdict(self), "version": SETTINGS_VERSION}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
@@ -154,6 +160,10 @@ class Config:
             values["profile"] = Profile(values["profile"])
         if "mode" in values:
             values["mode"] = ReplacementMode(values["mode"])
+            if data.get("version", 1) < SETTINGS_VERSION and values["mode"] is ReplacementMode.TAG:
+                # Saved before realistic became the default: tags were then the default
+                # every settings file held, not a choice.
+                values["mode"] = DEFAULT_MODE
         if "regime" in values:
             values["regime"] = Regime(values["regime"])
         if isinstance(values.get("limits"), dict):

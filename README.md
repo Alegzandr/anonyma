@@ -105,22 +105,31 @@ téléchargent depuis la page **Modèles**, uniquement à votre demande. Le prof
 n'est pas disponible dans la version portable : il y fonctionne comme Standard.
 
 **Remplacement** : comment les données sont remplacées.
-- **Balises** (par défaut) : `Jean Dupont` devient `[PERSONNE_001]`.
-- **Réaliste** : `Jean Dupont` devient un autre nom vraisemblable, et les dates sont
-  décalées.
+- **Réaliste** (par défaut) : `Jean Dupont` devient un autre nom vraisemblable, les
+  adresses, organisations et domaines aussi, et les dates sont décalées.
+- **Balises** : `Jean Dupont` devient `[PERSONNE_001]`.
 - **Masquage** : `Jean Dupont` devient `█████`.
 
+**Les liens sont conservés.** Une même valeur reçoit toujours le même faux élément, et
+deux valeurs différentes jamais le même : en-têtes, corps, citations, pièces jointes et
+noms de fichiers restent reliés, et un tri par interlocuteur, organisation ou fil donne
+le même résultat que sur les originaux. En mode réaliste, c'est vrai aussi **d'un lot à
+l'autre** : des mails traités en plusieurs fois gardent les mêmes faux noms, sans phrase
+secrète. Anonyma garde pour cela, sur ce poste seulement (`data/liens.anonyma`), une
+mémoire des faux éléments déjà donnés, sans aucune valeur d'origine. Pour repartir avec
+des faux noms sans lien avec les lots précédents : bouton **Repartir avec de nouveaux faux
+noms** des Réglages, ou `anonyma nouveaux-substituts`.
+
+> Qui disposerait de cette mémoire et d'une liste de noms pourrait vérifier si l'un
+> d'eux figurait dans un lot : tant qu'elle existe, les sorties sont, au sens du RGPD,
+> des données pseudonymisées. Elle ne quitte jamais le poste et n'est écrite ni dans les
+> sorties ni dans les rapports ; l'effacer rend les lots déjà produits anonymes.
+
 **Anonymisation ou pseudonymisation**
-- **Anonymisation** (par défaut) : irréversible, aucune correspondance n'est gardée.
+- **Anonymisation** (par défaut) : aucune valeur d'origine n'est gardée.
 - **Pseudonymisation** : les correspondances sont gardées dans une table chiffrée, pour
   pouvoir retrouver les vraies valeurs plus tard. Une phrase secrète protège cette table.
   **Une phrase secrète perdue rend la table définitivement illisible.**
-
-**Plusieurs lots qui doivent rester reliés** (des mails traités en plusieurs fois, puis
-triés ensemble) : dans un même lot, une même valeur reçoit toujours le même substitut et
-deux valeurs différentes jamais le même. D'un lot à l'autre, ce n'est garanti qu'en
-**pseudonymisation**, en réutilisant la même table : en anonymisation, chaque exécution
-tire de nouveaux substituts. Sinon, traitez tous les fichiers en un seul lot.
 
 **Listes** (onglet Listes des Réglages) : les valeurs à ne jamais masquer (le nom de
 votre entreprise…) et les valeurs à toujours masquer (vos clients, vos projets…).

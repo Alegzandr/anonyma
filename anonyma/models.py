@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from PIL import Image
 
     from anonyma.config import Config
-    from anonyma.store import MappingEntry
 
 
 def new_id() -> str:
@@ -100,24 +99,6 @@ class EntityType(enum.StrEnum):
     BUSINESS_TERM = "TERME_METIER"  # business lists without explicit type
     OPAQUE_ID = "IDENTIFIANT_TECHNIQUE"  # high-entropy tokens: hashes, UUIDs, transaction ids
     BARCODE = "CODE_BARRES"  # QR code / Data Matrix / barcode: always masked as a whole
-
-
-#: Direct identifiers: the benchmark requires >= 99 % recall on these.
-DIRECT_IDENTIFIERS: frozenset[str] = frozenset(
-    {
-        EntityType.PERSON,
-        EntityType.EMAIL,
-        EntityType.PHONE,
-        EntityType.IBAN,
-        EntityType.CREDIT_CARD,
-        EntityType.NIR,
-        EntityType.ADDRESS,
-        EntityType.LICENSE_PLATE,
-        EntityType.IP_ADDRESS,
-        EntityType.DATE_OF_BIRTH,
-        EntityType.USERNAME,
-    }
-)
 
 
 class SegmentKind(enum.StrEnum):
@@ -515,10 +496,6 @@ class MappingStore(Protocol):
     def reverse(self, substitute: str) -> str | None: ...
 
     def used_substitutes(self) -> set[str]: ...
-
-    def items(self) -> Iterator[MappingEntry]:
-        """Every entry, decrypted (internal ones included)."""
-        ...
 
     def save_filename(self, batch_id: str, output_name: str, original: str) -> None:
         """Keep the original path behind a neutral output path."""
