@@ -6,6 +6,8 @@
   frequency with wordfreq (data CC BY-SA 4.0) and validated against the Hunspell
   dictionaries (Grammalecte, MPL-2.0; SCOWL). Rebuilt with
   ``packaging/build_detection_data.py``.
+* :mod:`anonyma.data.communes`: real French communes with one of their postcodes,
+  hand-curated, for realistic substitute addresses.
 """
 
 from __future__ import annotations

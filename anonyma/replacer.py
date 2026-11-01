@@ -81,6 +81,12 @@ DATE_SHIFT_DAYS = (30, 400)
 BIRTH_SHIFT_DAYS = (30, 365)
 DATE_TYPES = frozenset({EntityType.DATE, EntityType.DATE_OF_BIRTH})
 MAX_ATTEMPTS = 25
+#: Custom entity type of project names (``custom_labels``, e.g. « nom de projet »).
+PROJECT_TYPE = "PROJET"
+#: Types whose substitute keeps the designators of the original and replaces its
+#: core, shared batch-wide (« Projet Colibri » / « Colibri » -> « Projet Héron » /
+#: « Héron »).
+ORG_TYPES = frozenset({EntityType.ORGANIZATION, PROJECT_TYPE})
 
 
 @dataclass(slots=True)
@@ -423,14 +429,37 @@ class _Realistic:
                     EntityType.ORGANIZATION,
                     EntityType.LOCATION,
                     EntityType.PROPER_NOUN,
+                    PROJECT_TYPE,
                 ):
-                    for token in tokens_of(variant):
+                    # An organisation's designators (« Groupe », « SAS ») name no one:
+                    # its substitute keeps them.
+                    name = variant
+                    if cluster.entity_type in ORG_TYPES:
+                        name = fk.split_organization(variant)[1]
+                    for token in tokens_of(name):
                         key = normalize(token.strip(".'’"))
                         # Name tokens are forbidden even when they are also common
                         # words ("Martin", "Petit"): a substitute must never reuse them.
                         if len(key) >= 3 and key not in PARTICLES and civility_of(token) is None:
                             self.forbidden_tokens.add(key)
         self.forbidden.discard("")
+        #: Organisation and project cores: compact original core -> substitute core.
+        self.cores: dict[str, str] = {}
+        #: Cores named as a project somewhere in the batch: they get a code name.
+        self.project_cores: set[str] = set()
+        for cluster in clusters.values():
+            if cluster.entity_type in ORG_TYPES:
+                for variant in cluster.variants:
+                    if cluster.entity_type == PROJECT_TYPE or fk.is_project_name(variant):
+                        self.project_cores.add(_core_key(variant))
+        #: Words of substitutes -> owner (``p:<cluster>`` for a person, ``o:<core>`` for
+        #: an organisation, a project or a domain derived from one, ``d:<domain>`` for
+        #: another domain): a surname never reappears as a company or domain word,
+        #: nor the other way round (« Raymond » the lawyer, ``raymond.fr`` the firm).
+        self.words: dict[str, str] = {}
+        #: Whole substitutes of organisations -> owner: the same core may be shared.
+        self.org_values: dict[str, str] = {}
+        self._org_labels: dict[str, tuple[str, str, bool]] | None = None
         #: Substitutes kept from an earlier assignment, never given to another cluster.
         self.pinned = {normalize(v): cid for cid, v in replacer.pinned.items()}
         self.shift = self._date_shift()
@@ -440,9 +469,12 @@ class _Realistic:
     # -- orchestration -----------------------------------------------------------
 
     def run(self, ordered: Sequence[EntityCluster]) -> None:
+        # Organisations before the rest: a mail domain of one derives from its
+        # substitute (``sorbel.fr`` -> ``courtois.fr`` next to « Groupe Courtois »).
         persons = [c for c in ordered if c.entity_type == EntityType.PERSON]
-        others = [c for c in ordered if c.entity_type != EntityType.PERSON]
-        for cluster in [*persons, *others]:
+        orgs = [c for c in ordered if c.entity_type in ORG_TYPES]
+        others = [c for c in ordered if c.entity_type not in ORG_TYPES | {EntityType.PERSON}]
+        for cluster in [*persons, *orgs, *others]:
             self._assign(cluster)
 
     def _assign(self, cluster: EntityCluster) -> None:
@@ -465,6 +497,8 @@ class _Realistic:
                 if known is not None:
                     break  # stored substitute stays authoritative
                 continue
+            if result is not None:
+                result = {v: _no_extra_period(v or cluster.canonical, s) for v, s in result.items()}
             if result is not None and (known is not None or self._acceptable(cluster, result)):
                 break
             result = None
@@ -491,8 +525,45 @@ class _Realistic:
         for vkey, (_, substitute) in chosen.items():
             if substitute != base:
                 self.table.by_variant[(cluster.id, vkey)] = substitute
+        self._record(cluster, base, result.values())
         if base != known:
             self.r.remember(cluster, base)
+
+    def _owner(self, cluster: EntityCluster) -> str | None:
+        if cluster.entity_type == EntityType.PERSON:
+            return f"p:{cluster.id}"
+        if cluster.entity_type in ORG_TYPES:
+            return f"o:{_core_key(cluster.canonical)}"
+        return None
+
+    def _words_of(self, cluster: EntityCluster, substitute: str) -> list[str]:
+        """Distinctive words of a substitute: an organisation's core only (two
+        groups may both be « Groupe … »)."""
+        if cluster.entity_type in ORG_TYPES:
+            substitute = fk.split_organization(substitute)[1]
+        words = (normalize(t.strip(".'’,")) for t in tokens_of(substitute))
+        return [w for w in words if len(w) >= 3 and w not in PARTICLES]
+
+    def _clashes(self, words: Iterable[str], owner: str) -> bool:
+        """A word already owned by another family of substitutes (persons may share
+        a surname among themselves: relatives do)."""
+        for word in words:
+            other = self.words.get(word, owner)
+            if other != owner and not (other[:2] == owner[:2] == "p:"):
+                return True
+        return False
+
+    def _record(self, cluster: EntityCluster, base: str, substitutes: Iterable[str]) -> None:
+        owner = self._owner(cluster)
+        if owner is None:
+            return
+        for substitute in {base, *substitutes}:
+            for word in self._words_of(cluster, substitute):
+                self.words.setdefault(word, owner)
+            if cluster.entity_type in ORG_TYPES:
+                self.org_values.setdefault(normalize(substitute), owner)
+        if cluster.entity_type in ORG_TYPES and not STORED_TAG.fullmatch(base.strip()):
+            self.cores.setdefault(_core_key(cluster.canonical), fk.split_organization(base)[1])
 
     def _tag(self, cluster: EntityCluster) -> None:
         tag = self.tags.tag_for(cluster)
@@ -512,17 +583,25 @@ class _Realistic:
                 local = v.strip("<> ").split("@")[0]
                 if generic_local(local):
                     own.update(normalize(p) for p in re.split(r"[-._+]", local) if p)
+        owner = self._owner(cluster)
         for substitute in result.values():
             key = normalize(substitute)
-            if key in self.forbidden or key in self.used:
+            shared = owner is not None and self.org_values.get(key) == owner
+            if key in self.forbidden or (key in self.used and not shared):
                 return False
-            if self.pinned.get(key, cluster.id) != cluster.id:
+            if owner is not None and self._clashes(self._words_of(cluster, substitute), owner):
+                return False
+            if not shared and self.pinned.get(key, cluster.id) != cluster.id:
                 return False
             if checksums.compact(substitute).casefold() in self.forbidden:
                 return False
             # Parts too: « Renaud-sur-François », ``monique.girard@…``, ``@elodie_david``
             # must not reuse « Renaud », « Girard », « Élodie ».
-            parts = [p for t in tokens_of(substitute) for p in (t, *re.split(r"[-._@]", t))]
+            # An organisation's own designators (« Groupe », « SAS ») are kept on purpose.
+            name = substitute
+            if cluster.entity_type in ORG_TYPES:
+                name = fk.split_organization(substitute)[1]
+            parts = [p for t in tokens_of(name) for p in (t, *re.split(r"[-._@]", t))]
             if any(
                 normalize(p.strip(".")) in self.forbidden_tokens
                 for p in parts
@@ -568,18 +647,59 @@ class _Realistic:
         if original in fk.PUBLIC_MAIL_DOMAINS:
             return original
         if original not in self.domains:
-            for _ in range(MAX_ATTEMPTS):
-                candidate = fk.fake_domain(rng)
-                # Never a name of the batch as domain word (``…@antoine.example``).
-                word = normalize(candidate.split(".", 1)[0])
+            derived = self._org_domain(original)
+            owner = derived[1] if derived else f"d:{original}"
+            candidate = ""
+            for attempt in range(MAX_ATTEMPTS):
+                label = derived[0] if derived and attempt == 0 else None
+                candidate = fk.fake_domain(original, rng, label)
+                # Never a name of the batch as domain word (``…@antoine.fr``), nor a
+                # word of another substitute (« Raymond » the lawyer).
+                words = [normalize(w) for w in fk.split_domain(candidate)[1].split("-")]
                 if (
                     candidate not in self.domains.values()
                     and normalize(candidate) not in self.forbidden
-                    and word not in self.forbidden_tokens
+                    and not any(w in self.forbidden_tokens for w in words)
+                    and not self._clashes((w for w in words if len(w) >= 3), owner)
                 ):
                     break
+            else:  # every name taken (tiny batch pools): a neutral numbered label
+                candidate = fk.fake_domain(original, rng, f"domaine{rng.randint(100, 999)}")
+            for word in fk.split_domain(candidate)[1].split("-"):
+                if len(word) >= 3:
+                    self.words.setdefault(normalize(word), owner)
             self.domains[original] = candidate
         return self.domains[original]
+
+    def _org_domain(self, domain: str) -> tuple[str, str] | None:
+        """(label, owner) of the substitute domain of an organisation of the batch
+        whose name the domain's label spells (``sorbel.fr`` or ``groupe-sorbel.fr``
+        for « Groupe Sorbel »): built from its substitute (``courtois.fr``,
+        ``groupe-courtois.fr``), hyphenation kept. None for any other domain."""
+        if self._org_labels is None:
+            self._org_labels = {}
+            for cluster in self.clusters.values():
+                substitute = self.table.by_cluster.get(cluster.id)
+                if cluster.entity_type not in ORG_TYPES or substitute is None:
+                    continue
+                if STORED_TAG.fullmatch(substitute.strip()):
+                    continue
+                for variant in cluster.variants:
+                    prefix, core, _ = fk.split_organization(variant)
+                    key = fk.compact_key(core)
+                    if len(key) >= 3:
+                        self._org_labels.setdefault(key, (key, prefix, False))
+                        whole = fk.compact_key(prefix + core)
+                        self._org_labels.setdefault(whole, (key, prefix, True))
+        label = fk.split_domain(domain)[1]
+        found = self._org_labels.get(fk.compact_key(label))
+        if found is None or found[0] not in self.cores:
+            return None
+        key, prefix, full = found
+        fake = fk.slug(f"{prefix} {self.cores[key]}" if full else self.cores[key])
+        if "-" not in label:
+            fake = fake.replace("-", "")
+        return (fake, f"o:{key}") if fake else None
 
     def nir_birth(self, nir: str) -> tuple[int, int] | None:
         """(year, month) of the substitute birth date of the person a NIR belongs
@@ -612,6 +732,19 @@ class _Realistic:
 # ---------------------------------------------------------------------------
 
 Generator = Callable[[_Realistic, EntityCluster, random.Random, str | None], dict[str, str] | None]
+
+
+def _core_key(name: str) -> str:
+    """Batch-wide key of an organisation's core (« Projet Colibri » -> ``colibri``)."""
+    return fk.compact_key(fk.split_organization(name)[1])
+
+
+def _no_extra_period(original: str, substitute: str) -> str:
+    """No final period the original does not have: « … chez Colibri. » must not give
+    « … chez Briand S.A.R.L.. »."""
+    if substitute.endswith(".") and len(substitute) > 1 and not original.rstrip().endswith("."):
+        return substitute[:-1]
+    return substitute
 
 
 def _case_of(entity_type: str, original: str, substitute: str) -> str:
@@ -807,6 +940,34 @@ def _shared(make: Callable[[str, random.Random], str]) -> Generator:
     return generate
 
 
+def _organization(
+    st: _Realistic, cluster: EntityCluster, rng: random.Random, known: str | None
+) -> dict[str, str]:
+    """Organisations and projects: designators and legal form kept, the core
+    replaced by a substitute shared by every name with the same core (« Projet
+    Colibri » and « Colibri » -> « Projet Héron » and « Héron »); a core named as a
+    project anywhere in the batch gets a code name."""
+    _, core, _ = fk.split_organization(cluster.canonical)
+    key = _core_key(cluster.canonical)
+    if known is not None:
+        fake_core = fk.split_organization(known)[1]
+        base = known
+    else:
+        fake_core = st.cores.get(key) or fk.fake_org_core(
+            core, rng, project=key in st.project_cores
+        )
+        base = fk.render_organization(cluster.canonical, fake_core)
+    out = {"": base}
+    for variant in cluster.variants:
+        if normalize(variant) == normalize(cluster.canonical):
+            out[variant] = fk.mirror_case(variant, base)  # a stored substitute as it is
+        elif _core_key(variant) == key:
+            out[variant] = fk.render_organization(variant, fake_core)
+        else:  # another form of the name (an acronym): the whole substitute
+            out[variant] = fk.mirror_case(variant, base)
+    return out
+
+
 def _url(
     st: _Realistic, cluster: EntityCluster, rng: random.Random, known: str | None
 ) -> dict[str, str]:
@@ -870,7 +1031,8 @@ GENERATORS: dict[str, Generator] = {
     EntityType.MESSAGE_ID: _message_id,
     EntityType.ADDRESS: _shared(fk.fake_address),
     EntityType.LOCATION: _shared(lambda v, rng: fk.mirror_case(v, fk.fake_city(rng))),
-    EntityType.ORGANIZATION: _shared(fk.fake_company),
+    EntityType.ORGANIZATION: _organization,
+    PROJECT_TYPE: _organization,
     EntityType.JOB_TITLE: _shared(fk.fake_job),
     EntityType.USERNAME: _shared(fk.fake_username),
     EntityType.CASE_NUMBER: _shared(fk.random_like),

@@ -146,7 +146,8 @@ def test_email_built_from_substitute_person() -> None:
     ascii_given = ascii_of(person.given[0])
     email = sub(table, kept, "jean.dupont@dupont-avocats.test")
     local, domain = email.split("@")
-    assert local.startswith(ascii_given + ".") and domain.endswith(".example")
+    assert local.startswith(ascii_given + ".") and domain.endswith(".test")
+    assert "dupont" not in domain  # the suffix is kept, the name is not
     other = sub(table, kept, "jdupont@gmail.com")
     assert other.endswith("@gmail.com") and other[0] == ascii_given[0]
 
@@ -312,13 +313,16 @@ def test_shift_date_formats() -> None:
 def test_other_types_realistic_and_fallback_tags() -> None:
     table, kept, _ = assign(
         [("12 rue des Lilas, 75011 Paris", "ADRESSE"), ("Nantes", "LIEU"),
-         ("Lemaire Conseil SARL", "ORGANISATION"), ("PROJET-X", "PROJET")],
+         ("Lemaire Conseil SARL", "ORGANISATION"), ("PROJET-X", "PROJET"),
+         ("Kardex", "MACHINE")],
         ReplacementMode.REALISTIC,
     )  # fmt: skip
     address = sub(table, kept, "12 rue des Lilas, 75011 Paris")
     assert re.fullmatch(r"\d+ .+, \d{5} .+", address) and "Lilas" not in address
     assert sub(table, kept, "Nantes") != "Nantes"
-    assert sub(table, kept, "PROJET-X") == "[PROJET_001]"  # no realistic generator
+    project = sub(table, kept, "PROJET-X")
+    assert re.fullmatch(r"PROJET-[A-Z]", project) and project != "PROJET-X"
+    assert sub(table, kept, "Kardex") == "[MACHINE_001]"  # no realistic generator
 
 
 def test_pseudonymization_realistic_is_stable_across_batches() -> None:
