@@ -279,3 +279,23 @@ def test_job_title_left_in_its_file_is_to_review() -> None:
         doc, [("Conseillère clientèle Entreprises", EntityType.JOB_TITLE)], set(), []
     )
     assert result.residues and not any(r.certain for r in result.residues)
+
+
+def test_team_display_name_next_to_a_substitute_address_is_not_certain() -> None:
+    doc = _output("Projets IRVE <irma.mathieu@colas.example>")
+    result = Verifier(Config(), [RegexDetector(Config())]).verify(
+        doc, [("irve@exemple.test", "EMAIL")], {"irma.mathieu@colas.example"}, []
+    )
+    assert not any(r.certain for r in result.residues)
+
+
+def test_team_mailbox_gets_no_person_local_part(tmp_path: Path) -> None:
+    from anonyma.models import ReplacementMode
+    from anonyma.pipeline import Pipeline
+
+    source = tmp_path / "in"
+    source.mkdir()
+    (source / "a.txt").write_text("Écrire à irve@hexagone.example pour les bornes.", "utf-8")
+    Pipeline(Config(mode=ReplacementMode.REALISTIC, workers=1)).run([source], tmp_path / "out")
+    text = next((tmp_path / "out").rglob("a.txt")).read_text(encoding="utf-8")
+    assert "irve@" not in text and "boite" in text

@@ -68,7 +68,7 @@ from anonyma.models import (
     Severity,
     VerificationResult,
 )
-from anonyma.names import PARTICLES, ROLE_WORDS, civility_of, needs_capital
+from anonyma.names import PARTICLES, ROLE_WORDS, civility_of, is_functional_name, needs_capital
 from anonyma.policy import keeps
 from anonyma.rawscan import RawScanner, raw_residues
 from anonyma.replacer import BLACKOUT_CHAR
@@ -310,8 +310,14 @@ class Verifier:
                             reason=DETECTOR_HIT,
                             detector=entity.detector,
                             value=value,
+                            # « Projets IRVE » next to a substitute address reads as
+                            # a person only through that address: not certain.
                             certain=detector.deterministic
-                            and entity.score >= CERTAIN_DETECTOR_SCORE,
+                            and entity.score >= CERTAIN_DETECTOR_SCORE
+                            and not (
+                                entity.entity_type == EntityType.PERSON
+                                and is_functional_name(value)
+                            ),
                         )
                     )
         result.residues = neutral_places(result.residues, kinds)
@@ -416,6 +422,10 @@ def _substitutes(substitutes: set[str]) -> MultiMatcher[str]:
             words = sub.split()
             if len(words) > 1:
                 subs.add("".join(words), sub)
+            # The local part of a substitute address (« irma.mathieu ») read alone.
+            local = sub.strip("<> ").split("@")[0] if "@" in sub else ""
+            if len(local) >= 5:
+                subs.add(local, sub)
     return subs
 
 
