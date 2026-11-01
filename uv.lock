@@ -28,7 +28,7 @@ wheels = [
 
 [[package]]
 name = "anonyma"
-version = "0.6.3"
+version = "0.6.4"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
