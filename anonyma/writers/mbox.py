@@ -27,19 +27,21 @@ class MboxWriter(Writer):
         ctx: WriteContext,
     ) -> list[Issue]:
         newline: bytes = str(document.properties.get("newline", "\n")).encode()
-        out = bytearray()
-        for segment_id, child_id in document.properties.get("messages", []):
-            output = ctx.child_outputs.get(child_id)
-            if output is None or output.path is None:
-                continue  # omitted: reported by the pipeline
-            message = output.path.read_bytes()
-            line = plan.apply(document.segment(segment_id)) if segment_id is not None else ""
-            separator = safe_from_line(line, message_moment(message))
-            separator = separator.replace("\r", " ").replace("\n", " ")
-            # mboxo quoting: no body line may look like a separator.
-            message = _FROM_LINE.sub(b">From ", message)
-            if not message.endswith(b"\n"):
-                message += newline
-            out += b"From " + separator.encode("utf-8") + newline + message + newline
-        destination.write_bytes(bytes(out))
+        # Indexed once (20,000 mails: one scan of the segments each was quadratic), and
+        # written message by message rather than held whole in memory twice.
+        segments = {s.id: s for s in document.segments}
+        with destination.open("wb") as out:
+            for segment_id, child_id in document.properties.get("messages", []):
+                output = ctx.child_outputs.get(child_id)
+                if output is None or output.path is None:
+                    continue  # omitted: reported by the pipeline
+                message = output.path.read_bytes()
+                line = plan.apply(segments[segment_id]) if segment_id is not None else ""
+                separator = safe_from_line(line, message_moment(message))
+                separator = separator.replace("\r", " ").replace("\n", " ")
+                # mboxo quoting: no body line may look like a separator.
+                message = _FROM_LINE.sub(b">From ", message)
+                if not message.endswith(b"\n"):
+                    message += newline
+                out.write(b"From " + separator.encode("utf-8") + newline + message + newline)
         return []

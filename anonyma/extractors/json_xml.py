@@ -19,6 +19,7 @@ import bisect
 import re
 from collections.abc import Sequence
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from lxml import etree
@@ -116,7 +117,7 @@ class JsonExtractor(Extractor):
                 html_values[i] = _html_value(value, i, label, where, document, ctx)
                 continue
             if token.kind == "string":
-                hint = hint_from(_nearest_key(token.keys), siblings.get(token.parent, {}))
+                hint = partial(hint_from, _nearest_key(token.keys), siblings.get(token.parent, {}))
                 refs = extract_blobs(value, hint, document, ctx)
                 if refs:
                     embedded[i] = refs
@@ -240,11 +241,51 @@ def xml_hint(unit: Unit) -> Hint:
     return hint_from(own, siblings)
 
 
-def _label(tree: etree._ElementTree, unit: Unit) -> str:
+def element_paths(root: etree._Element) -> dict[etree._Element, str]:
+    """``tree.getpath(element)`` of every element, in one pass: libxml2 walks the
+    siblings of each element to number it, quadratic on a flat file of 100,000
+    records. Same rules: ``prefix:name``, ``*`` in a default namespace (numbered
+    among all sibling elements), else the name, numbered among the siblings of the
+    same name and namespace prefix; ``[n]`` only when there are several."""
+
+    def step(element: etree._Element) -> tuple[str, tuple[str | None, str] | None]:
+        qname = etree.QName(element)
+        if qname.namespace is None:
+            return qname.localname, (None, qname.localname)
+        if element.prefix is None:
+            return "*", None  # default namespace: numbered among every element
+        return f"{element.prefix}:{qname.localname}", (element.prefix, qname.localname)
+
+    paths = {root: "/" + step(root)[0]}
+    todo = [root]
+    while todo:
+        parent = todo.pop()
+        children = [c for c in parent if isinstance(c.tag, str)]
+        if not children:
+            continue
+        steps = [step(c) for c in children]
+        sizes: dict[tuple[str | None, str] | None, int] = {}
+        for _, key in steps:
+            if key is not None:
+                sizes[key] = sizes.get(key, 0) + 1
+        seen: dict[tuple[str | None, str] | None, int] = {}
+        base = paths[parent]
+        for position, (child, (name, key)) in enumerate(zip(children, steps, strict=True)):
+            if key is None:
+                size, index = len(children), position + 1
+            else:
+                size = sizes[key]
+                index = seen[key] = seen.get(key, 0) + 1
+            paths[child] = f"{base}/{name}[{index}]" if size > 1 else f"{base}/{name}"
+            todo.append(child)
+    return paths
+
+
+def _label(paths: dict[etree._Element, str], tree: etree._ElementTree, unit: Unit) -> str:
     node = unit.anchor
     if not isinstance(node.tag, str):
         return "commentaire" if isinstance(node, etree._Comment) else "instruction"
-    path = tree.getpath(node)
+    path = paths.get(node) or tree.getpath(node)
     if unit.kind == "attr" and unit.attrs:
         return f"{path}/@{local_name(unit.attrs[0][1])}"
     return path
@@ -279,6 +320,7 @@ class XmlExtractor(Extractor):
                 )
             )
         embedded: dict[int, list[EmbeddedRef]] = {}
+        paths = element_paths(tree.getroot())
         for i, unit in enumerate(xml_tree_units(tree)):
             if unit.kind == "attr":
                 kind = SegmentKind.ATTRIBUTE
@@ -288,7 +330,7 @@ class XmlExtractor(Extractor):
                 kind = SegmentKind.BODY
             text = unit.text
             if kind is not SegmentKind.COMMENT:
-                refs = extract_blobs(text, xml_hint(unit), document, ctx)
+                refs = extract_blobs(text, partial(xml_hint, unit), document, ctx)
                 if refs:
                     embedded[i] = refs
                     text = masked(text, refs)
@@ -300,7 +342,9 @@ class XmlExtractor(Extractor):
                     id=f"x{i}",
                     text=text,
                     locator=(i,),
-                    context=SegmentContext(kind, label=_label(tree, unit), line=line or None),
+                    context=SegmentContext(
+                        kind, label=_label(paths, tree, unit), line=line or None
+                    ),
                 )
             )
         document.properties[EMBEDDED] = embedded

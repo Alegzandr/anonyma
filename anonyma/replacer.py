@@ -625,6 +625,10 @@ def _person(
             raise _CollisionError
     st.persons[cluster.id] = fake
     out: dict[str, str] = {"": fk.render_person(canonical, fake) if known is None else known}
+    if known is None and normalize(out[""]) in st.used:
+        # Taken already: ``_acceptable`` would refuse it, so the variants (dozens for a
+        # person of a large batch) are not rendered for nothing.
+        raise _CollisionError
     for variant in cluster.variants:
         person = parse_person(variant)
         compact = variant.strip()

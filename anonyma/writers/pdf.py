@@ -700,20 +700,29 @@ class PdfWriter(Writer):
             paint_boxes(canvas, regions, ctx.mode)
             store_image_pixels(doc, xref, canvas, storage)
         blanked = 0
-        for xref in document.properties.get("pdf_unextracted", []):
-            if PdfWriter._delete_image(doc, int(xref)):
+        unextracted = document.properties.get("pdf_unextracted", [])
+        # First page showing each image, read once (one page scan per image was
+        # quadratic on a long scan without OCR).
+        first_page: dict[int, int] = {}
+        if unextracted:
+            for number, page in enumerate(doc):
+                for item in page.get_images(full=True):
+                    first_page.setdefault(int(item[0]), number)
+        for xref in unextracted:
+            if PdfWriter._delete_image(doc, int(xref), first_page):
                 blanked += 1
         PdfWriter._strip_jpeg(doc, set(per_image))
         return blanked
 
     @staticmethod
-    def _delete_image(doc: pymupdf.Document, xref: int) -> bool:
-        """Replace image ``xref`` by a transparent pixel (every placement)."""
-        for page in doc:
-            if any(item[0] == xref for item in page.get_images(full=True)):
-                page.delete_image(xref)
-                return True
-        return False
+    def _delete_image(doc: pymupdf.Document, xref: int, first_page: dict[int, int]) -> bool:
+        """Replace image ``xref`` by a transparent pixel (every placement: the object
+        itself is rewritten, so ``first_page`` stays valid)."""
+        number = first_page.get(xref)
+        if number is None:
+            return False
+        doc[number].delete_image(xref)
+        return True
 
     @staticmethod
     def _strip_jpeg(doc: pymupdf.Document, skip: set[int]) -> None:

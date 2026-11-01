@@ -17,6 +17,7 @@ from anonyma.codec import decode_bytes
 from anonyma.extractors._embedded import PROPERTY as EMBEDDED
 from anonyma.extractors._embedded import (
     EmbeddedRef,
+    Hint,
     extract_blobs,
     hint_from,
     masked,
@@ -125,8 +126,12 @@ class CsvExtractor(Extractor):
     ) -> str | None:
         """The cell text to expose (files replaced by marks), None when nothing is
         left of it."""
-        siblings = {names[c]: t for c, t in rows[f.row].items() if c in names and c != f.col}
-        refs = extract_blobs(value, hint_from(names.get(f.col, ""), siblings), document, ctx)
+
+        def hint() -> Hint:
+            siblings = {names[c]: t for c, t in rows[f.row].items() if c in names and c != f.col}
+            return hint_from(names.get(f.col, ""), siblings)
+
+        refs = extract_blobs(value, hint, document, ctx)
         if not refs:
             return value
         embedded[f"r{f.row}c{f.col}"] = refs

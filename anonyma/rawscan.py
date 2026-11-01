@@ -285,7 +285,7 @@ class RawScanner:
             if b"/Image" in dictionary or b"/FontFile" in dictionary or b"/Length1" in dictionary:
                 continue
             try:
-                content = zlib.decompressobj().decompress(view[match.end() :], self._budget)
+                content = _inflate(view, match.end(), self._budget)
             except zlib.error:
                 continue
             yield from self._bytes(content, f"{label}, flux n°{number}", depth + 1)
@@ -301,8 +301,13 @@ class RawScanner:
             return
         collapsed = _SPACES.sub(" ", text)
         lower = collapsed.lower()
-        if len(lower) != len(collapsed):  # a few characters lower to several
-            lower = "".join(c if len(c.lower()) != 1 else c.lower() for c in collapsed)
+        if len(lower) != len(collapsed):
+            # « İ » (U+0130), the only character lowering to two, is kept as is so
+            # that offsets still match. Same as lowering character by character (which
+            # took seconds per MB of binary, whose UTF-16 readings hold « İ » almost
+            # always): « Σ » is set to « σ » first, as alone, never to a final « ς ».
+            parts = collapsed.replace("Σ", "σ").split("İ")
+            lower = "İ".join(part.lower() for part in parts)
         covered: list[tuple[int, int]] | None = None
         for end, key in self._values.iter(lower):
             start = end - len(key) + 1
@@ -338,6 +343,28 @@ class RawScanner:
             else:
                 merged.append((start, end))
         return merged
+
+
+#: Compressed bytes given to zlib at a time (see :func:`_inflate`).
+_INFLATE_CHUNK = 1 << 16
+
+
+def _inflate(data: memoryview, start: int, limit: int) -> bytes:
+    """``zlib.decompressobj().decompress(data[start:], limit)``, fed by chunks: zlib
+    copies the input left after the end of the stream, so feeding it the rest of the
+    file made a PDF of thousands of streams quadratic. Raises ``zlib.error`` the same."""
+    inflater = zlib.decompressobj()
+    pieces: list[bytes] = []
+    position, left = start, limit
+    while position < len(data) and left > 0 and not inflater.eof:
+        chunk = data[position : position + _INFLATE_CHUNK]
+        position += len(chunk)
+        piece = inflater.decompress(chunk, left)
+        pieces.append(piece)
+        left -= len(piece)
+        if inflater.unconsumed_tail:
+            break  # output limit reached
+    return b"".join(pieces)
 
 
 def raw_residues(hits: Sequence[tuple[str, RawHit]]) -> list[Residue]:

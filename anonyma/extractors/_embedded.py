@@ -23,8 +23,9 @@ from __future__ import annotations
 import base64
 import binascii
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 from anonyma import registry
@@ -104,6 +105,7 @@ def hint_from(name: str, siblings: Mapping[str, str]) -> Hint:
     return Hint(strong, mime, suffix)
 
 
+@lru_cache(maxsize=4096)
 def name_key(name: str) -> str:
     """Normalized form of a field name (``fileName`` -> ``filename``)."""
     return " ".join(re.sub(r"[^a-z0-9]+", " ", normalize(name)).split())
@@ -289,7 +291,13 @@ def _suffix(data: bytes, kind: str, hint: Hint, mime: str = "") -> str:
     return kind
 
 
-def find_blobs(value: str, hint: Hint = NO_HINT) -> list[Blob]:
+#: A hint, or a function computing it: the neighbours of a value are only read when
+#: the value is base64 (looking at every sibling of every cell or element was
+#: quadratic on wide CSV rows and flat XML).
+LazyHint = Hint | Callable[[], Hint]
+
+
+def find_blobs(value: str, hint: LazyHint = NO_HINT) -> list[Blob]:
     """Embedded files of ``value``: the whole (stripped) value when it is base64 of a
     file, else every ``data:...;base64,`` URI holding a file."""
     stripped = value.strip()
@@ -298,12 +306,14 @@ def find_blobs(value: str, hint: Hint = NO_HINT) -> list[Blob]:
         # The whole value (its final line end included, when there is one).
         end = len(value)
         parsed = parse_base64(value[lead:])
-        if parsed is None:
+        if parsed is None and lead + len(stripped) < len(value):
             end = lead + len(stripped)
             parsed = parse_base64(stripped)
         if parsed is not None:
             data, style = parsed
             compact = "".join(_NEWLINE.split(stripped))
+            if callable(hint):
+                hint = hint()
             kind = _kind(data, compact, hint)
             if kind is not None:
                 suffix = _suffix(data, kind, hint)
@@ -335,7 +345,7 @@ def find_blobs(value: str, hint: Hint = NO_HINT) -> list[Blob]:
 
 
 def extract_blobs(
-    value: str, hint: Hint, document: Document, ctx: ExtractionContext
+    value: str, hint: LazyHint, document: Document, ctx: ExtractionContext
 ) -> list[EmbeddedRef]:
     """Extract the embedded files of ``value`` as children of ``document``."""
     refs: list[EmbeddedRef] = []

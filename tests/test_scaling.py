@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +11,7 @@ from anonyma import threads
 from anonyma.config import Config
 from anonyma.detectors.regex_fr import RegexDetector, RowLabels, _row_label_hint
 from anonyma.models import Profile, Segment, SegmentContext, SegmentKind
+from anonyma.pipeline import Pipeline
 
 
 def _cell(ref: str, text: str) -> Segment:
@@ -66,3 +68,55 @@ def test_model_threads_share_the_cpus_of_a_pool(monkeypatch: pytest.MonkeyPatch)
     assert threads.model_threads() == 2
     threads.set_pool_size(64)
     assert threads.model_threads() == 1
+
+
+def test_element_paths_match_libxml2() -> None:
+    from anonyma.extractors._xml import parse_xml
+    from anonyma.extractors.json_xml import element_paths
+
+    data = (
+        b'<r xmlns="urn:d" xmlns:a="urn:a" xmlns:b="urn:a"><x/><a:y/><b:y/><a:y/>'
+        b'<z xmlns=""><q/><q/><w/><c xmlns="urn:e"/></z><x/><!--c--><?pi x?>'
+        b'<n:k xmlns:n="urn:n"/></r>'
+    )
+    for sample in (data, b"<root><a/><b/><a><c/><c/></a><!-- x --><a/></root>"):
+        tree = parse_xml(sample, doctype=True)
+        paths = element_paths(tree.getroot())
+        for element in tree.getroot().iter():
+            if isinstance(element.tag, str):
+                assert paths[element] == tree.getpath(element)
+
+
+def test_flat_xml_is_linear(tmp_path: Path) -> None:
+    def run(items: int) -> float:
+        path = tmp_path / f"flat{items}.xml"
+        body = "".join(f"<item><nom>Valeur {i}</nom><code>{i}</code></item>" for i in range(items))
+        path.write_text(f"<liste>{body}</liste>", encoding="utf-8")
+        started = time.perf_counter()
+        Pipeline(Config(profile=Profile.LIGHT, workers=1)).analyze([path])
+        return time.perf_counter() - started
+
+    small, large = run(500), run(4000)
+    assert large < small * 8 * 3
+
+
+def test_chunked_inflate_matches_zlib() -> None:
+    import os
+    import zlib
+
+    from anonyma.rawscan import _inflate
+
+    payload = zlib.compress(os.urandom(200_000) + b"texte " * 50_000)
+    for data in (payload + b"suite", payload[: len(payload) // 2], b"xx" + payload):
+        view = memoryview(data)
+        for start in (0, 2):
+            for limit in (1, 70_000, 10**9):
+                try:
+                    expected: bytes | None = zlib.decompressobj().decompress(view[start:], limit)
+                except zlib.error:
+                    expected = None
+                try:
+                    got: bytes | None = _inflate(view, start, limit)
+                except zlib.error:
+                    got = None
+                assert got == expected

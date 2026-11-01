@@ -569,12 +569,17 @@ def apply_policies(
         for entity in kept:
             if entity.cluster_id:
                 dropped_values.setdefault(entity.cluster_id, set()).add(entity.value)
-        used = {e.cluster_id for e in remaining}
+        # Values still mentioned, per cluster: grouped once rather than scanned for each
+        # cluster (thousands of kept organisations under « liste_noire »).
+        remaining_values: dict[str | None, set[str]] = {}
+        for mention in remaining:
+            remaining_values.setdefault(mention.cluster_id, set()).add(mention.value)
+        used = set(remaining_values)
         for cid, values in dropped_values.items():
             target = clusters.get(cid)
             if target is None:
                 continue
-            still = {e.value for e in remaining if e.cluster_id == cid}
+            still = remaining_values.get(cid, set())
             target.variants -= values - still
             if cid not in used or not target.variants:
                 del clusters[cid]
