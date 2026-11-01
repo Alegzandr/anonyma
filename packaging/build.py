@@ -26,6 +26,7 @@ LibreOffice is downloaded at build time only (pinned version, SHA-256 checked, s
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
@@ -174,6 +175,15 @@ def gui_path(folder: Path) -> Path:
     return folder / APP
 
 
+def _clear_read_only(function: object, path: str, _exc: BaseException) -> None:
+    with contextlib.suppress(OSError):
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        if os.path.isdir(path) and not os.path.islink(path):
+            os.rmdir(path)
+        else:
+            os.unlink(path)
+
+
 def reset_runtime_dirs(folder: Path, retry_seconds: float = 30.0) -> None:
     """Empty ``models`` and ``data`` before packaging. On Windows the smoke test's
     LibreOffice (soffice.bin) may still be exiting and recreating folders in its
@@ -182,7 +192,9 @@ def reset_runtime_dirs(folder: Path, retry_seconds: float = 30.0) -> None:
         target = folder / name
         deadline = time.monotonic() + retry_seconds
         while True:
-            shutil.rmtree(target, ignore_errors=True)
+            # Read-only entries (LibreOffice's « Documents » folder) need their flag
+            # cleared first on Windows.
+            shutil.rmtree(target, onexc=_clear_read_only)
             if not target.exists() or time.monotonic() >= deadline:
                 break
             time.sleep(0.5)

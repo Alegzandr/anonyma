@@ -6,11 +6,15 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from anonyma import paths
 
 _HOLDER = """
 import sys
 from pathlib import Path
+import pytest
+
 from anonyma import paths
 paths.claim(Path(sys.argv[1]))
 print("ok", flush=True)
@@ -74,4 +78,22 @@ def test_remove_tree_waits_for_a_file_released_shortly(tmp_path: Path) -> None:
     # On Windows an open file cannot be deleted: the first attempts fail.
     threading.Timer(0.6, held.close).start()
     assert remove_tree(folder, retry_seconds=5.0)
+    assert not folder.exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows read-only attribute")
+def test_remove_tree_clears_read_only_folders_and_files(tmp_path: Path) -> None:
+    import shutil
+
+    from anonyma.paths import remove_tree
+
+    folder = tmp_path / "lot"
+    documents = folder / "lo-1-2" / "Documents"
+    documents.mkdir(parents=True)
+    (folder / "lo-1-2" / "lecture_seule.xcu").write_text("x", encoding="utf-8")
+    for entry in (documents, folder / "lo-1-2" / "lecture_seule.xcu"):
+        subprocess.run(["attrib", "+R", str(entry)], check=True, capture_output=True)
+    shutil.rmtree(folder, ignore_errors=True)
+    assert documents.exists()  # what a plain removal leaves behind
+    assert remove_tree(folder, retry_seconds=1.0)
     assert not folder.exists()

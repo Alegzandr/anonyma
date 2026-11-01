@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import os
 import shutil
+import stat
 import sys
 import tempfile
 import time
@@ -182,6 +183,23 @@ def _recent(path: Path) -> bool:
         return False
 
 
+def _clear_read_only(function: object, path: str, _exc: BaseException) -> None:
+    """``shutil.rmtree`` error handler: on Windows a read-only file or folder (LibreOffice
+    marks its « Documents » folder so) cannot be removed until the flag is cleared."""
+    with contextlib.suppress(OSError):
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        if os.path.isdir(path) and not os.path.islink(path):
+            os.rmdir(path)
+        else:
+            os.unlink(path)
+
+
+def rmtree(path: Path) -> None:
+    """``shutil.rmtree`` that also removes read-only entries and never raises."""
+    with contextlib.suppress(OSError):
+        shutil.rmtree(path, onexc=_clear_read_only)
+
+
 #: Seconds a removal keeps retrying while files are still held: on Windows,
 #: ``soffice.exe`` returns while its ``soffice.bin`` child still holds the profile.
 REMOVE_RETRY_SECONDS = 10.0
@@ -192,7 +210,7 @@ def remove_tree(path: Path, retry_seconds: float = REMOVE_RETRY_SECONDS) -> bool
     a process that is exiting. True when nothing is left."""
     deadline = time.monotonic() + retry_seconds
     while True:
-        shutil.rmtree(path, ignore_errors=True)
+        rmtree(path)
         if not path.exists():
             return True
         if time.monotonic() >= deadline:
@@ -209,7 +227,7 @@ def clean_tmp() -> None:
         for child in root.iterdir():
             if child.is_dir():
                 if not _in_use(child):
-                    shutil.rmtree(child, ignore_errors=True)
+                    rmtree(child)
             elif not _recent(child):
                 with contextlib.suppress(OSError):
                     child.unlink()
