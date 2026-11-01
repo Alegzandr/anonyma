@@ -324,7 +324,7 @@ dans `<sortie>_quarantaine/`, à côté du dossier de sortie.
 
 | Profil | Détection | Besoins indicatifs |
 |---|---|---|
-| `leger` | expressions régulières + Presidio + listes métier | toute machine |
+| `leger` | expressions régulières, règles et listes métier | toute machine |
 | `standard` | + modèle GLiNER (entités nommées) | 6 Go de mémoire vive |
 | `complet` | + modèle de langage local (Qwen3, GGUF Q4) | 16 Go et 8 processeurs logiques |
 

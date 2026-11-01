@@ -1,6 +1,6 @@
 """Declarative regex rules of the French LIGHT detector (helpers, not a plugin).
 
-Each :class:`Rule` becomes a Presidio ``PatternRecognizer``; validation (checksums),
+Each :class:`Rule` is a compiled regex; validation (checksums),
 context boosting and span adjustments are applied afterwards by
 :mod:`anonyma.detectors.regex_fr`, so that a checksum failure can still be kept at a
 low score when strong context words are present (recall first).

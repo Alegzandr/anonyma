@@ -30,7 +30,7 @@ log = get_logger("hardware")
 
 GIB = 1024**3
 
-#: Below this much RAM, only the LIGHT profile (regex + Presidio) is recommended.
+#: Below this much RAM, only the LIGHT profile (regex and rules) is recommended.
 STANDARD_MIN_RAM = 6 * GIB
 #: The FULL profile (local LLM) needs at least this much RAM...
 FULL_MIN_RAM = 16 * GIB
@@ -347,7 +347,7 @@ def recommend_profile(info: HardwareInfo) -> Profile:
 
 
 PROFILE_LABELS = {
-    Profile.LIGHT: "Léger (expressions régulières + Presidio)",
+    Profile.LIGHT: "Léger (expressions régulières et règles)",
     Profile.STANDARD: "Standard (+ GLiNER)",
     Profile.FULL: "Complet (+ modèle de langage local)",
 }

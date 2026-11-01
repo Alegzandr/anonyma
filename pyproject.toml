@@ -26,10 +26,10 @@ dependencies = [
     "xlrd>=2.0.2",
     "olefile>=0.47",
     "pymupdf>=1.26,<2",
-    "presidio-analyzer>=2.2.355",
     "tokenizers>=0.20",
     "numpy>=1.26",
     "pyahocorasick>=2.1",
+    "regex>=2024.9",
     "phonenumbers>=8.13",
     "zxing-cpp>=2.2",
 ]
@@ -37,6 +37,8 @@ dependencies = [
 [project.optional-dependencies]
 llm = [
     "llama-cpp-python>=0.3.30",
+    # The model's chat template (anonyma/llm.py).
+    "jinja2>=3.1",
 ]
 
 [project.scripts]
@@ -53,6 +55,7 @@ dev = [
     "lxml-stubs>=0.5.1",
     "types-regex>=2026.9.29.20261030",
     "qrcode>=7",
+    "jinja2>=3.1",
 ]
 
 [tool.uv]
@@ -103,7 +106,7 @@ packages = ["anonyma"]
 module = [
     "docx.*", "pptx.*", "odf.*", "striprtf.*", "fitz.*", "pymupdf.*", "extract_msg.*",
     "pypff.*", "py7zr.*", "pillow_heif.*", "rapidocr.*", "rapidocr_onnxruntime.*",
-    "presidio_analyzer.*", "presidio_anonymizer.*", "onnxruntime.*", "llama_cpp.*",
+    "onnxruntime.*", "llama_cpp.*",
     "faker.*", "xlrd.*", "ahocorasick", "ahocorasick.*", "olefile.*", "tokenizers.*", "psutil.*", "PyInstaller.*",
 ]
 ignore_missing_imports = true

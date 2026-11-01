@@ -1,4 +1,4 @@
-"""Custom Presidio recognizers needing more than one regex (helpers, not a plugin).
+"""Custom recognizers needing more than one regex (helpers, not a plugin).
 
 * :class:`PersonRecognizer`: civility + name (civility left outside the span), known
   given name + capitalized surname, ``SURNAME Given``, ``GIVEN SURNAME``, mixed case
@@ -15,11 +15,11 @@ Results carry ``recognition_metadata["attributes"]`` (e.g. civility gender).
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import Any
 
 import regex
-from presidio_analyzer import EntityRecognizer, RecognizerResult
 
 from anonyma.data import first_name, is_common_word
 from anonyma.detectors._rules import SP, STREET_TYPES, STRICT_STREET_TYPES
@@ -326,6 +326,17 @@ CIVILITY = (
 _CIVILITY = regex.compile(rf"(?<![\w.\-]){CIVILITY}(?=[ \t  ]+[{UPPER}dDvVlL])")
 
 
+@dataclass(slots=True)
+class RecognizerResult:
+    """One match of a recognizer (the shape of Presidio's, which is no longer used)."""
+
+    entity_type: str
+    start: int
+    end: int
+    score: float
+    recognition_metadata: dict[str, Any] = field(default_factory=dict)
+
+
 def _result(entity_type: str, start: int, end: int, score: float, **attrs: str) -> Any:
     return RecognizerResult(
         entity_type,
@@ -453,8 +464,15 @@ _NOT_NAME_AFTER_CUE = frozenset(
 )  # fmt: skip
 
 
-class CustomRecognizer(EntityRecognizer):
+class CustomRecognizer:
     """Base of the recognizers below: no NLP artefacts needed."""
+
+    def __init__(
+        self, supported_entities: list[str], name: str, supported_language: str = "fr"
+    ) -> None:
+        self.supported_entities = list(supported_entities)
+        self.name = name
+        self.supported_language = supported_language
 
     def load(self) -> None:
         return None

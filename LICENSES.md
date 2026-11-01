@@ -15,7 +15,7 @@
 > commerciale de PyMuPDF). D'autres composants embarqués relèvent aussi de la
 > GPL (x265 via pillow-heif, pcodedmp via extract-msg) : voir plus bas.
 
-Fichier généré le 2026-10-31 par `packaging/gen_licenses.py` (Windows AMD64, Python 3.12.10). Les dépendances propres à un système (ONNX Runtime DirectML sous Windows, par exemple) varient d'une plateforme à l'autre : chaque archive portable contient la liste générée pour son système.
+Fichier généré le 2026-11-01 par `packaging/gen_licenses.py` (Windows AMD64, Python 3.12.10). Les dépendances propres à un système (ONNX Runtime DirectML sous Windows, par exemple) varient d'une plateforme à l'autre : chaque archive portable contient la liste générée pour son système.
 
 ## Licences copyleft fortes détectées
 
@@ -42,6 +42,7 @@ Dans tous les cas, PyMuPDF (AGPL-3.0) et extract-msg (GPL-3.0) font partie des c
 
 ## Licences copyleft faibles (bibliothèques)
 
+- certifi 2026.10.23 : MPL-2.0
 - inflate64 1.0.4 : LGPL-2.1-or-later
 - libpff-python 20260926 : LGPL-3.0-or-later
 - multivolumefile 0.2.3 : LGPL-2.1+
@@ -57,7 +58,14 @@ Dans tous les cas, PyMuPDF (AGPL-3.0) et extract-msg (GPL-3.0) font partie des c
 
 Les modèles ne sont pas inclus dans l'archive : ils sont téléchargés à la demande (ou importés hors ligne) après vérification en direct de leur licence sur Hugging Face. Les licences non commerciales sont refusées.
 
-Aucun modèle dans le catalogue au moment de la génération.
+| Identifiant | Titre | Dépôt | Révision | Licence |
+|---|---|---|---|---|
+| gliner-multi-pii | GLiNER multilingue données personnelles | [filip-w/gliner-multi-pii-onnx](https://huggingface.co/filip-w/gliner-multi-pii-onnx) | `6b3388973924` | apache-2.0 |
+| gliner-multi-pii-fp16 | GLiNER multilingue données personnelles (compact) | [filip-w/gliner-multi-pii-onnx](https://huggingface.co/filip-w/gliner-multi-pii-onnx) | `6b3388973924` | apache-2.0 |
+| qwen3-4b | Qwen3 4B (Q4) | [Qwen/Qwen3-4B-GGUF](https://huggingface.co/Qwen/Qwen3-4B-GGUF) | `bc640142c66e` | apache-2.0 |
+| qwen3-8b | Qwen3 8B (Q4) | [Qwen/Qwen3-8B-GGUF](https://huggingface.co/Qwen/Qwen3-8B-GGUF) | `7c41481f57cb` | apache-2.0 |
+| qwen3-14b | Qwen3 14B (Q4) | [Qwen/Qwen3-14B-GGUF](https://huggingface.co/Qwen/Qwen3-14B-GGUF) | `530227a7d994` | apache-2.0 |
+| ocr-latin-ppocrv5 | OCR alphabet latin (accents français) | [monkt/paddleocr-onnx](https://huggingface.co/monkt/paddleocr-onnx) | `7b02d0a30a07` | apache-2.0 |
 
 ## Composants Python
 
@@ -68,6 +76,7 @@ Aucun modèle dans le catalogue au moment de la génération.
 | backports.zstd | 1.8.0 | PSF-2.0 | https://github.com/rogdham/backports.zstd |
 | beautifulsoup4 | 4.15.0 | MIT License | https://www.crummy.com/software/BeautifulSoup/bs4/ |
 | brotli | 1.2.1 | MIT | https://github.com/google/brotli |
+| certifi | 2026.10.23 | MPL-2.0 | https://github.com/certifi/python-certifi |
 | cffi | 2.1.1 | MIT-0 | https://cffi.readthedocs.io/ |
 | click | 8.5.0 | BSD-3-Clause | https://github.com/pallets/click/ |
 | colorama | 0.4.6 | BSD License | https://github.com/tartley/colorama |
@@ -83,7 +92,9 @@ Aucun modèle dans le catalogue au moment de la génération.
 | fsspec | 2026.9.0 | BSD-3-Clause | https://github.com/fsspec/filesystem_spec |
 | h11 | 0.16.0 | MIT | https://github.com/python-hyper/h11 |
 | hf-xet | 1.8.0 | Apache-2.0 | https://github.com/huggingface/xet-core |
+| httpcore | 1.0.9 | BSD-3-Clause | https://www.encode.io/httpcore/ |
 | httpcore2 | 2.16.0 | BSD-3-Clause | https://github.com/pydantic/httpx2 |
+| httpx | 0.28.1 | BSD-3-Clause | https://github.com/encode/httpx |
 | httpx2 | 2.16.0 | BSD-3-Clause | https://github.com/pydantic/httpx2 |
 | huggingface_hub | 2.4.0 | Apache-2.0 | https://github.com/huggingface/huggingface_hub |
 | idna | 3.20 | BSD-3-Clause | https://github.com/kjd/idna |
@@ -103,11 +114,13 @@ Aucun modèle dans le catalogue au moment de la génération.
 | opencv-python-headless | 5.0.0.93 | Apache 2.0 | https://github.com/opencv/opencv-python |
 | packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging |
 | pcodedmp | 1.2.6 | GPL | https://github.com/bontchev/pcodedmp |
+| phonenumbers | 9.0.42 | Apache-2.0 | https://github.com/daviddrysdale/python-phonenumbers |
 | pillow | 13.0.0 | MIT-CMU | https://python-pillow.org |
 | pillow_heif | 1.8.1 | BSD-3-Clause | https://github.com/bigcat88/pillow_heif |
 | protobuf | 7.36.2 | 3-Clause BSD License | https://developers.google.com/protocol-buffers/ |
 | psutil | 7.2.2 | BSD-3-Clause | https://github.com/giampaolo/psutil |
 | py7zr | 1.1.4 | LGPL-2.1-or-later | https://py7zr.readthedocs.io/ |
+| pyahocorasick | 2.3.1 | BSD-3-Clause and Public-Domain | http://github.com/WojciechMula/pyahocorasick |
 | pybcj | 1.0.8 | LGPL-2.1-or-later | https://pypi.org/project/pybcj |
 | pyclipper | 1.4.0 | MIT | https://github.com/fonttools/pyclipper |
 | pycparser | 3.12 | BSD-3-Clause | https://github.com/eliben/pycparser |
@@ -120,6 +133,7 @@ Aucun modèle dans le catalogue au moment de la génération.
 | PyYAML | 6.0.3 | MIT | https://pyyaml.org/ |
 | rapidocr-onnxruntime | 1.4.4 | Apache-2.0 | https://github.com/RapidAI/RapidOCR |
 | red-black-tree-mod | 1.22 | MIT | http://stromberg.dnsalias.org/~strombrg/red-black-tree-mod/ |
+| regex | 2026.9.29 | Apache-2.0 AND CNRI-Python | https://github.com/mrabarnett/mrab-regex |
 | rich | 15.0.0 | MIT | https://github.com/Textualize/rich |
 | RTFDE | 0.1.2.2 | GNU Lesser General Public License v3 (LGPLv3) | https://github.com/seamustuohy/RTFDE |
 | shapely | 2.2.0 | BSD-3-Clause | https://github.com/shapely/shapely |
@@ -129,6 +143,7 @@ Aucun modèle dans le catalogue au moment de la génération.
 | soupsieve | 3.0.4 | MIT | https://github.com/facelessuser/soupsieve |
 | sympy | 1.14.0 | BSD | https://sympy.org |
 | texttable | 1.7.2 | MIT | https://github.com/foutaise/texttable/ |
+| tokenizers | 0.23.3 | Apache Software License | https://github.com/huggingface/tokenizers |
 | tqdm | 4.70.1 | MPL-2.0 AND MIT | https://tqdm.github.io |
 | truststore | 0.10.5 | MIT | https://github.com/sethmlarson/truststore |
 | typer | 0.27.3 | MIT | https://github.com/fastapi/typer |

@@ -42,7 +42,7 @@ def new_id() -> str:
 class Profile(enum.StrEnum):
     """Detection profile, from cheapest to most thorough."""
 
-    LIGHT = "leger"  # regex + Presidio
+    LIGHT = "leger"  # regex and rule-based recognizers
     STANDARD = "standard"  # + GLiNER
     FULL = "complet"  # + LLM
 
