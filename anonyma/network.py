@@ -169,6 +169,12 @@ def _dll(name: str) -> Any:
     return loader(name, use_last_error=True)
 
 
+def _last_error() -> int:
+    """``ctypes.get_last_error()`` (Windows only, like :func:`_dll`)."""
+    getter: Callable[[], int] = getattr(ctypes, "get_last_error")  # noqa: B009
+    return getter()
+
+
 def _take(pointer: int | None) -> str:
     """Read and free a string WinHTTP allocated with ``GlobalAlloc``."""
     if not pointer:
@@ -227,7 +233,7 @@ def _winhttp_auto_proxy(url: str, script: str, auto_detect: bool) -> str | None:
             options.dwAutoDetectFlags = _AUTO_DETECT_DHCP | _AUTO_DETECT_DNS_A
         info = _ProxyInfo()
         ok = winhttp.WinHttpGetProxyForUrl(session, url, ctypes.byref(options), ctypes.byref(info))
-        if not ok and ctypes.get_last_error() == _ERROR_LOGIN_FAILURE:
+        if not ok and _last_error() == _ERROR_LOGIN_FAILURE:
             options.fAutoLogonIfChallenged = 1  # the script is behind Windows logon
             ok = winhttp.WinHttpGetProxyForUrl(
                 session, url, ctypes.byref(options), ctypes.byref(info)
