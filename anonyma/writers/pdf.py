@@ -108,8 +108,8 @@ def _rect(box: BBox) -> pymupdf.Rect:
     return pymupdf.Rect(box.x0, box.y0, box.x1, box.y1)
 
 
-def line_boxes(segment: Segment, rep: Replacement) -> list[list[BBox]]:
-    """Character boxes of ``rep`` grouped by line (split on ``\\n``)."""
+def _line_groups(segment: Segment, rep: Replacement) -> list[list[BBox]]:
+    """Character boxes of ``rep`` per line (split on ``\\n``), empty lines kept."""
     boxes = segment.char_boxes or ()
     groups: list[list[BBox]] = [[]]
     for index in range(rep.start, min(rep.end, len(boxes))):
@@ -119,7 +119,20 @@ def line_boxes(segment: Segment, rep: Replacement) -> list[list[BBox]]:
         box = boxes[index]
         if box.x1 > box.x0 and box.y1 > box.y0:
             groups[-1].append(box)
-    return [g for g in groups if g]
+    return groups
+
+
+def line_parts(segment: Segment, rep: Replacement) -> list[tuple[list[BBox], str]] | None:
+    """The lines of ``rep``, each with its part of the substitute, when the
+    substitute is cut by the same line breaks as the value (a number cut at a line
+    end): each part is then painted where the original part was. None
+    otherwise (the substitute is painted whole on the first line)."""
+    groups = _line_groups(segment, rep)
+    parts = [part.strip() for part in rep.substitute.split("\n")]
+    if len(groups) < 2 or len(parts) != len(groups):
+        return None
+    pairs = [(g, part) for g, part in zip(groups, parts, strict=True) if g]
+    return pairs if len(pairs) > 1 and all(part for _, part in pairs) else None
 
 
 def full_rect(boxes: Sequence[BBox]) -> pymupdf.Rect:
@@ -762,9 +775,18 @@ class PdfWriter(Writer):
                 page_work = work.setdefault(int(seg.locator[1]), _PageWork())
                 for rep in reps:
                     if seg.context.kind is SegmentKind.BARCODE and seg.context.bbox is not None:
-                        lines = [[seg.context.bbox]]
-                    else:
-                        lines = line_boxes(seg, rep)
+                        page_work.regions.append(
+                            _Region(region_kind, [[seg.context.bbox]], rep.substitute)
+                        )
+                        continue
+                    parts = line_parts(seg, rep)
+                    if parts is not None:
+                        # One region per line, each with its part of the substitute.
+                        page_work.regions.extend(
+                            _Region(region_kind, [boxes], text) for boxes, text in parts
+                        )
+                        continue
+                    lines = [g for g in _line_groups(seg, rep) if g]
                     if lines:
                         page_work.regions.append(_Region(region_kind, lines, rep.substitute))
         invisible: dict[int, list[tuple[float, float, float, float]]] = document.properties.get(

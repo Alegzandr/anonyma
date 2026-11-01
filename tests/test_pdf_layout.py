@@ -12,7 +12,16 @@ import pymupdf
 import pytest
 
 from anonyma.config import Config
-from anonyma.models import DocumentResult, DocumentStatus, ReplacementMode
+from anonyma.models import (
+    BBox,
+    DocumentResult,
+    DocumentStatus,
+    Replacement,
+    ReplacementMode,
+    Segment,
+    SegmentContext,
+    SegmentKind,
+)
 from anonyma.pipeline import Pipeline
 from anonyma.writers.pdf import (
     HARD_SIZE_RATIO,
@@ -20,6 +29,7 @@ from anonyma.writers.pdf import (
     MIN_SIZE_RATIO,
     TextLayout,
     layout_text,
+    line_parts,
 )
 
 #: Layout is the subject here, not OCR: rendered pages are read by a blank engine.
@@ -200,3 +210,24 @@ def test_layout_tiers() -> None:
     assert overflowing.width > 15
     inside = layout(15, overflow=False)  # OCR boxes: stays within its box
     assert inside.width <= rect.width + 1e-6
+
+
+def test_value_cut_by_a_line_break_is_painted_on_each_line() -> None:
+    """A number cut at a line end, its end at the next line start: each part of the
+    substitute goes where its part of the value was, not after the first line."""
+    text = "n° FR 00 123 \n456 789. Suite"
+    cut = text.index("\n")
+    boxes = []
+    for index in range(len(text)):
+        line, column = (0, index) if index < cut else (1, index - cut - 1)
+        boxes.append(BBox(column * 5.0, line * 12.0, column * 5.0 + 5, line * 12.0 + 10))
+    segment = Segment("s", text, ("text", 0, 0), SegmentContext(SegmentKind.BODY), tuple(boxes))
+    start, end = text.index("123"), text.index(". Suite")
+    rep = Replacement(start, end, text[start:end], "987 \n654 321", "SIREN", "c")
+    parts = line_parts(segment, rep)
+    assert parts is not None
+    assert [part for _, part in parts] == ["987", "654 321"]
+    assert [round(boxes[0].y0) for boxes, _ in parts] == [0, 12]
+    assert parts[1][0][0].x0 == 0.0  # the second part starts the second line
+    # A substitute on one line is painted whole on the first line.
+    assert line_parts(segment, Replacement(start, end, "", "987 654 321", "SIREN", "c")) is None
