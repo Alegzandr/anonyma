@@ -20,7 +20,6 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QAbstractSpinBox,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -90,13 +89,6 @@ def _set_button_icon(b: QPushButton, icon_name: str) -> None:
         theme.notifier().changed.connect(_retint_buttons)
         _retint_connected = True
 
-
-def set_button_icon(b: QPushButton, icon_name: str) -> None:
-    """Change (or remove, with "") the themed icon of a button."""
-    if icon_name:
-        _set_button_icon(b, icon_name)
-    else:
-        b.setProperty(_ICON_PROPERTY, "")
         b.setIcon(QIcon())
 
 
@@ -190,14 +182,6 @@ class KeyButton(QPushButton):
         x += text_width + self._GAP
         painter.setPen(QColor(t.muted))
         painter.drawText(QRect(x, 0, self._key_width(), self.height()), flags, self.key)
-
-
-def pad_spin(*spins: QAbstractSpinBox) -> None:
-    """Inset the value like other fields (the style sheet cannot reach the inner editor)."""
-    for spin in spins:
-        editor = spin.lineEdit()
-        if editor is not None:
-            editor.setTextMargins(6, 0, 0, 0)
 
 
 def left_header(view: QAbstractItemView) -> None:

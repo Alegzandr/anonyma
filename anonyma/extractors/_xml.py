@@ -177,11 +177,6 @@ def attr_items(el: etree._Element) -> list[tuple[str, str]]:
     return [(str(k), str(v)) for k, v in el.attrib.items()]
 
 
-def qn(ns: str, local: str) -> str:
-    """Clark notation ``{ns}local``."""
-    return f"{{{ns}}}{local}"
-
-
 def local_name(tag: object) -> str:
     if not isinstance(tag, str):
         return ""

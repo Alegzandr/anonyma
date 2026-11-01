@@ -41,14 +41,13 @@ def boundary_ok(text: str, start: int, end: int) -> bool:
 
 
 #: File extensions after a name in a file-name-like token (``lettre_riviere.docx``).
-_EXTENSIONS = frozenset(
+FILE_EXTENSIONS = frozenset(
     {
         "pdf", "doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "ods", "csv", "ppt", "pptx",
         "odp", "jpg", "jpeg", "png", "gif", "tif", "tiff", "heic", "eml", "msg", "zip", "html",
         "htm", "xml", "json", "mp3", "mp4", "wav", "mov",
     }
 )  # fmt: skip
-FILE_EXTENSIONS = _EXTENSIONS
 
 
 def in_identifier(text: str, start: int, end: int) -> bool:
@@ -64,7 +63,7 @@ def in_identifier(text: str, start: int, end: int) -> bool:
         ext = "".join(c for c in tail[:5] if c.isalnum()).lower()
         for size in range(len(ext), 1, -1):
             nxt = text[end + 1 + size] if end + 1 + size < len(text) else ""
-            if ext[:size] in _EXTENSIONS and not nxt.isalnum():
+            if ext[:size] in FILE_EXTENSIONS and not nxt.isalnum():
                 return before in ("", "-", "/", "\\") or before.isspace()
     return False
 

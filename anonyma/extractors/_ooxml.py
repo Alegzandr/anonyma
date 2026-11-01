@@ -63,7 +63,6 @@ APP = "docProps/app.xml"
 CUSTOM = "docProps/custom.xml"
 
 NS_CT = "http://schemas.openxmlformats.org/package/2006/content-types"
-NS_PR = "http://schemas.openxmlformats.org/package/2006/relationships"
 #: Relationship id attribute namespaces (transitional and strict).
 NS_R = frozenset(
     {

@@ -617,10 +617,10 @@ def test_extrapolation_follows_the_sample_growth() -> None:
     one, upper = pipeline.extrapolate([(100, 10)], 40, 1000)  # one file: no curve
     assert one == pytest.approx(40 * 10**pipeline.ESTIMATE_MIN_BETA) and upper == 400
     assert pipeline.extrapolate([(500, 10)], 40, 500) == (40, 40)  # all read: exact
-    estimate = pipeline.LlmEstimate(20.0, 300, 12, 205, 160.0, 2400)
+    estimate = pipeline.LlmEstimate(20.0, 300, 12, 205, 160.0)
     text = estimate.warning("--profil standard")
     assert "environ 20 min estimées (au plus environ 2 h 40 min)" in text
-    assert not pipeline.LlmEstimate(14.0, 200, 12, 205, 160.0, 2400).long
+    assert not pipeline.LlmEstimate(14.0, 200, 12, 205, 160.0).long
 
 
 def test_exact_workload_is_announced_before_the_model_stage(
