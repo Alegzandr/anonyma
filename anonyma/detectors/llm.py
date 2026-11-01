@@ -28,7 +28,7 @@ from anonyma.detectors._filters import (
     plausible,
     skip_segment,
 )
-from anonyma.detectors.gliner import job_titles_near_people
+from anonyma.detectors.gliner import in_context, job_titles_near_people
 from anonyma.logs import get_logger
 from anonyma.model_catalog import LLM_PREFERENCE, ModelKind, ModelSpec, get_spec
 from anonyma.models import Detector, Entity, EntityType, Profile, Segment, SegmentKind
@@ -260,7 +260,7 @@ def _keep(segment: Segment, entity_type: str, value: str, start: int) -> bool:
         filename=filename,
         ocr=segment.context.kind is SegmentKind.OCR,
         capitalized_mid_sentence=capitalized,
-    )
+    ) and in_context(entity_type, text, start, start + len(value))
 
 
 _PROPER_TYPES = frozenset({EntityType.ORGANIZATION, EntityType.LOCATION, EntityType.ADDRESS})

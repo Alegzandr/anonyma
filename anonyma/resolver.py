@@ -64,6 +64,9 @@ from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import normalize
 
 PROPAGATION_DETECTOR = "propagation"
+#: Statistical detectors: a lone ordinary word only they found (« Entreprises » as an
+#: organisation) is masked where found, never searched through the batch.
+MODEL_DETECTORS = frozenset({"gliner", "llm", PROPAGATION_DETECTOR})
 MIN_PROPAGATION_LENGTH = 3
 
 _ID_SECRET = secrets.token_bytes(32)
@@ -699,7 +702,11 @@ def cluster_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
     # An uncertain mention, or a « person » made of ordinary words, is masked where it
     # was found; a lone ordinary word of it is not searched batch-wide (« Nouvelle »
     # of « Société Nouvelle des… », « Entreprises » of « Facturation Entreprises »).
-    narrow = cluster.needs_review or not _reliable_cluster(cluster)
+    narrow = (
+        cluster.needs_review
+        or not _reliable_cluster(cluster)
+        or (bool(cluster.detectors) and cluster.detectors <= MODEL_DETECTORS)
+    )
     for variant in cluster.variants:
         if len(normalize(variant)) < MIN_PROPAGATION_LENGTH:
             continue
