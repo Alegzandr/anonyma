@@ -39,7 +39,7 @@ from anonyma import checksums, threadindex
 from anonyma import substitutes as fk
 from anonyma.atomic import AtomicIndex
 from anonyma.config import Config
-from anonyma.data import first_name
+from anonyma.data import first_name, gender_of
 from anonyma.models import (
     Document,
     Entity,
@@ -61,6 +61,7 @@ from anonyma.names import (
     parse_person,
     tokens_of,
 )
+from anonyma.policy import POLICY_BLACKLIST, keeps
 from anonyma.resolver import generic_local, identity_key, phone_key
 from anonyma.textutils import normalize
 
@@ -89,6 +90,9 @@ DATE_SHIFT_DAYS = (30, 330)
 BIRTH_SHIFT_DAYS = (30, 365)
 DATE_TYPES = frozenset({EntityType.DATE, EntityType.DATE_OF_BIRTH})
 MAX_ATTEMPTS = 25
+#: Types of the places an address substitute must not hold, and their shortest value.
+_PLACE_TYPES = frozenset({EntityType.ADDRESS, EntityType.POSTAL_CODE, EntityType.LOCATION})
+MIN_PLACE_LENGTH = 5
 #: Custom entity type of project names (``custom_labels``, e.g. « nom de projet »).
 PROJECT_TYPE = "PROJET"
 #: Types whose substitute keeps the designators of the original and replaces its
@@ -115,13 +119,13 @@ class SubstitutionTable:
         assert entity.cluster_id is not None
         exact = self.by_surface.get((entity.cluster_id, entity.value))
         if exact is not None:
-            return exact
+            return _lines_of(entity.value, exact)
         variant = self.by_variant.get((entity.cluster_id, normalize(entity.value)))
         substitute = variant if variant is not None else self.by_cluster[entity.cluster_id]
         if self.mode is ReplacementMode.REALISTIC:
             # Case variants share one normalized key: adapt to this mention.
             substitute = _case_of(entity.entity_type, entity.value, substitute)
-        return substitute
+        return _lines_of(entity.value, substitute)
 
     def all_substitutes(self) -> set[str]:
         return (
@@ -458,6 +462,25 @@ class _Realistic:
                         if len(key) >= 3 and key not in PARTICLES and civility_of(token) is None:
                             self.forbidden_tokens.add(key)
         self.forbidden.discard("")
+        #: Places of the batch (addresses, postcodes, towns): never inside the
+        #: substitute of an address (« 12 rue Neuve 69002 Lyon » when « 69002 Lyon »
+        #: is an original value).
+        places = sorted(
+            {
+                key
+                for cluster in clusters.values()
+                if cluster.entity_type in _PLACE_TYPES
+                for variant in cluster.variants
+                if len(key := normalize(variant)) >= MIN_PLACE_LENGTH
+            },
+            key=len,
+            reverse=True,
+        )
+        self.places = (
+            re.compile(r"(?<!\w)(?:" + "|".join(map(re.escape, places)) + r")(?!\w)")
+            if places
+            else None
+        )
         #: Organisation and project cores: compact original core -> substitute core.
         self.cores: dict[str, str] = {}
         #: Cores named as a project somewhere in the batch: they get a code name.
@@ -601,10 +624,21 @@ class _Realistic:
                 local = v.strip("<> ").split("@")[0]
                 if generic_local(local):
                     own.update(normalize(p) for p in re.split(r"[-._+]", local) if p)
+        if (
+            cluster.entity_type == EntityType.ADDRESS
+            and self.places is not None
+            and any(self.places.search(normalize(s)) for s in result.values())
+        ):
+            return False
         owner = self._owner(cluster)
+        components = self.own_components(cluster)
         for substitute in result.values():
             key = normalize(substitute)
-            shared = owner is not None and self.org_values.get(key) == owner
+            # « Pauline » alone, when two people of the batch are called Pauline: its
+            # substitute is that of the given name, the link the original holds.
+            shared = (owner is not None and self.org_values.get(key) == owner) or (
+                key in components
+            )
             if key in self.forbidden or (key in self.used and not shared):
                 return False
             if owner is not None and self._clashes(self._words_of(cluster, substitute), owner):
@@ -627,6 +661,23 @@ class _Realistic:
             ):
                 return False
         return True
+
+    def own_components(self, cluster: EntityCluster) -> set[str]:
+        """Substitutes already given to the given names and surname of ``cluster``
+        (normalized): a lone given name or surname written alone takes them."""
+        if cluster.entity_type != EntityType.PERSON:
+            return set()
+        out: set[str] = set()
+        for variant in cluster.variants:
+            person = parse_person(variant)
+            if person is None:
+                continue
+            keys = [("g", normalize(g)) for g in person.given if not is_initial(g)]
+            surname = " ".join(w for w in person.surname if normalize(w) not in PARTICLES)
+            if surname:
+                keys.append(("s", normalize(surname)))
+            out.update(normalize(s) for k in keys if (s := self.component.get(k)))
+        return out
 
     # -- one substitute per name component -----------------------------------------
     #
@@ -730,6 +781,14 @@ class _Realistic:
     def domain(self, original: str, rng: random.Random) -> str:
         original = original.casefold()
         if original in fk.PUBLIC_MAIL_DOMAINS:
+            return original
+        if self.r.config.organization_policy == POLICY_BLACKLIST and keeps(
+            EntityType.URL, original, self.r.config
+        ):
+            # Organizations kept on purpose (« liste noire »): a masked address keeps
+            # its domain too, only the local part changes (« ventes@groupe.fr »), as
+            # in its URLs and in the text. A whitelisted public domain is no choice of
+            # the user: a person's address there still gets a plausible domain.
             return original
         if original not in self.domains and self.store:
             stored = self.remembered(self.store.lookup(DOMAIN_TYPE, original))
@@ -883,6 +942,21 @@ def _no_extra_period(original: str, substitute: str) -> str:
     return substitute
 
 
+_SPACES = re.compile(r"\s+")
+
+
+def _lines_of(original: str, substitute: str) -> str:
+    """A name written over several lines (« Jean » then « DUPONT ») gets its substitute
+    over the same lines when the words line up one for one: the layout stays."""
+    if "\n" not in original:
+        return substitute
+    separators = _SPACES.findall(original.strip())
+    words = substitute.split()
+    if len(words) != len(separators) + 1:
+        return substitute
+    return words[0] + "".join(sep + word for sep, word in zip(separators, words[1:], strict=True))
+
+
 def _case_of(entity_type: str, original: str, substitute: str) -> str:
     """Case of ``original`` on ``substitute``: word by word for a name (« Claire
     FONTAINE » -> « Paul MARTIN »), as a whole otherwise: the words of a fake
@@ -923,7 +997,12 @@ def _person(
     canonical = parse_person(cluster.canonical) or PersonName(
         "", (), (cluster.canonical,), False, None
     )
-    gender = cluster.attributes.get("gender") or canonical.gender
+    # The given name tells the gender better than a civility, which may be another
+    # person's (« Monsieur et Madame VALMONT Jeanne et Paul »).
+    lexical = next(
+        (g for g in (gender_of(n) for n in canonical.given if not is_initial(n)) if g), None
+    )
+    gender = lexical or cluster.attributes.get("gender") or canonical.gender
     if known is not None:
         parsed = parse_person(known)
         if parsed is None:
@@ -943,16 +1022,23 @@ def _person(
     if known is None and not st.injective(st.pending[cluster.id]):
         raise _CollisionError
     out: dict[str, str] = {"": fk.render_person(canonical, fake) if known is None else known}
-    if known is None and normalize(out[""]) in st.used:
+    taken = normalize(out[""])
+    if known is None and taken in st.used and taken not in st.own_components(cluster):
         # Taken already: ``_acceptable`` would refuse it, so the variants (dozens for a
-        # person of a large batch) are not rendered for nothing.
+        # person of a large batch) are not rendered for nothing. A given name alone
+        # takes the substitute of that given name (see ``_acceptable``).
         raise _CollisionError
     for variant in cluster.variants:
         person = parse_person(variant)
         compact = variant.strip()
         template = match_login_template(compact, canonical) if " " not in compact else None
-        # Case tells the roles of a mention unless it is in lower case or a single word.
-        lone = variant.islower() or len(_NAME_WORD.findall(variant)) == 1
+        # Case tells the roles of a mention unless it is in lower case, a single word,
+        # or given names only (« Prénom : JEANNE ALICE » of a form).
+        words = _NAME_WORD.findall(variant)
+        given_only = bool(words) and {normalize(w) for w in words} <= {
+            normalize(g) for g in canonical.given
+        }
+        lone = variant.islower() or len(words) == 1 or given_only
         by_role = _by_roles(variant, canonical, fake) if lone else None
         initials = _initials_like(compact, canonical, fake)
         if initials is not None:
@@ -1039,6 +1125,14 @@ def _email(
     local, _, domain = address.partition("@")
     if known is not None:
         base = known
+        if (
+            "@" in known
+            and st.r.config.organization_policy == POLICY_BLACKLIST
+            and keeps(EntityType.URL, domain, st.r.config)
+        ):
+            # Remembered from a batch whose policy masked the domain: this policy
+            # keeps it, like everywhere else in this batch.
+            base = f"{known.rpartition('@')[0]}@{domain.casefold()}"
     else:
         fake_local = None
         owner = cluster.attributes.get("person")

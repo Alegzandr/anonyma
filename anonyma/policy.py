@@ -47,7 +47,7 @@ from anonyma.models import (
     Segment,
 )
 from anonyma.names import needs_capital
-from anonyma.resolver import GENERIC_LOCAL_PARTS, propagate, resolve
+from anonyma.resolver import GENERIC_LOCAL_PARTS, generic_local, propagate, resolve
 from anonyma.textsearch import MultiMatcher, leftmost_longest
 from anonyma.textutils import normalize
 
@@ -330,7 +330,7 @@ def _keeps(entity_type: str, value: str, white: OrgList, black: OrgList, policy:
     if entity_type == EntityType.EMAIL:
         address = value.strip().strip("<>")
         local, _, domain = address.rpartition("@")
-        if not local or local.casefold() not in _GENERIC_MAILBOXES:
+        if not local or not (local.casefold() in _GENERIC_MAILBOXES or generic_local(local)):
             return False
         return _host_kept(domain.lower(), white, black, policy)
     if entity_type in NAME_TYPES:
@@ -431,6 +431,9 @@ def _label_forms(host: str) -> list[str]:
     return [label, " ".join(parts)]
 
 
+_EMAIL_VALUE = re.compile(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}")
+
+
 def url_personal_parts(value: str) -> list[tuple[int, int, str]]:
     """Spans (relative to ``value``) of the personal parts of a kept URL."""
     m = _URL_PARTS.match(value)
@@ -474,8 +477,12 @@ def url_personal_parts(value: str) -> list[tuple[int, int, str]]:
                 continue
             if key in SAFE_QUERY_KEYS and val.replace("-", "").replace("_", "").isalpha():
                 continue
+            if val.isalpha() and is_common_word(val) and first_name(val) is None:
+                continue  # « lang=francais », « mode=liste »: an option, no one
             s = base + item.start(2)
-            spans.append((s, s + len(val), EntityType.OPAQUE_ID))
+            # An address (« ?to=achats@valmont.fr ») follows the policy of addresses.
+            kind = EntityType.EMAIL if _EMAIL_VALUE.fullmatch(val) else EntityType.OPAQUE_ID
+            spans.append((s, s + len(val), kind))
     return spans
 
 

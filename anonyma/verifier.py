@@ -43,7 +43,7 @@ words (``Petit``, ``Rose``) only count when capitalized.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
@@ -71,6 +71,7 @@ from anonyma.models import (
 from anonyma.names import (
     PARTICLES,
     ROLE_WORDS,
+    after_saint,
     civility_of,
     has_proper_name,
     is_functional_name,
@@ -79,7 +80,13 @@ from anonyma.names import (
 from anonyma.policy import keeps
 from anonyma.rawscan import RawScanner, raw_residues
 from anonyma.replacer import BLACKOUT_CHAR
-from anonyma.resolver import DOCUMENT_LOCAL_TYPES, NAME_TYPES, cluster_forms
+from anonyma.resolver import (
+    DOCUMENT_LOCAL_TYPES,
+    NAME_TYPES,
+    cluster_forms,
+    compact_key,
+    in_generic_mailbox,
+)
 from anonyma.textsearch import FILE_EXTENSIONS, MultiMatcher, leftmost_longest
 from anonyma.textutils import normalize, normalize_with_map, strip_accents
 
@@ -172,6 +179,8 @@ class Verifier:
         allowed: Sequence[str] = (),
         *,
         names: Sequence[str] = (),
+        uncertain: Collection[str] = (),
+        brands: Collection[str] = (),
     ) -> VerificationResult:
         """Check a re-extracted output tree.
 
@@ -179,18 +188,25 @@ class Verifier:
         ``substitutes``: values introduced by the replacer (ignored by detectors).
         ``allowed``: values the user chose to keep (whitelist, rejected clusters).
         ``names``: original names of the input file and of its embedded items.
+        ``uncertain``: values of uncertain clusters, whose derived forms are those
+        propagation searched (no lone ordinary surname: « Envoyé » of « Sylvie
+        Envoyé »).
+        ``brands``: compact keys of the organizations the batch names for sure
+        (:func:`anonyma.resolver.brand_keys`): kept by the policy, one read as the
+        surname of a substitute (« Sylvie Transports Valmont ») is no person left over.
         """
         result = VerificationResult(verified=True)
         allowed_keys = {normalize(a) for a in allowed} | self.config.whitelist_keys()
+        doubtful = frozenset(uncertain)
         table = _cached(
-            ("table", tuple(sensitive), frozenset(allowed_keys)),
-            lambda: self._table(sensitive, allowed_keys),
+            ("table", tuple(sensitive), frozenset(allowed_keys), doubtful),
+            lambda: self._table(sensitive, allowed_keys, doubtful),
         )
-        ocr_key = ("ocr", tuple(sensitive), frozenset(allowed_keys))
+        ocr_key = ("ocr", tuple(sensitive), frozenset(allowed_keys), doubtful)
 
         def ocr_table() -> MultiMatcher[tuple[str, int]]:
             # Built on the first OCR segment only: most outputs have none.
-            return _cached(ocr_key, lambda: self._ocr_table(sensitive, allowed_keys))
+            return _cached(ocr_key, lambda: self._ocr_table(sensitive, allowed_keys, doubtful))
 
         subs = _cached(("subs", frozenset(substitutes)), lambda: _substitutes(substitutes))
         plan = _cached(("plan", frozenset(substitutes)), lambda: _Plan(substitutes))
@@ -244,6 +260,12 @@ class Verifier:
                 for m in leftmost_longest(table.find(segment.text, prepared=prepared)):
                     if not _inside(m.start, m.end, spans):
                         entity_type, source = m.payloads[0]
+                        if entity_type == EntityType.PERSON and after_saint(segment.text, m.start):
+                            continue  # « Saint-Étienne » holds no « Étienne »
+                        if entity_type in NAME_TYPES and in_generic_mailbox(
+                            segment.text, m.start, m.end
+                        ):
+                            continue  # « gestion_atlas@… »: a function mailbox
                         # A job title left elsewhere in its file describes nobody for
                         # sure (it was masked next to its person): to review.
                         sure = entity_type not in DOCUMENT_LOCAL_TYPES
@@ -313,6 +335,12 @@ class Verifier:
                     if overlap and not parts:
                         continue  # only substitutes, civilities and stop words
                     if (
+                        overlap
+                        and entity.entity_type == EntityType.PERSON
+                        and all(_kept_brand(p, brands, self.config) for p in parts)
+                    ):
+                        continue  # a substitute given name before a kept organization
+                    if (
                         not detector.deterministic
                         and entity.entity_type in NAME_TYPES
                         and not any(has_proper_name(p) for p in (parts if overlap else [value]))
@@ -381,7 +409,10 @@ class Verifier:
 
     @classmethod
     def _table(
-        cls, sensitive: Sequence[tuple[str, str]], allowed_keys: set[str]
+        cls,
+        sensitive: Sequence[tuple[str, str]],
+        allowed_keys: set[str],
+        uncertain: frozenset[str] = frozenset(),
     ) -> MultiMatcher[tuple[str, str]]:
         table: MultiMatcher[tuple[str, str]] = MultiMatcher()
         for entity_type, values in cls._values(sensitive, allowed_keys).items():
@@ -391,19 +422,22 @@ class Verifier:
                     (entity_type, TABLE_DETECTOR),
                     require_capital=_needs_capital(entity_type, value),
                 )
-            for form, cap in _derived(entity_type, values):
+            for form, cap in _derived(entity_type, values, uncertain):
                 if normalize(form) not in allowed_keys and worth_checking(form):
                     table.add(form, (entity_type, TABLE_VARIANT_DETECTOR), require_capital=cap)
         return table
 
     @classmethod
     def _ocr_table(
-        cls, sensitive: Sequence[tuple[str, str]], allowed_keys: set[str]
+        cls,
+        sensitive: Sequence[tuple[str, str]],
+        allowed_keys: set[str],
+        uncertain: frozenset[str] = frozenset(),
     ) -> MultiMatcher[tuple[str, int]]:
         """Skeleton forms of every value, searched in OCR text only."""
         table: MultiMatcher[tuple[str, int]] = MultiMatcher()
         for entity_type, values in cls._values(sensitive, allowed_keys).items():
-            forms = set(values) | {f for f, _ in _derived(entity_type, values)}
+            forms = set(values) | {f for f, _ in _derived(entity_type, values, uncertain)}
             for form in forms:
                 key = skeleton(form)
                 length = len(re.sub(r"\W+", "", key))
@@ -434,6 +468,11 @@ def _cached[T](key: object, build: Callable[[], T]) -> T:
             _CACHE.pop(next(iter(_CACHE)))
         _CACHE[key] = build()
     return _CACHE[key]  # type: ignore[return-value]
+
+
+def _kept_brand(text: str, brands: Collection[str], config: Config) -> bool:
+    """An organization of the batch (``brands``) the policy keeps visible."""
+    return compact_key(text) in brands and keeps(EntityType.ORGANIZATION, text, config)
 
 
 def _compact_name(text: str) -> str:
@@ -494,10 +533,13 @@ def _needs_capital(entity_type: str, value: str) -> bool:
     return entity_type in NAME_TYPES and needs_capital(value)
 
 
-def _derived(entity_type: str, values: set[str]) -> Iterator[tuple[str, bool]]:
-    """Derived forms of the batch values (same rules as propagation), plus, for names
-    and addresses, every form with its hyphens as spaces or glued (OCR and file names
-    drop or add hyphens: ``QUINTAVALLE BREZAC``, ``QuintavalleBrezac``)."""
+def _derived(
+    entity_type: str, values: set[str], uncertain: frozenset[str] = frozenset()
+) -> Iterator[tuple[str, bool]]:
+    """Derived forms of the batch values (same rules as propagation, ``uncertain``
+    values derived as uncertain clusters), plus, for names and addresses, every form
+    with its hyphens as spaces or glued (OCR and file names drop or add hyphens:
+    ``QUINTAVALLE BREZAC``, ``QuintavalleBrezac``)."""
     forms: dict[str, bool] = {}
     if entity_type in (
         EntityType.PERSON,
@@ -510,7 +552,11 @@ def _derived(entity_type: str, values: set[str]) -> Iterator[tuple[str, bool]]:
     ):
         for value in values:
             cluster = EntityCluster(
-                id="", entity_type=entity_type, canonical=value, variants={value}
+                id="",
+                entity_type=entity_type,
+                canonical=value,
+                variants={value},
+                uncertain=value in uncertain,
             )
             for form, cap in cluster_forms(cluster):
                 if form != value:

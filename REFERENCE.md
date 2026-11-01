@@ -560,8 +560,9 @@ mémoire ; la pseudonymisation utilise sa table chiffrée.
   nom de famille substitué n'est jamais réutilisé comme nom d'organisation ou de domaine,
   ni l'inverse. Les adresses, villes et codes postaux sont de vraies communes françaises
   avec un de leurs vrais codes postaux (seule la rue est inventée). Les domaines de
-  messagerie publics (gmail.com, orange.fr…) sont conservés ; le domaine d'une
-  organisation du lot suit son substitut (`sorbel.fr` → `courtois.fr`,
+  messagerie publics (gmail.com, orange.fr…) sont conservés, comme ceux des organisations
+  laissées visibles par la politique « liste noire » (seule la partie avant le `@` d'une
+  adresse masquée change alors) ; le domaine d'une organisation du lot suit son substitut (`sorbel.fr` → `courtois.fr`,
   `groupe-sorbel.fr` → `groupe-courtois.fr`) ; les autres reçoivent un nom vraisemblable,
   avec la même extension (`.fr`, `.com`…). Ces domaines **peuvent exister réellement** :
   ils ne transportent aucune donnée d'origine, mais n'écrivez pas aux adresses d'un

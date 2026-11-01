@@ -320,6 +320,7 @@ NOT_LONE_GIVEN = frozenset(
 
 CIVILITY = (
     r"(?:M\.|MM\.|Mr\.?|Mrs\.?|Ms\.?|Mme\.?|Mmes\.?|Mlle\.?|Melle|Dr\.?|Pr\.?|Me|Mgr|"
+    r"MR\.?|MME\.?|MMES\.?|MLLE\.?|"
     r"(?i:monsieur|madame|mademoiselle|messieurs|mesdames|docteur|professeur|ma[iî]tre|"
     r"monseigneur))"
 )
@@ -409,6 +410,37 @@ def _surname_token(token: _Token) -> bool:
     return token.is_cap or token.is_upper
 
 
+#: Words that open a mail footer after a signature (« Sylvie Envoyé de mon
+#: iPhone », « Sent from my iPhone »): never the surname before them.
+_FOOTER_WORDS = frozenset({"envoye", "envoyee", "sent"})
+#: Ordinary words heading or qualifying an organization name (« Rose Holding »,
+#: « Lucie Groupe Valmont »): never the surname after a given name.
+_ORG_WORDS = frozenset(
+    {
+        "societe", "cabinet", "groupe", "association", "entreprise", "etablissements",
+        "laboratoire", "laboratoires", "clinique", "banque", "agence", "fondation",
+        "mutuelle", "mutuelles", "compagnie", "syndicat", "federation", "holding",
+        "assurance", "assurances", "notaires", "conseil", "services", "service",
+        "chambre",
+    }
+)  # fmt: skip
+_FIELD_COLON = regex.compile(rf"{SP}*:")
+
+
+def _label_word(text: str, token: _Token) -> bool:
+    """An ordinary word that follows a name without being part of it: a job title
+    (« Sylvie Chargée de clientèle » of a signature flattened on one line), an
+    organization word (« Rose Holding »), a field
+    (« Valmont Courriel : x@y.fr », « Durand Tél : ») or a footer (« Envoyé depuis »)."""
+    if not is_common_word(token.bare):
+        return False
+    if token.key in _JOB_WORDS or token.key in _ORG_WORDS:
+        return True  # in capitals too: « Sylvie SERVICE CLIENTS »
+    if token.is_upper:
+        return False
+    return token.key in _FOOTER_WORDS or bool(_FIELD_COLON.match(text, token.end))
+
+
 def _upper_surname(token: _Token) -> bool:
     return (
         token.is_upper
@@ -457,6 +489,13 @@ _CUE = regex.compile(
     r"|amicalement|sinc[èe]res[ \t]+salutations)(?=[ \t]*[,.!]?[ \t]*\r?\n)"
     r"|(?P<civ>M\.|Mme\.?|Mlle\.?|Mr\.?|Mrs\.?|Ms\.?|(?i:monsieur|madame|mademoiselle))"
     r"(?=[ \t]+(?-i:[a-zß-öø-ÿ]))"
+    # A maiden or married name (« Jeanne MARTEAU née VALMONT », « veuve Lacombe »).
+    r"|(?P<maiden>n[ée]e|n[ée]\(e\)|[ée]pouse|[ée]p\.|veuve|vve)(?=[ \t]+(?-i:[A-ZÀ-ÖØ-Þ]))"
+    # A relative named after the kinship word (« mon oncle VALMONT Gaspard »).
+    r"|(?P<kin>(?:arri[èe]re-)?(?:grand|petit|petite|belle|beau)-(?:m[èe]re|p[èe]re|fils"
+    r"|fille|s(?:oe|œ)ur|fr[èe]re)|m[èe]re|p[èe]re|fils|fille|[ée]poux|[ée]pouse|mari"
+    r"|femme|fr[èe]re|s(?:oe|œ)ur|oncle|tante|neveu|ni[èe]ce|cousine?|d[ée]funte?|feue?)"
+    r"(?=[ \t]+(?-i:[A-ZÀ-ÖØ-Þ]))"
     r")[ \t]*[:,]?[ \t]*(?:\r?\n[ \t]*){0,2}",
     regex.IGNORECASE,
 )
@@ -521,7 +560,9 @@ class PersonRecognizer(CustomRecognizer):
         out: list[Any] = []
         starts = {t.start: i for i, t in enumerate(tokens)}
         for m in _CUE.finditer(text, timeout=2):
-            kind = next(k for k in ("strong", "field", "closing", "civ") if m.group(k))
+            kind = next(
+                k for k in ("strong", "field", "closing", "civ", "maiden", "kin") if m.group(k)
+            )
             i = starts.get(m.end())
             if i is None:
                 continue
@@ -532,12 +573,25 @@ class PersonRecognizer(CustomRecognizer):
                 _given_any_case(taken[0], 500) or any(t.is_upper for t in taken[1:])
             ):
                 continue  # « Monsieur le maire », « madame la directrice »
+            if kind == "maiden" and all(t.bare.istitle() and is_common_word(t.bare) for t in taken):
+                continue  # « épouse Heureuse »: no name
+            if kind == "kin" and not (
+                _given_any_case(taken[0], 500) or any(t.is_upper for t in taken)
+            ):
+                continue  # « sa mère Patrie », « le fils Prodigue »
             start, end = taken[0].start, taken[-1].start + len(taken[-1].bare)
             if taken[-1].is_initial:
                 end = taken[-1].end
             if text[end : end + 1] == "@":
                 continue
-            score = {"strong": 0.85, "civ": 0.8, "field": 0.75, "closing": 0.7}[kind]
+            score = {
+                "strong": 0.85,
+                "civ": 0.8,
+                "maiden": 0.85,
+                "kin": 0.75,
+                "field": 0.75,
+                "closing": 0.7,
+            }[kind]
             attrs = {"rule": "indice"}
             if kind == "civ":
                 attrs["gender"] = CIVILITIES.get(normalize(m.group("civ")), "")
@@ -647,8 +701,8 @@ class PersonRecognizer(CustomRecognizer):
         """Extend a capitals surname to the left (``LE GOFF``, ``DE LA TOUR``)."""
         while k > 0 and self._glued(text, tokens[k - 1], tokens[k]):
             prev = tokens[k - 1]
-            if prev.bare in ACRONYMS:
-                break
+            if prev.bare in ACRONYMS or civility_of(prev.text) is not None:
+                break  # « MME VALMONT Jeanne »: the civility is no part of the name
             upper_word = prev.is_upper and (prev.key not in STOP_WORDS or prev.key in PARTICLES)
             if upper_word or prev.text.upper() in ("D'", "D’", "L'", "L’"):
                 k -= 1
@@ -671,8 +725,10 @@ class PersonRecognizer(CustomRecognizer):
         i = tok.start - 1
         while i >= 0 and text[i] in " \t  ":
             i -= 1
-        if i < 0 or text[i] in '.!?:;\n\r•-–—"«(':
-            return False  # sentence or list item start: too ambiguous
+        if i < 0 or text[i] in '.!?:;\n\r•"«(':
+            return False  # sentence start: too ambiguous
+        if text[i] in "-–—" and not text[text.rfind("\n", 0, i) + 1 : i].strip():
+            return False  # list item start (« - Pierre »), unlike « voir avec - Pierre - demain »
         nxt = text[tok.end : tok.end + 1]
         return not (nxt and (nxt.isalnum() or nxt in "-'’"))
 
@@ -726,8 +782,8 @@ class PersonRecognizer(CustomRecognizer):
                     taken.append(tok)
                     j += 1
                     continue
-                if not _surname_token(tok):
-                    break
+                if not _surname_token(tok) or (taken and _label_word(text, tok)):
+                    break  # « Mme Durand Sylvie Envoyé de mon iPhone »
                 is_given = _given(tok, 200)
                 if taken and not only_given and is_common_word(tok.bare) and not tok.is_upper:
                     break
@@ -816,7 +872,28 @@ class PersonRecognizer(CustomRecognizer):
                     surname.extend(tokens[k + 1 : after])
                     k = after - 1
                     continue
-                if not _surname_token(nxt):
+                if nxt.is_upper and nxt.key in PARTICLES:
+                    # « Jeanne DE VALMONT », « Jeanne LE GOFF »: particles in capitals
+                    # before a surname in capitals.
+                    after = k + 1
+                    while (
+                        after + 1 < n
+                        and tokens[after + 1].is_upper
+                        and tokens[after + 1].key in PARTICLES
+                        and self._glued(text, tokens[after], tokens[after + 1])
+                    ):
+                        after += 1
+                    if not (
+                        after + 1 < n
+                        and self._glued(text, tokens[after], tokens[after + 1])
+                        and _upper_surname(tokens[after + 1])
+                        and tokens[after + 1].key not in PARTICLES
+                    ):
+                        break
+                    surname.extend(tokens[k + 1 : after + 2])
+                    k = after + 1
+                    continue
+                if not _surname_token(nxt) or _label_word(text, nxt):
                     break
                 if tok.is_upper and not nxt.is_upper:
                     break
@@ -850,9 +927,15 @@ class PersonRecognizer(CustomRecognizer):
 
 _NUM = r"\d{1,4}(?:" + SP + r"?(?i:bis|ter|quater|[a-d])(?![\w]))?"
 _CITY_WORD = rf"[{UPPER}][{UPPER}{LOWER}'’\-]+"
+#: Labels that follow a city on a signature flattened on one line (« 76000 Valmont
+#: Tél. 02… »): never a word of the city.
+_AFTER_CITY = (
+    r"(?!(?i:t[ée]l|t[ée]l[ée]phone|fax|port|portable|mobile|mail|e-mail|email|site)"
+    r"(?![\w\-]))"
+)
 _CITY = (
     rf"{_CITY_WORD}(?:[ \-](?:(?:sur|sous|en|le|la|les|de|du|des|lès|lez|aux|d'|l'|Saint|"
-    rf"Sainte|St|Ste)[ \-])?{_CITY_WORD}){{0,4}}(?:{SP}+CEDEX(?:{SP}?\d{{1,2}})?)?"
+    rf"Sainte|St|Ste)[ \-])?{_AFTER_CITY}{_CITY_WORD}){{0,4}}(?:{SP}+CEDEX(?:{SP}?\d{{1,2}})?)?"
 )
 _CP = r"(?:0[1-9]|[1-8]\d|9[0-8]|2[AB])" + SP + r"?\d{3}"
 _STREET_NAME_WORD = (
@@ -956,6 +1039,10 @@ _NOT_CITY = frozenset(
 )
 
 
+#: Particles that never end a street name (« rue des », « allée de la »).
+_STREET_PARTICLES = frozenset({"de", "du", "des", "la", "le", "les", "l'", "d'", "aux", "au"})
+
+
 class AddressRecognizer(CustomRecognizer):
     def __init__(self) -> None:
         super().__init__(
@@ -968,15 +1055,21 @@ class AddressRecognizer(CustomRecognizer):
     def analyze(self, text: str, entities: list[str], nlp_artifacts: Any = None) -> list[Any]:
         out: list[Any] = []
         strict: dict[int, int] = {}
+        #: Strict matches whose street name is only particles (« 12 rue des »).
+        short: set[int] = set()
         for m in _ADDRESS_STRICT.finditer(text, timeout=2):
             score = 0.95 if m.group("tail") else 0.85
             strict[m.start()] = m.end()
+            if all(normalize(w) in _STREET_PARTICLES for w in m.group("name").split()):
+                short.add(m.start())
             out.append(_result(EntityType.ADDRESS, m.start(), m.end(), score))
         for m in _ADDRESS_LOOSE.finditer(text, timeout=2):
             end = strict.get(m.start())
             if end is not None and end < m.end():
                 extra = text[end : m.end()].split()
-                if all(w.islower() and is_common_word(w) for w in extra):
+                # « 12 rue des » stops before a lower-case name (« tilleuls »): the loose
+                # form completes a street name made of particles only.
+                if m.start() not in short and all(w.islower() and is_common_word(w) for w in extra):
                     continue  # the loose form only adds ordinary words of the sentence
             out.append(_result(EntityType.ADDRESS, m.start(), m.end(), 0.8))
         for m in _STREET_NO_NUMBER.finditer(text, timeout=2):
@@ -1119,7 +1212,11 @@ class OrganizationRecognizer(CustomRecognizer):
 _PLACE = regex.compile(
     rf"(?<=(?<![\w])(?i:n[ée]e?s?(?:\(e\)|{SP}\(e\))?|domicili[ée]e?s?|demeurant|r[ée]sidant|"
     rf"habitant|habite|originaire|vit|vivant|install[ée]e?|born|lives|living|resides|"
-    rf"lieu de naissance{SP}*:?|n[ée]e?{SP}+le{SP}+[^,\n]{{4,20}}){SP}+(?i:[àa]|en|au|aux|in|"
+    rf"lieu de naissance{SP}*:?|n[ée]e?{SP}+le{SP}+[^,\n]{{4,20}}|"
+    # Place of an event (« accident survenu à Valmont », « hospitalisé le 03/02/2026
+    # à Valmont »).
+    rf"d[ée]c[ée]d[ée]e?s?|survenue?s?|inhum[ée]e?s?|hospitalis[ée]e?s?|"
+    rf"(?:d[ée]c[ée]d[ée]e?s?|dcd|hospitalis[ée]e?s?){SP}+le{SP}+[^,\n]{{4,20}}){SP}+(?i:[àa]|en|au|aux|in|"
     rf"[àa]{SP}+la|de){SP}+)"
     rf"[{UPPER}][\w'’\-]+(?:[ \-](?:(?:sur|sous|en|le|la|les|de|du|des|lès|aux)[ \-])?"
     rf"[{UPPER}][\w'’\-]+){{0,3}}",

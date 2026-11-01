@@ -153,13 +153,17 @@ def reshape(original: str, fake_chars: str) -> str:
 
 
 def random_like(original: str, rng: random.Random) -> str:
-    """Same shape: digits -> digits, letters -> letters (case kept), rest kept."""
+    """Same shape: digits -> digits, letters -> letters (case kept), rest kept. A
+    hexadecimal value (a GUID) stays hexadecimal: its letters are taken from a-f."""
+    alnum = [ch for ch in original if ch.isalnum()]
+    hexadecimal = any(ch.isalpha() for ch in alnum) and all(ch in string.hexdigits for ch in alnum)
+    letters = "ABCDEF" if hexadecimal else string.ascii_uppercase
     out: list[str] = []
     for ch in original:
         if ch.isdigit():
             out.append(rng.choice(string.digits))
         elif ch.isalpha():
-            letter = rng.choice(string.ascii_uppercase)
+            letter = rng.choice(letters)
             out.append(letter if ch.isupper() else letter.lower())
         else:
             out.append(ch)

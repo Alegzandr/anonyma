@@ -220,6 +220,14 @@ def plausible_email(value: str) -> bool:
     return len(key) <= MAX_FREE_TLD or key in LONG_TLDS
 
 
+def mail_domain(value: str) -> bool:
+    """« @valmont-transports.fr » after a local part cut by a space (« j.martin
+    @valmont-transports.fr »): the domain of an address, no handle. Only a short top-level
+    domain counts (``.fr``, ``.com``): « @jean.dupont » is a handle."""
+    domain = value.lstrip("@")
+    return plausible_email(f"x@{domain}") and len(domain.rsplit(".", 1)[-1]) <= 3
+
+
 BIC_COUNTRIES = frozenset(checksums.IBAN_LENGTHS) | frozenset(
     [
         "US",
@@ -257,7 +265,7 @@ BIC_COUNTRIES = frozenset(checksums.IBAN_LENGTHS) | frozenset(
 # -- vocabularies ---------------------------------------------------------------
 
 STREET_TYPES = (
-    r"rue|ruelle|avenue|av|boulevard|bd|blvd|bvd|place|pl|impasse|imp|all[ée]e|chemin|ch|"
+    r"rue|ruelle|avenue|av|boulevard|bd|bld|blvd|bvd|place|pl|impasse|imp|all[ée]e|chemin|ch|"
     r"route|rte|quai|cours|square|sq|passage|pass|r[ée]sidence|r[ée]s|lotissement|lot|"
     r"lieu[- ]dit|ld|hameau|voie|sentier|rond[- ]point|faubourg|fbg|faub|parvis|esplanade|"
     r"promenade|prom|villa|cit[ée]|quartier|mont[ée]e|traverse|venelle|carrefour|domaine|"
@@ -296,7 +304,10 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "email",
         EntityType.EMAIL,
-        r"(?<![\w.%+\-'])[\w.%+\-']{1,64}@(?:[\w\-]+\.)+(?:\p{L}{2,24}|xn--[A-Za-z0-9\-]{2,59})"
+        # An apostrophe inside the local part (``o'brien@``), never an opening quote
+        # (Outlook's « 'achats@valmont.fr' <achats@valmont.fr> »).
+        r"(?<![\w.%+\-])(?<!\w')(?!')[\w.%+\-']{1,64}@(?:[\w\-]+\.)+"
+        r"(?:\p{L}{2,24}|xn--[A-Za-z0-9\-]{2,59})"
         # Never a prefix of a longer dotted name (``x@a.CRM.lookuplogicalname``).
         r"(?![\w\-]|\.[\w\-])",
         1.0,
@@ -725,7 +736,8 @@ RULES: tuple[Rule, ...] = (
         + SP
         + r"{0,3}[:=]"
         + SP
-        + r"{0,3})[^\s,;\"'<>()\[\]]{2,64}",
+        # « uid=X&page=2 » in a link: the value stops at the next parameter.
+        + r"{0,3})[^\s,;\"'<>()\[\]&]{2,64}",
         0.85,
         flags=regex.MULTILINE | regex.IGNORECASE,
         # The last word of every keyword above, then the separator.
@@ -764,6 +776,7 @@ RULES: tuple[Rule, ...] = (
         r"|namespace|list|counter-style|layer|container|property|viewport)(?![\w\-]))"
         r"\w(?:[\w.\-]{1,28}\w)(?![\w@\-]|\.\w)",
         0.6,
+        validator=lambda value: not mail_domain(value),
         context=(
             "twitter",
             "instagram",
@@ -821,6 +834,42 @@ RULES: tuple[Rule, ...] = (
         prefilter=r"dossier|affaire|r[ée]f|rg|ticket|contrat|police|sinistre|client|adh[ée]rent"
         r"|matricule|passeport|passport|cni|carte d'identit|permis|titre de|facture|commande"
         r"|devis|patient|ipp|nda|billet|r[ée]servation",
+    ),
+    # Case references without a keyword: they find a person's file in the system
+    # that issued them as surely as a name. Letters then digits (« ABC012345 -
+    # VALMONT », « commande XY123456789 »)...
+    Rule(
+        "reference_lettres_chiffres",
+        EntityType.CASE_NUMBER,
+        r"(?<![\w\-./])[0-9]{0,6}[A-Z]{1,4}[0-9]{5,12}[A-Z]{0,4}(?![\w\-]|\.\w)",
+        0.7,
+    ),
+    # ... any token holding digits after « N° » (« commande N°48XYZ0012 »)...
+    Rule(
+        "reference_numero",
+        EntityType.CASE_NUMBER,
+        r"(?<=(?<![\w])[Nn][°º]" + SP + r"?)(?=[A-Z0-9/\-]*[0-9](?:[A-Z0-9/\-]*[0-9]){3})"
+        r"[A-Z0-9][A-Z0-9/\-]{3,30}(?<![/\-])(?![\w])",
+        0.7,
+    ),
+    # ... capitals and digits mixed (a ticket « [#TCK5A7B91C3D] »)...
+    Rule(
+        "reference_mixte",
+        EntityType.CASE_NUMBER,
+        r"(?<![\w\-./])(?=(?:[A-Z]*[0-9]){4})(?=(?:[0-9]*[A-Z]){4})[A-Z0-9]{10,24}"
+        r"(?![\w\-]|\.\w)",
+        0.7,
+    ),
+    # ... and a long number on the line of a contract or case word (« DOSSIER
+    # M. VALMONT PAUL 183456789 »).
+    Rule(
+        "numero_ligne_contexte",
+        EntityType.CASE_NUMBER,
+        r"(?<![\w\-./,])\d{7,12}(?![\w\-]|[.,]\d)",
+        0.7,
+        context=("contrat", "dossier", "police", "sinistre", "adherent", "devis", "facture"),
+        needs_context=True,
+        before=80,
     ),
 )
 

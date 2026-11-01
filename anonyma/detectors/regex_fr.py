@@ -48,6 +48,7 @@ from anonyma.models import (
 )
 from anonyma.names import is_functional_name
 from anonyma.registry import register_detector
+from anonyma.textsearch import FILE_EXTENSIONS
 from anonyma.textutils import normalize
 
 log = get_logger("detectors.regex")
@@ -512,6 +513,8 @@ class RegexDetector(Detector):
                 continue
             if entity_type == EntityType.PERSON and is_functional_name(stripped):
                 continue  # « Projets IRVE », « Hexagone Facturation 4.2 »
+            if _FILE_NAME.search(stripped):
+                continue  # « nom » of an attachment: a file name, read by the rules
             s = start + part.find(stripped)
             out.append((entity_type, s, s + len(stripped), score, {"rule": "label"}))
         return out
@@ -578,7 +581,9 @@ class RegexDetector(Detector):
             for boundary in (". ", "\n", ";", "!", "?"):
                 window = window.rsplit(boundary, 1)[-1]
             window = normalize(window)
-            dob = dob_label or (self.dob_context is not None and self.dob_context.search(window))
+            dob = dob_label or (
+                self.dob_context is not None and _born_last(self.dob_context, window)
+            )
             if dob and not time_only:
                 out.append((EntityType.DATE_OF_BIRTH, start, end, 0.95, attrs))
                 continue
@@ -589,6 +594,10 @@ class RegexDetector(Detector):
         return out
 
 
+#: A value ending with a file extension (« Courrier M. VALMONT.pdf »).
+_FILE_NAME = regex.compile(
+    r"\.(?:" + "|".join(sorted(FILE_EXTENSIONS, key=len, reverse=True)) + r")$", regex.I
+)
 _GLUED_STREET = regex.compile(
     r"(?<=\d[ \t]?)(?:rue|avenue|boulevard|place|impasse|all[ée]e|chemin|quai|route|square"
     r"|cours|passage|r[ée]sidence|lotissement)(?=(?:du|de|des|la|le|aux|d')\p{Lu})",
@@ -626,6 +635,24 @@ def unglued(text: str) -> tuple[str, list[int]] | None:
         out.append(ch)
         index.append(i)
     return ("".join(out), index) if changed else None
+
+
+#: Words of a later event between « née » and a date (« Mme Jeanne Valmont née
+#: Marteau, mariée le 3 mars »): that date is no birth date.
+_EVENT_CUE = regex.compile(
+    r"(?<![a-z])(?:mariee|mariage|divorcee|divorce|embauchee|embauche|arrivee"
+    r"|decede|decedee|decedes|decedees|deces|dcd|mort|morte|inhume|inhumee|obseques"
+    r"|survenu|survenue)(?![a-z])"
+)
+
+
+def _born_last(dob_context: regex.Pattern[str], window: str) -> bool:
+    """A birth cue in ``window`` (normalized text before a date) that no later event
+    follows."""
+    births = list(dob_context.finditer(window))
+    if not births:
+        return False
+    return not _EVENT_CUE.search(window, births[-1].end())
 
 
 #: Characters around a date searched for signature cues (and persons).

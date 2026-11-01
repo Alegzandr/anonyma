@@ -32,7 +32,7 @@ import ipaddress
 import re
 import secrets
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 
 from anonyma import checksums
@@ -56,6 +56,7 @@ from anonyma.names import (
     PARTICLES,
     ROLE_WORDS,
     PersonName,
+    after_saint,
     civility_of,
     given_like,
     is_functional_name,
@@ -200,9 +201,40 @@ def generic_local(local: str) -> bool:
     parts = [p for p in re.split(r"[._\-+]", key) if p]
     if not parts or any(p.isdigit() for p in parts):
         return False
-    return any(p in GENERIC_LOCAL_PARTS for p in parts) and all(
-        (p in GENERIC_LOCAL_PARTS or is_common_word(p)) and not given_like(p) for p in parts
+    return any(p in GENERIC_LOCAL_PARTS or _glued_role(p) for p in parts) and all(
+        (p in GENERIC_LOCAL_PARTS or is_common_word(p) or _glued_role(p)) and not given_like(p)
+        for p in parts
     )
+
+
+_ADDRESS_TOKEN = re.compile(r"[^\s<>\"'(),;:]+@[^\s<>\"'(),;:]+")
+
+
+def in_generic_mailbox(text: str, start: int, end: int) -> bool:
+    """``text[start:end]`` is an ordinary word of the local part of a function mailbox
+    (``atlas`` of ``gestion_atlas@…``): it names no one there."""
+    if not is_common_word(text[start:end]):
+        return False
+    for m in _ADDRESS_TOKEN.finditer(text, max(0, start - 64), min(len(text), end + 64)):
+        at = text.index("@", m.start(), m.end())
+        if m.start() <= start and end <= at:
+            return generic_local(text[m.start() : at].rpartition(":")[2])
+    return False
+
+
+def _glued_role(part: str) -> bool:
+    """Two words glued in a local part, one naming a function, neither a given name
+    (``gestioncommandes``, ``servicepaie``)."""
+    for i in range(3, len(part) - 2):
+        head, tail = part[:i], part[i:]
+        if not (head in GENERIC_LOCAL_PARTS or tail in GENERIC_LOCAL_PARTS):
+            continue
+        if all(
+            (w in GENERIC_LOCAL_PARTS or is_common_word(w)) and not given_like(w)
+            for w in (head, tail)
+        ):
+            return True
+    return False
 
 
 def reliable_person(person: PersonName) -> bool:
@@ -422,6 +454,7 @@ def resolve(
 
     ids = IdWhitelist(config.opaque_id_whitelist or [])
     entities = _unwrap_persons(entities, clusters)
+    entities = _trim_organizations(entities)
     by_span: dict[tuple[str, str, int, int, bool], Entity] = {}
     span_detectors: dict[tuple[str, str, int, int, bool], set[str]] = {}
     for entity in entities:
@@ -529,7 +562,13 @@ def _field_pairs(entities: Sequence[Entity]) -> dict[int, str]:
     out: dict[int, str] = {}
     for items in fields.values():
         surnames = [e for e in items if e.attributes["field"] == "nom" and _name_part(e.value)]
-        givens = [e for e in items if e.attributes["field"] == "prenom" and _name_part(e.value)]
+        # « Prénom : JEANNE ALICE »: two given names read as a full name.
+        givens = [
+            e
+            for e in items
+            if e.attributes["field"] == "prenom"
+            and (_name_part(e.value) or _given_names_only(e.value))
+        ]
         for surname in surnames:
             near = [g for g in givens if abs(g.start - surname.start) <= FIELD_PAIR_DISTANCE]
             if not near:
@@ -604,6 +643,99 @@ def _unwrap_persons(
     return out
 
 
+def compact_key(value: str) -> str:
+    """``value`` without case, accents, spaces or punctuation (« Transports-Valmont »
+    -> ``transportsvalmont``)."""
+    return "".join(c for c in normalize(value) if c.isalnum())
+
+
+def brand_keys(entities: Sequence[Entity]) -> frozenset[str]:
+    """Compact keys of the organizations a batch names for sure: the label of a mail
+    or web domain that several addresses or links share, or that is also detected as
+    an organization (``transports-valmont.fr``, « Transports Valmont »). Public mailboxes are
+    no organization of the batch, and a word written as a surname after a civility
+    (« M. Valmont ») is a person's name."""
+    from anonyma.substitutes import PUBLIC_MAIL_DOMAINS, split_domain
+
+    organizations = {
+        compact_key(e.value) for e in entities if e.entity_type == EntityType.ORGANIZATION
+    }
+    uses: dict[str, set[str]] = {}
+    surnames: set[str] = set()
+    for e in entities:
+        if e.entity_type == EntityType.PERSON:
+            person = parse_person(e.value)
+            if person is not None and person.civility:
+                surnames.add(compact_key(" ".join(person.surname)))
+            continue
+        if e.entity_type not in (EntityType.EMAIL, EntityType.URL):
+            continue
+        host = e.value.strip("<> ").rpartition("@")[2].split("://")[-1].split("/")[0]
+        host = host.split(":")[0].casefold()
+        if "." not in host or host in PUBLIC_MAIL_DOMAINS:
+            continue
+        label = split_domain(host)[1]
+        uses.setdefault(compact_key(label), set()).add(normalize(e.value))
+        # « Valmont » of ``valmont-services.fr``: the name without its designators.
+        core = [w for w in re.split(r"[-_]", label) if w and w not in BRAND_DESIGNATORS]
+        if core and len(core) < len([w for w in re.split(r"[-_]", label) if w]):
+            uses.setdefault(compact_key("".join(core)), set()).add(normalize(e.value))
+    return frozenset(
+        key
+        for key, values in uses.items()
+        if len(key) >= MIN_ORGANIZATION_KEY
+        and (len(values) >= 2 or key in organizations)
+        and key not in surnames
+    )
+
+
+def _trim_organizations(entities: Sequence[Entity]) -> list[Entity]:
+    """« Sylvie Transports Valmont Logistique », « JEANNE MARTEAU VALMONT » (a signature
+    flattened on one line): the organization of the batch (:func:`brand_keys`)
+    written after a person's name is no part of it; it would be masked as her surname
+    everywhere. The mention keeps the name before it. A person written with a
+    civility (« Mme Valmont ») keeps her whole name."""
+    brands = brand_keys(entities)
+    if not brands:
+        return list(entities)
+    out: list[Entity] = []
+    for e in entities:
+        span = None
+        if e.entity_type == EntityType.PERSON and e.review is not ReviewStatus.MANUAL:
+            span = before_brand(e.value, brands)
+        if span is None:
+            out.append(e)
+            continue
+        start, end = span
+        out.append(replace(e, value=e.value[start:end], start=e.start + start, end=e.start + end))
+    return out
+
+
+def before_brand(value: str, brands: frozenset[str]) -> tuple[int, int] | None:
+    """Span of the name before a trailing organization of ``brands`` in ``value``
+    (« Sylvie Transports Valmont » -> « Sylvie »), None when there is none."""
+    person = parse_person(value)
+    if person is None or not person.is_full or person.civility or person.surname_first:
+        return None
+    words = list(_WORD_RUN.finditer(value))
+    for cut in range(len(person.given), len(words)):
+        if compact_key(value[words[cut].start() : words[-1].end()]) in brands:
+            return words[0].start(), words[cut - 1].end()
+    return None
+
+
+#: Organization keys shorter than this never trim a person name.
+MIN_ORGANIZATION_KEY = 5
+#: Words of a domain label that only qualify an organization's name
+#: (``valmont-services.fr``, ``groupe-valmont.fr``).
+BRAND_DESIGNATORS = frozenset(
+    {
+        "assurance", "assurances", "mutuelle", "groupe", "group", "services", "service",
+        "conseil", "france", "sa", "sas", "sarl",
+    }
+)  # fmt: skip
+
+
 def _person_inside(value: str, forms: set[str]) -> tuple[int, int] | None:
     """Offsets of a known person name in ``value`` when every other word is ordinary."""
     words = list(_WORD_RUN.finditer(value))
@@ -627,6 +759,11 @@ def _ordinary(word: str, *, first: bool) -> bool:
     if key in _MAIL_PREFIXES:
         return True
     return is_common_word(word) and (word.islower() or first)
+
+
+def _given_names_only(value: str) -> bool:
+    words = _WORD_RUN.findall(value)
+    return len(words) > 1 and all(given_like(w) for w in words)
 
 
 def _name_part(value: str) -> bool:
@@ -985,7 +1122,9 @@ def lone_given(cluster: EntityCluster) -> dict[str, bool]:
 
     In a mail thread the given name alone (« Merci Maëlle ») is the most frequent
     form of a person: once a full name is known, every lone mention is masked, however
-    frequent the given name. A place or brand (« Florence ») is left out."""
+    frequent the given name. A place or brand (« Florence ») is left out, and so is
+    an ordinary word of an uncertain mention (« Rose » of « Rose Ind… » cut short:
+    « rose » elsewhere is the word)."""
     out: dict[str, bool] = {}
     for variant in cluster.variants:
         person = parse_person(variant)
@@ -996,7 +1135,10 @@ def lone_given(cluster: EntityCluster) -> dict[str, bool]:
                     continue
                 if key in NOT_LONE_GIVEN or key in _CALENDAR_WORDS:
                     continue
-                out[given] = any(is_common_word(p) for p in given.split("-") if p)
+                common = any(is_common_word(p) for p in given.split("-") if p)
+                if common and cluster.uncertain:
+                    continue
+                out[given] = common
     return out
 
 
@@ -1248,7 +1390,29 @@ def propagate(
         spans = taken.get((doc_id, segment.id), [])
         exact = set(spans)
         emitted: list[tuple[int, int]] = []
-        for match in leftmost_longest(needles.find(segment.text)):
+        # A value read on one line (« Valmont Agence », « 76000 Valmont Tél » in a cell
+        # flattened on one line) never cuts a line of another text in two: its
+        # substitute would swallow the break and the first words of the next line.
+        # Its parts are searched on their own, so the match is left out before the
+        # longest ones are chosen. A name written over whole lines (« Jean\nDupont »)
+        # stays one match (its substitute keeps the breaks); another value only runs
+        # over a line break when it was found that way.
+        found = [
+            m
+            for m in needles.find(segment.text)
+            if not _LINE_BREAK.search(segment.text, m.start, m.end)
+            or any(
+                _LINE_BREAK.search(v)
+                for t in m.payloads
+                if t.cluster_id is not None and t.cluster_id in clusters
+                for v in clusters[t.cluster_id].variants
+            )
+            or (
+                all(t.entity_type in NAME_TYPES for t in m.payloads)
+                and not _cuts_line(segment.text, m.start, m.end)
+            )
+        ]
+        for match in leftmost_longest(found):
             # A form inside an existing mention adds nothing; a longer one
             # (``Kowalczyk Jean-Baptiste`` around a detected ``Jean-Baptiste``)
             # is kept: the replacer merges overlapping spans into their union.
@@ -1264,6 +1428,14 @@ def propagate(
             ]
             if not targets:
                 continue
+            if all(t.entity_type == EntityType.PERSON for t in targets) and after_saint(
+                segment.text, match.start
+            ):
+                continue  # « Saint-Étienne » holds no « Étienne »
+            if all(t.entity_type in NAME_TYPES for t in targets) and in_generic_mailbox(
+                segment.text, match.start, match.end
+            ):
+                continue  # « gestion_atlas@… »: a function mailbox, no one's name
             # Never inside a GUID or a token (``…4e8a-b93c…`` holds no initials).
             if atomic.fit(segment.text, match.start, match.end) != (match.start, match.end):
                 continue
@@ -1351,6 +1523,17 @@ def _adjacent_given(word: str) -> bool:
         return False
     # « rose », « pierre » in lower case are words; capitalized they are names.
     return word[:1].isupper() or not is_common_word(word)
+
+
+_LINE_BREAK = re.compile(r"[\r\n  ]")
+
+
+def _cuts_line(text: str, start: int, end: int) -> bool:
+    """``text[start:end]`` runs over a line break and stops inside the next line."""
+    if not _LINE_BREAK.search(text, start, end):
+        return False
+    rest = _LINE_BREAK.split(text[end : end + 200], maxsplit=1)[0]
+    return bool(rest.strip())
 
 
 def _pick(targets: Sequence[_Target]) -> _Target:

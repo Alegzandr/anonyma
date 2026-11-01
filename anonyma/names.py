@@ -389,11 +389,23 @@ ROLE_WORDS = frozenset(
         "relation", "relations", "rgpd", "rh", "sales", "sav", "secretariat", "securite",
         "service", "services", "siege", "social", "standard", "support", "systeme",
         "team", "technique", "ventes", "webmaster",
+        # Back-office services (« reglements@ », « Service Courrier »).
+        "adhesion", "adhesions", "cotisations", "courrier", "devis", "reglement",
+        "reglements",
     }
 )  # fmt: skip
 #: Capitals-only tokens read as acronyms inside a functional name (« Projets IRVE »).
 _ACRONYM_MAX = 5
 _VERSION = re.compile(r"^v?\d+(?:[.,]\d+)*$", re.IGNORECASE)
+
+
+_SAINT = re.compile(r"(?:^|[^\w])(?:saint|sainte|st|ste)[-‐]$", re.IGNORECASE)
+
+
+def after_saint(text: str, start: int) -> bool:
+    """A word at ``start`` right after « Saint- » (« Étienne » of « Saint-Étienne »,
+    « Marie » of « Sainte-Marie »): a place or a saint, never a person's name."""
+    return bool(_SAINT.search(text, max(0, start - 8), start))
 
 
 def is_role_word(word: str) -> bool:

@@ -85,6 +85,7 @@ from anonyma.resolver import (
     NAME_TYPES,
     PROPAGATION_DETECTOR,
     TYPE_PRIORITY,
+    brand_keys,
     cluster_forms,
     link_by_place,
     propagate,
@@ -181,6 +182,9 @@ class BatchAnalysis:
     work_dir: Path
     inputs: list[Path] = field(default_factory=list)
     started_at: datetime = field(default_factory=datetime.now)
+    #: Organizations the batch names for sure (:func:`anonyma.resolver.brand_keys`),
+    #: taken before the organization policy drops the kept ones.
+    brands: frozenset[str] = frozenset()
 
     def all_documents(self) -> Iterator[Document]:
         for doc in self.documents:
@@ -1086,6 +1090,10 @@ class _WriteJob:
     #: (``config.neutral_filenames``), else the top-level names, whose folders are
     #: named consistently for the whole batch (:func:`top_level_names`).
     output_names: dict[str, str] = field(default_factory=dict)
+    #: Values of uncertain clusters: the verifier derives them as propagation did.
+    uncertain: frozenset[str] = frozenset()
+    #: Organizations the batch names for sure (:func:`anonyma.resolver.brand_keys`).
+    brands: frozenset[str] = frozenset()
 
 
 def _counts(entities: Sequence[Entity]) -> dict[str, int]:
@@ -1362,7 +1370,13 @@ def _verify_output(path: Path, name: str, job: _WriteJob) -> VerificationResult:
         verifier = Verifier(job.config, detectors_for(job.config))
         substitutes = job.table.all_substitutes()
         result = verifier.verify(
-            output_doc, job.sensitive, substitutes, job.allowed, names=job.names
+            output_doc,
+            job.sensitive,
+            substitutes,
+            job.allowed,
+            names=job.names,
+            uncertain=job.uncertain,
+            brands=job.brands,
         )
         if result.clean:
             # Backstop: what no extractor exposed is still in the bytes.
@@ -1793,6 +1807,7 @@ class Pipeline:
         entities, clusters = resolve([*entities, *extra], self.config, clusters)
         link_by_place(documents, entities, clusters)
         entities = drop_inside_whitelist(documents, entities, self.config)
+        brands = brand_keys(entities)
         entities, clusters = apply_policies(documents, entities, clusters, self.config)
         return BatchAnalysis(
             batch_id,
@@ -1802,6 +1817,7 @@ class Pipeline:
             clusters,
             work_dir,
             inputs=[Path(p).resolve() for p in inputs],
+            brands=brands,
         )
 
     def _late_detection(
@@ -1935,6 +1951,7 @@ class Pipeline:
                 if searched_variant(c, v)  # a word masked where found only: not a value
             }
         )
+        uncertain = frozenset(v for c in active.values() if c.uncertain for v in c.variants)
         allowed = sorted(set(resolved.allowed) | WRITER_PLACEHOLDERS)
         structure = frozenset(
             name
@@ -1977,6 +1994,8 @@ class Pipeline:
                     names=original_names(doc),
                     structure=structure,
                     output_names={d.id: names[d.id] for d in doc.walk() if d.id in names},
+                    uncertain=uncertain,
+                    brands=analysis.brands,
                 )
             )
         return _WritePlan(jobs, table)
