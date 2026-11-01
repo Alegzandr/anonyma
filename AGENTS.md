@@ -41,6 +41,12 @@ before you consider a change done. On Windows, keep pytest's base temp short
 - **Never leak sensitive data**: no original value, file name or exception message that
   may contain one in logs, reports or `Issue` messages. Sensitive model fields are
   `repr=False`; use `logs.fingerprint(value)` for correlation.
+- **No precise examples in comments**: comments, docstrings and commit messages describe
+  the case in general terms (« a number cut at a line end », « a brand in capitals
+  followed by a country name »), never with precise values (names, numbers,
+  identifiers, addresses, organizations, text copied from a document). Concrete values
+  belong in tests only, and are invented. A real document used to reproduce a problem
+  never enters the repository: work on a copy outside it and delete it afterwards.
 - **Offline**: `netguard` blocks outbound connections; only model downloads (the automatic
   model setup at GUI startup, `anonyma/model_setup.py`, or a user request) and the startup
   update check of the portable build (`anonyma/updater.py`, GitHub releases) run inside
