@@ -46,7 +46,10 @@ re-reads the outputs by independent means; method and results in
 The portable build downloads a pinned LibreOffice (SHA-256 checked) at **build time**
 (`packaging/libreoffice_bundle.py`) and copies it into `libreoffice/`; the application never
 downloads it. On Windows, spelling dictionaries and UI languages other than French and
-English are stripped.
+English are stripped. On Windows and Linux, the parts headless conversions never load are
+removed too (`UNUSED_PARTS`: icon themes but one, bundled Python and Java, gallery,
+templates, AutoText, Poppler PDF import); the build's smoke test converts doc, xls and ppt
+with what is left.
 
 ## Continuous integration and releases
 
@@ -65,6 +68,14 @@ fails. A tag with a suffix (`v1.2.0-rc1`) is published as a pre-release.
 
 - **PyMuPDF pinned to 1.x**: 2.0 ships code first published under a non-commercial licence.
 - **OpenCV headless**: the full build bundles Qt and clashes with PySide6.
+- **Archive size**: `packaging/anonyma.spec` drops what the hooks collect but the app never
+  loads (`UNUSED_FILES`: Mesa software OpenGL, OpenCV's FFmpeg back end, Pillow's AVIF codec,
+  MuPDF headers, the Qt network stack, Qt translations other than French). No dependency
+  should pull spaCy or another NLP stack in: the rule-based recognizers are plain Python.
+- **Threads of the ONNX models** (`anonyma/threads.py`): in a worker pool, GLiNER and the OCR
+  each get the logical CPUs divided by the pool size; a process running alone keeps ONNX
+  Runtime's default. Letting every worker start one thread per core made OCR batches
+  about 1.7 times slower.
 - **No native Qt file dialogs**: they remember recent folders in the Windows registry,
   outside the portable folder.
 - **Network guard**: every outbound connection is blocked at process level, except inside

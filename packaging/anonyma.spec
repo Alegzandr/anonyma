@@ -166,6 +166,8 @@ EXCLUDES = [
     "PySide6.QtSerialPort",
     "PySide6.QtWebSockets",
     "PySide6.QtHttpServer",
+    # The application never opens a socket through Qt (updates and downloads use httpx).
+    "PySide6.QtNetwork",
 ]
 
 common = dict(
@@ -181,6 +183,36 @@ common = dict(
 
 gui_analysis = Analysis([str(ROOT / "packaging" / "launch_gui.py")], **common)  # noqa: F821
 cli_analysis = Analysis([str(ROOT / "packaging" / "launch_cli.py")], **common)  # noqa: F821
+
+# -- size: files collected by the hooks but never used ----------------------------------
+# Matched against the destination path inside _internal/, "/" separators, lower case.
+UNUSED_FILES = [
+    re.compile(pattern)
+    for pattern in (
+        # Mesa software OpenGL fallback: the GUI is plain Qt Widgets (no OpenGL).
+        r"(^|/)opengl32sw\.dll$",
+        # OpenCV's FFmpeg video back end: OCR only decodes still images.
+        r"(^|/)opencv_videoio_ffmpeg[^/]*$",
+        # AVIF codec of Pillow: AVIF is not a supported format.
+        r"^pil/_avif\.",
+        # MuPDF C++ headers and import libraries (for building extensions only).
+        r"^pymupdf/mupdf-devel/",
+        # Qt network stack and its plugins (QtNetwork is excluded above).
+        r"(^|/)(lib)?qt6network[^/]*$",
+        r"^pyside6/plugins/(tls|networkinformation)/",
+    )
+]
+QT_TRANSLATION = re.compile(r"^pyside6/translations/(?!qtbase_fr\.qm$)")
+
+
+def wanted(entry: tuple[str, ...]) -> bool:
+    dest = entry[0].replace("\\", "/").lower()
+    return not QT_TRANSLATION.match(dest) and not any(p.search(dest) for p in UNUSED_FILES)
+
+
+for analysis in (gui_analysis, cli_analysis):
+    analysis.binaries = [e for e in analysis.binaries if wanted(e)]
+    analysis.datas = [e for e in analysis.datas if wanted(e)]
 
 gui_pyz = PYZ(gui_analysis.pure)  # noqa: F821
 cli_pyz = PYZ(cli_analysis.pure)  # noqa: F821

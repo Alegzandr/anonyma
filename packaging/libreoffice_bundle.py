@@ -190,7 +190,49 @@ def _unpack_windows(msi: Path, destination: Path, scratch: Path) -> None:
             else:
                 item.unlink()
     _keep_languages(install_root)
+    _prune_unused(install_root)
     shutil.move(str(install_root), destination)
+
+
+#: Parts of the installation that headless doc/xls/ppt conversions never load (about
+#: 95 MB of the compressed archive): icon themes other than the default one, the
+#: bundled Python (macros, wizards) and Java classes, the gallery, document
+#: templates, AutoText, the Poppler-based PDF import (PDF goes through PyMuPDF).
+UNUSED_PARTS = (
+    "share/config/images_*.zip",
+    "program/python-core-*",
+    "program/python*.exe",
+    "program/python3*.dll",
+    "program/libpython3*",
+    "program/pyuno*",
+    "program/pythonloader*",
+    "program/pythonscript.py",
+    "program/uno.py",
+    "program/unohelper.py",
+    "program/officehelper.py",
+    "program/wizards",
+    "program/classes",
+    "program/xpdfimport*",
+    "share/xpdfimport",
+    "share/gallery",
+    "share/template",
+    "share/autotext",
+    "share/wizards",
+    "share/Scripts",
+)
+#: Icon theme kept: the default one, in case a code path asks for an image.
+KEPT_ICON_THEME = "images_colibre.zip"
+
+
+def _prune_unused(install_root: Path) -> None:
+    for pattern in UNUSED_PARTS:
+        for item in install_root.glob(pattern):
+            if item.name == KEPT_ICON_THEME:
+                continue
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
 
 
 #: UI languages kept from the multilingual Windows installer (en-US is built in).
@@ -264,6 +306,7 @@ def _unpack_linux(archive: Path, destination: Path, scratch: Path) -> None:
     roots = sorted((tree / "opt").glob("libreoffice*"))
     if not roots or not (roots[0] / "program" / "soffice").exists():
         raise SystemExit("soffice introuvable après l'extraction des paquets Debian.")
+    _prune_unused(roots[0])
     shutil.move(str(roots[0]), destination)
 
 
