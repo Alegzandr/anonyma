@@ -390,6 +390,19 @@ def _given(token: _Token, min_count: int = 500) -> bool:
     return record is not None and record.count >= min_count
 
 
+#: An ordinary word that is a given name rarer than this (« Parfait », « Bienvenu »)
+#: reads as the word before another given name; frequent ones (« Jean Pierre ») are
+#: names.
+GREETING_GIVEN_MAX = 20000
+
+
+def _greeting_word(token: _Token) -> bool:
+    if token.is_upper or not is_common_word(token.bare):
+        return False
+    record = first_name(token.bare)
+    return record is None or record.count < GREETING_GIVEN_MAX
+
+
 def _surname_token(token: _Token) -> bool:
     if token.key in STOP_WORDS or token.bare in ACRONYMS:
         return False
@@ -614,6 +627,22 @@ class PersonRecognizer(CustomRecognizer):
             return False
         return not _ends_sentence(left) and civility_of(right.text) is None
 
+    def _lead_surname(self, text: str, tokens: list[_Token], i: int) -> int:
+        """Start of a name written surname first in title case at the start of a line
+        (« Nguyen Thi Lan », « Kowalczyk Jean-Baptiste ») : a capitalized word that is
+        neither an ordinary word nor a given name, just before the given names."""
+        if i == 0 or not self._glued(text, tokens[i - 1], tokens[i]):
+            return i
+        prev = tokens[i - 1]
+        if not prev.is_cap or prev.is_upper or prev.key in STOP_WORDS or prev.bare in ACRONYMS:
+            return i
+        if is_common_word(prev.bare) or _given(prev, 200) or civility_of(prev.text) is not None:
+            return i
+        line_start = text.rfind("\n", 0, prev.start) + 1
+        if text[line_start : prev.start].strip(" \t> "):
+            return i
+        return i - 1
+
     def _upper_surname_start(self, text: str, tokens: list[_Token], k: int) -> int:
         """Extend a capitals surname to the left (``LE GOFF``, ``DE LA TOUR``)."""
         while k > 0 and self._glued(text, tokens[k - 1], tokens[k]):
@@ -771,6 +800,11 @@ class PersonRecognizer(CustomRecognizer):
                 and tokens[j + 1].is_upper == tok.is_upper
             ):
                 j += 1
+            if j > i and _greeting_word(tok):
+                # « Parfait Hélène, merci » : an ordinary word that is also a rare given
+                # name, before a given name, is the word; the person is « Hélène ».
+                i += 1
+                continue
             k = j
             surname: list[_Token] = []
             while k + 1 < n and len(surname) < 5 and self._glued(text, tokens[k], tokens[k + 1]):
@@ -808,7 +842,8 @@ class PersonRecognizer(CustomRecognizer):
             end = end_tok.end - (1 if end_tok.text.endswith(".") else 0)
             common = all(is_common_word(s.bare) for s in surname if s.key not in PARTICLES)
             score = 0.75 if tok.is_upper else (0.55 if common and not surname[0].is_upper else 0.8)
-            out.append(_result(EntityType.PERSON, tok.start, end, score))
+            lead = tokens[self._lead_surname(text, tokens, i)] if not tok.is_upper else tok
+            out.append(_result(EntityType.PERSON, lead.start, end, score))
             i = k + 1
         return out
 

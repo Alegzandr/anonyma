@@ -819,9 +819,13 @@ def evaluate_doc(truth: dict[str, Any], out_root: Path) -> dict[str, Any]:
             readable, detail = region_state(original, output, region["bbox"])
             if readable:
                 hits.append(f"image {region['image']} ({detail})")
+        # The given name alone (« Merci Maëlle ») identifies a person among the people
+        # of a file or a mail thread: it is a leak like any other form.
         partial = []
         for rendering in entry.get("partial", []):
-            partial += find(rendering, prepared, hay.gps)
+            labels = find(rendering, prepared, hay.gps)
+            partial += labels
+            hits += [f"{label} « {rendering['text']} » (prénom seul)" for label in labels]
         entries_out.append(
             {
                 "id": entry["id"],

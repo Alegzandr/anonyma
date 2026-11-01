@@ -281,6 +281,8 @@ class _PersonIndex:
     #: OCR-folded keys (:func:`ocr_fold`) of full names and surnames -> clusters.
     folded: dict[str, set[str]] = field(default_factory=dict)
     folded_surname: dict[str, set[str]] = field(default_factory=dict)
+    #: Initials in capitals a person signs with (« JB », « HM ») -> clusters.
+    signs: dict[str, set[str]] = field(default_factory=dict)
 
     def add(self, cluster_id: str, person: PersonName) -> None:
         if not person.is_full or not reliable_person(person):
@@ -293,6 +295,11 @@ class _PersonIndex:
         self.by_surname.setdefault(person.surname_key, set()).add(cluster_id)
         self.by_given.setdefault(person.given_key, set()).add(cluster_id)
         self.initials.setdefault(cluster_id, set()).add(person.initials)
+        if not any(is_initial(g) for g in person.given):
+            given = "".join(p[0] for g in person.given for p in g.split("-") if p).upper()
+            family = "".join(w[0] for w in person.surname if normalize(w) not in PARTICLES).upper()
+            for sign in {given + family, given if len(given) > 1 else ""} - {""}:
+                self.signs.setdefault(sign, set()).add(cluster_id)
 
     def link(self, person: PersonName, value: str = "") -> str | None:
         compact = value.strip()
@@ -300,6 +307,10 @@ class _PersonIndex:
             owners = self.logins.get(compact.casefold(), set())
             if len(owners) == 1:
                 return next(iter(owners))
+            if compact.isalpha() and compact.isupper() and 2 <= len(compact) <= 4:
+                signers = self.signs.get(compact, set())
+                if len(signers) == 1:
+                    return next(iter(signers))
         if person.is_full:
             swapped = self.full.get(f"{person.surname_key}|{person.given_key}")
             exact = self.full.get(f"{person.given_key}|{person.surname_key}") or swapped
@@ -844,11 +855,16 @@ def _grouped(compact: str, size: int = 4) -> str:
     return " ".join(compact[i : i + size] for i in range(0, len(compact), size))
 
 
+_DAY_MONTH = re.compile(r"^\d{1,2}/\d{1,2}$")
+
+
 def searched_variant(cluster: EntityCluster, variant: str) -> bool:
     """Whether a mention of ``cluster`` is searched through the batch (propagation and
     verification). An uncertain mention, a « person » made of ordinary words or a lone
     ordinary word only a model found is masked where found, nowhere else (« Nouvelle »
     of « Société Nouvelle des… », « Entreprises » of « Facturation Entreprises »)."""
+    if cluster.entity_type == EntityType.DATE and _DAY_MONTH.match(variant.strip()):
+        return False  # « le 9/10 » is a date there; « noté 9/10 » elsewhere is a mark
     if cluster.entity_type not in NAME_TYPES or not _lone_common(variant):
         return True
     if normalize(variant) in _CALENDAR_WORDS:
@@ -954,32 +970,89 @@ def _person_forms(cluster: EntityCluster) -> Iterator[tuple[str, bool]]:
             yield surname, bool(needs_capital(surname))
 
 
-#: Given names at least this frequent (INSEE births) are not searched alone: too many
-#: people share them (« Jean », « Marie »); rarer ones identify (« Ysaline »).
-DISTINCTIVE_GIVEN_MAX = 20000
+def lone_given(cluster: EntityCluster) -> dict[str, bool]:
+    """Given names of a person cluster searched alone through the whole batch: given
+    name -> whether it is also an ordinary word (« Pierre », « Rose »), then searched
+    capitalized only (or alone on its line, see :func:`_signature_given`).
 
-
-def distinctive_given(cluster: EntityCluster) -> set[str]:
-    """Given names of a person cluster worth searching alone: neither a common word
-    nor a very frequent given name, nor a place or brand (« Florence »)."""
-    out: set[str] = set()
+    In a mail thread the given name alone (« Merci Maëlle ») is the most frequent
+    form of a person: once a full name is known, every lone mention is masked, however
+    frequent the given name. A place or brand (« Florence ») is left out."""
+    out: dict[str, bool] = {}
     for variant in cluster.variants:
         person = parse_person(variant)
         if person is not None and person.is_full and reliable_person(person):
-            out.update(_distinctive_given(person))
+            for given in person.given:
+                key = normalize(given)
+                if is_initial(given) or len(key) < MIN_PROPAGATION_LENGTH:
+                    continue
+                if key in NOT_LONE_GIVEN or key in _CALENDAR_WORDS:
+                    continue
+                out[given] = any(is_common_word(p) for p in given.split("-") if p)
     return out
 
 
-def _distinctive_given(person: PersonName) -> Iterator[str]:
-    for given in person.given:
-        if is_initial(given) or len(normalize(given)) < 4 or normalize(given) in NOT_LONE_GIVEN:
+#: A line made of one word, possibly after a signature dash or a quote mark and
+#: before a punctuation mark (« pierre », « -- Rose », « > karim, »).
+_LONE_LINE = re.compile(
+    r"(?m)^[ \t>]*(?:--?[ \t]*)?([^\W\d_]+(?:-[^\W\d_]+)*)[ \t]*[.,!]?[ \t]*\r?$"
+)
+
+
+def initials_signatures(cluster: EntityCluster) -> set[tuple[str, str]]:
+    """Initials a person signs with: (letters, dotted form of a compound given name or
+    ""). ``Jean-Baptiste Kowalczyk`` -> (``JB``, ``J.-B.``) and (``JBK``, ""); ``Hélène
+    Marchetti`` -> (``H``, "") and (``HM``, "")."""
+    out: set[tuple[str, str]] = set()
+    for variant in cluster.variants:
+        person = parse_person(variant)
+        if person is None or not person.is_full or not reliable_person(person):
             continue
-        record = first_name(given)
-        if record is not None and record.count >= DISTINCTIVE_GIVEN_MAX:
+        if any(is_initial(g) for g in person.given):
             continue
-        if any(is_common_word(part) for part in given.split("-") if part):
+        parts = [p for g in person.given for p in g.split("-") if p]
+        surname = [s for s in person.surname if normalize(s) not in PARTICLES]
+        given = "".join(p[0] for p in parts).upper()
+        family = "".join(s[0] for s in surname).upper()
+        if not given.isalpha() or not family.isalpha():
             continue
-        yield given
+        compound = len(parts) > 1 and len(person.given) == 1
+        out.add((given, "-".join(f"{p[0].upper()}." for p in parts) if compound else ""))
+        out.add((given + family, ""))
+    return out
+
+
+#: Initials alone on their line, upper case, with or without dots (« JB », « J.-B. »,
+#: « H. », « GM »): a signature. A single letter needs its dot.
+_INITIALS_LINE = re.compile(
+    r"(?m)^[ \t>]*(?:--?[ \t]*)?((?:[A-Z]\.?-?){1,3}[A-Z]\.?|[A-Z]\.)[ \t]*[,!]?[ \t]*\r?$"
+)
+
+
+#: Short capitals written alone on a line that are no initials.
+_NOT_INITIALS = frozenset({"OK", "PS", "NB", "RAS", "CC", "TR", "RE", "FW", "PJ", "VS", "AM", "PM"})
+
+
+def _signature_initials(
+    text: str, signed: Mapping[str, _Target]
+) -> Iterator[tuple[int, int, _Target]]:
+    for m in _INITIALS_LINE.finditer(text):
+        letters = "".join(c for c in m.group(1) if c.isalpha())
+        if letters in _NOT_INITIALS:
+            continue
+        target = signed.get(letters)
+        if target is not None:
+            yield m.start(1), m.end(1), target
+
+
+def _signature_given(text: str, given: Mapping[str, _Target]) -> Iterator[tuple[int, int, str]]:
+    """Given names that are ordinary words, written in lower case alone on their line:
+    a signature (« pierre »), never prose."""
+    for m in _LONE_LINE.finditer(text):
+        word = m.group(1)
+        key = normalize(word)
+        if key in given:
+            yield m.start(1), m.end(1), key
 
 
 _TRAILING_DIGITS = re.compile(r"\d+$")
@@ -1037,7 +1110,7 @@ def propagate(
     """
     matcher: MultiMatcher[_Target] = MultiMatcher()
     scores: dict[str | None, float] = {}
-    lone_given: dict[str, dict[str, str]] = {}
+    lone: dict[str, dict[str, tuple[str, bool]]] = {}
     manual: set[str] = set()
     person_keys = {
         cluster_key(EntityType.PERSON, v)
@@ -1055,20 +1128,43 @@ def propagate(
         for form, cap in cluster_forms(cluster):
             matcher.add(form, target, require_capital=cap)
         if cluster.entity_type == EntityType.PERSON:
-            for given in distinctive_given(cluster):
-                lone_given.setdefault(normalize(given), {})[cluster.id] = given
+            for given, common in lone_given(cluster).items():
+                lone.setdefault(normalize(given), {})[cluster.id] = (given, common)
         if cluster.entity_type == EntityType.EMAIL and "person" not in cluster.attributes:
             new = _Target(None, EntityType.PERSON)
             for form, cap in _email_person_forms(cluster):
                 if cluster_key(EntityType.PERSON, form) not in person_keys:
                     matcher.add(form, new, require_capital=cap)
-    # A distinctive given name alone (« Ysaline ») is searched only when a single
-    # person of the batch bears it: two « Bérénice » leave each lone mention to the
-    # detectors and to the review.
-    for owners in lone_given.values():
+    # A given name alone (« Maëlle ») goes to the only person of the batch bearing it;
+    # when two people share it (two « Bérénice »), each lone mention is still masked,
+    # as a person of its own that ``link_by_place`` then gives to the one of its file.
+    signature: dict[str, _Target] = {}
+    for key, owners in lone.items():
         if len(owners) == 1:
-            ((cluster_id, given),) = owners.items()
-            matcher.add(given, _Target(cluster_id, EntityType.PERSON))
+            ((cluster_id, (given, common)),) = owners.items()
+            target = _Target(cluster_id, EntityType.PERSON)
+        else:
+            given, common = next(iter(owners.values()))
+            target = _Target(None, EntityType.PERSON)
+        matcher.add(given, target, require_capital=common)
+        if common:
+            signature[key] = target
+    # Initials signing a mail (« JB », « J.-B. », « GM »): alone on their line only,
+    # except the dotted initials of a compound given name, which are no word.
+    by_letters: dict[str, set[str]] = {}
+    for cluster in clusters.values():
+        if cluster.entity_type == EntityType.PERSON and cluster.review is not ReviewStatus.REJECTED:
+            for letters, dotted in initials_signatures(cluster):
+                by_letters.setdefault(letters, set()).add(cluster.id)
+                if dotted:
+                    by_letters.setdefault(dotted, set()).add(cluster.id)
+    signed: dict[str, _Target] = {}
+    for letters, bearers in by_letters.items():
+        owner = next(iter(bearers)) if len(bearers) == 1 else None
+        if letters.isalpha():
+            signed[letters] = _Target(owner, EntityType.PERSON)
+        else:
+            matcher.add(letters, _Target(owner, EntityType.PERSON))
     if not len(matcher):
         return []
     scores[None] = 0.7
@@ -1107,6 +1203,7 @@ def propagate(
     ) -> Iterator[Entity]:
         spans = taken.get((doc_id, segment.id), [])
         exact = set(spans)
+        emitted: list[tuple[int, int]] = []
         for match in leftmost_longest(needles.find(segment.text)):
             # A form inside an existing mention adds nothing; a longer one
             # (``Kowalczyk Jean-Baptiste`` around a detected ``Jean-Baptiste``)
@@ -1132,18 +1229,34 @@ def propagate(
                 start, end = _with_given_names(segment.text, start, end)
                 if atomic.fit(segment.text, start, end) != (start, end):
                     start, end = match.start, match.end
-            yield Entity(
-                entity_type=target.entity_type,
-                value=segment.text[start:end],
-                document_id=doc_id,
-                segment_id=segment.id,
-                start=start,
-                end=end,
-                score=scores.get(target.cluster_id, 0.7),
-                detector=PROPAGATION_DETECTOR,
-                cluster_id=target.cluster_id,
-                review=(ReviewStatus.MANUAL if target.cluster_id in manual else ReviewStatus.AUTO),
-            )
+            emitted.append((start, end))
+            yield make(target, doc_id, segment, start, end)
+        if needles is not matcher:
+            return
+        lines: list[tuple[int, int, _Target]] = [
+            (start, end, signature[key])
+            for start, end, key in _signature_given(segment.text, signature)
+        ]
+        lines += _signature_initials(segment.text, signed) if signed else []
+        for start, end, target in lines:
+            if any(s < end and start < e for s, e in (*spans, *emitted)):
+                continue
+            emitted.append((start, end))
+            yield make(target, doc_id, segment, start, end)
+
+    def make(target: _Target, doc_id: str, segment: Segment, start: int, end: int) -> Entity:
+        return Entity(
+            entity_type=target.entity_type,
+            value=segment.text[start:end],
+            document_id=doc_id,
+            segment_id=segment.id,
+            start=start,
+            end=end,
+            score=scores.get(target.cluster_id, 0.7),
+            detector=PROPAGATION_DETECTOR,
+            cluster_id=target.cluster_id,
+            review=(ReviewStatus.MANUAL if target.cluster_id in manual else ReviewStatus.AUTO),
+        )
 
     found = scan(matcher, existing)
     # Names completed by this pass (« Siobhan O'Callaghan » around a known surname,

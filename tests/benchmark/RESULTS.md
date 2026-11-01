@@ -73,8 +73,8 @@ normalisés :
 * personne : nom complet dans les deux ordres, nom de famille seul, chaque élément d'un
   nom composé (`Delacroix`, `Vasseur`) ; pour les noms qui sont aussi des mots courants
   (`Petit`, `Boucher`, `Martin`…), seules les formes capitalisées ou en majuscules
-  comptent. Le **prénom seul** n'est pas compté comme fuite mais signalé à part
-  (« résidu de prénom ») ;
+  comptent. Le **prénom seul** est compté comme fuite : dans un fil de courriels, c'est
+  la forme la plus fréquente d'une personne (« Merci Maëlle ») ;
 * e-mail : adresse complète et partie locale suivie de `@` ;
 * téléphone, IBAN, carte, NIR, SIREN/SIRET, TVA, plaque, n° de dossier : chiffres et
   lettres sans séparateurs (téléphone : numéro national, préfixe pays toléré ; IBAN :
@@ -509,10 +509,11 @@ pendant les mesures).
   (prénom absent de la liste), donc ses formes d'identifiant ne sont pas dérivées.
   Le profil `leger` ne détecte pas les fonctions (9 % de rappel) et peu de lieux hors
   adresses et colonnes typées.
-* **Prénoms seuls** (non comptés comme fuites) : en `standard`, « Inès » reste en
-  signature d'un message transféré (06) ; en `leger`, 6 personnes gardent un prénom
-  isolé. Propager les prénoms seuls à tout le lot ferait trop de faux positifs ;
-  une propagation limitée au document n'a pas été ajoutée.
+* **Prénoms seuls** : comptés comme fuites depuis la 0.4.0. Avant la propagation des
+  prénoms à tout le lot, ils faisaient tomber le rappel direct à 98,8 % en `leger` et
+  99,7 % en `standard` ; il est revenu à 100 % dans les deux profils, sans perte de
+  précision (`leger` 97,6 %, `standard` 96,1 %, l'écart venant des dates sans année
+  désormais masquées).
 * **Précision** : le masquage des dates non liées à une naissance (choix d'Anonyma,
   `detect_dates`) est la première cause de « faux positifs » (17 sur 24 en
   `standard`) ; il se désactive par la configuration. Restent notamment
